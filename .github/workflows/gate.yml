@@ -1,0 +1,34 @@
+# CI mirror of the local merge gate (findings L5/L6/M10/M11):
+#  - NON-mutating lint (gate-ci: ruff --check, does not mask drift)
+#  - tests + evals (orchestrator suite via deterministic claude shim)
+#  - content_guard on changed features vs the base (sacred substance: version bump)
+#  - plan-lint (just validate) informative on changed features
+name: gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]   # trunk protected on direct push; feature branches gated via their PR
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    env:
+      LAB_NO_NOTIFY: "1"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # full history: needed for diff vs the base
+      - uses: astral-sh/setup-uv@v8.2.0
+      - run: uv python install 3.12
+      - uses: extractions/setup-just@v3
+      - run: just install
+      - name: Content guard + plan-lint (changed features)
+        run: |
+          if [ -n "${{ github.base_ref }}" ]; then
+            BASE="origin/${{ github.base_ref }}"
+          else
+            BASE="HEAD~1"
+          fi
+          just check-content-ci "$BASE"
+      - run: just gate-ci

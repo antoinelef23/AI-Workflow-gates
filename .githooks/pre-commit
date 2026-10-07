@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Pre-commit gate — enforces the "sacred substance" + plan-lint rules locally,
+# before they reach CI (issues #15 / #19). Mirrors lab/engine/ci_checks.sh but compares
+# the working tree to HEAD (the commit being made) instead of a base branch.
+#
+# Enable once per clone:   git config core.hooksPath .githooks
+# Override for a commit:    git commit --no-verify
+#
+# Calls the python checks directly (no make/just dependency) so it is robust.
+set -uo pipefail
+root="$(git rev-parse --show-toplevel)" || exit 1
+cd "$root" || exit 1
+
+rc=0
+
+# Brand guard: no client/brand proper nouns in staged framework content (runs on
+# every commit, not only feature changes). Scope excludes work/ + **/assets/.
+python3 lab/engine/brand_guard.py --staged || rc=1
+
+# Feature dirs with staged changes. Feature dir = nearest ancestor holding ANY triplet
+# member (spec.md / design.md / tasks.md): depth-agnostic (work/<feature>/ and
+# work/<domain>/<feature>/) AND robust to a missing spec.md, so a design.md change is
+# still guarded even when its spec.md is absent or deleted in the same commit.
+features=$(git diff --cached --name-only -- work/ examples/ 2>/dev/null \
+  | while IFS= read -r f; do
+      d=$(dirname "$f")
+      while [ "$d" != "." ] && [ "$d" != "work" ] && [ "$d" != "examples" ]; do
+        if [ -f "$d/spec.md" ] || [ -f "$d/design.md" ] || [ -f "$d/tasks.md" ]; then
+          echo "$d"; break
+        fi
+        d=$(dirname "$d")
+      done
+    done | sort -u)
+
+for feat in $features; do
+  [ -d "$feat" ] || continue  # feature fully deleted in this commit
+  if [ -f "$feat/spec.md" ]; then
+    python3 lab/engine/content_guard.py --git "$feat/spec.md" || rc=1
+  fi
+  if [ -f "$feat/design.md" ]; then
+    python3 lab/engine/content_guard.py --git "$feat/design.md" || rc=1
+  fi
+  if [ -f "$feat/tasks.md" ]; then
+    # --validate returns before the fail-closed secret check, so no secret needed.
+    python3 lab/engine/orchestrate.py "$feat" --validate || rc=1
+  fi
+done
+
+if [ $rc -ne 0 ]; then
+  echo "⛔ pre-commit: brand_guard / content_guard / plan-lint failed (see above)." >&2
+  echo "   Remove the brand reference, bump 'version:' for a substance change, fix the plan errors," >&2
+  echo "   or override with 'git commit --no-verify'." >&2
+fi
+exit $rc

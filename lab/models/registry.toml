@@ -1,0 +1,57 @@
+# Lab model registry — SOURCE OF TRUTH, data-driven.
+#
+# Adding a model = one [[model]] entry. The orchestrator and the eval harness
+# take it into account WITHOUT code changes (designed for model evolution).
+# After each new model: `just eval-models live=1` then arbitration — see lab/models/EVOLUTION.md.
+#
+# The metrics (cost, latency, pass rate) are NOT in this file:
+# they are MEASURED by the harness (fairness), not declared. Here: identity,
+# eligibility by role, context profile.
+
+schema_version = 1
+
+# ------------------------------------------------------------------ candidates
+[[model]]
+id = "claude-opus-4-8"          # passed as-is to `claude --model` (alias "opus" also accepted)
+label = "Opus 4.8"
+family = "claude"
+tier = "frontier"               # frontier | balanced | fast (descriptive)
+released = ""                   # to fill in
+roles = ["planner", "implementer", "reviewer"]
+context_profile = "base"
+
+[[model]]
+id = "claude-sonnet-4-6"
+label = "Sonnet 4.6"
+family = "claude"
+tier = "balanced"
+released = ""
+roles = ["planner", "implementer", "reviewer", "eval-runner"]
+context_profile = "base"
+
+[[model]]
+id = "claude-haiku-4-5-20251001"
+label = "Haiku 4.5"
+family = "claude"
+tier = "fast"
+released = "2025-10-01"
+roles = ["eval-runner"]                  # implementer REMOVED: fails COC-merge even in verbose (loop 2026-06-15)
+context_profile = "base"                 # verbose tested, does not lift the eliminatory score → reverted
+
+# ---------------------------------------------------------------- context budget
+# Static-context budget per role (lab/engine/context_budget.py, `just context-budget`;
+# chars/4 heuristic — calibrate against the tool's own output, not a real tokenizer).
+# Soft gate by design: measuring is always on, FAILING starts only when the Owner
+# uncomments max_static_tokens (work/sdlc-rework ADR-4, same fusible philosophy as
+# content_guard).
+# [context]
+# max_static_tokens = 8000
+
+# ------------------------------------------------------- production assignment
+# THE INCUMBENT: which model drives each role today. The scorecard compares
+# the challengers against this baseline. Changed only on quantified proof.
+[roles]
+planner = "claude-opus-4-8"
+implementer = "claude-sonnet-4-6"
+reviewer = "claude-opus-4-8"
+eval-runner = "claude-haiku-4-5-20251001"

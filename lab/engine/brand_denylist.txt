@@ -1,0 +1,21 @@
+# Brand / proper-noun denylist — enforced by lab/engine/brand_guard.py
+#
+# The lab stays generic / org-neutral: no client or brand proper nouns in the
+# FRAMEWORK content (CLAUDE.md hard rule). This file is the ONE sanctioned place
+# the names live — it is the detector's config and is itself excluded from the scan.
+#
+# SCOPE of the guard: lab/, docs/, templates, agents, skills, README, CLAUDE.md…
+# NOT scanned (usage a posteriori, may legitimately carry brand names):
+#   work/**  and  **/assets/**
+#
+# Rules for this file:
+#   - one term per line; `#` starts a comment; blank lines ignored
+#   - matched case-insensitively, on word boundaries (so "acme" won't hit "acmeon")
+#   - NEVER add lab vocabulary here. The spec-ID prefixes INV / BHV / EX / EVAL /
+#     NG / OQ / ADR are core vocabulary, not brands — listing them would flag the
+#     whole repo.
+#   - multi-word terms are matched verbatim (e.g. "Acme Corp")
+#
+# Seeded from the de-branding history. Maintainers: add any client name or internal
+# product name that must never reappear in the generic lab.
+

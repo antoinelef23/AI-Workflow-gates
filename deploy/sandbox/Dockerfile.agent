@@ -1,0 +1,25 @@
+# Agent sandbox image — runs the `claude` implementer with no host access.
+# Build:  docker build -t lab-agent:latest -f deploy/sandbox/Dockerfile.agent .
+# Used by lab/engine/sandbox_runner.py when LAB_RUNNER=sandbox.
+#
+# Contains exactly what an implementer needs (python, uv, git, the claude CLI) and
+# nothing of the host. The repo is bind-mounted at /workspace at run time; $HOME is
+# an ephemeral tmpfs, so no host dotfiles/keychain/secret are ever reachable.
+FROM python:3.12-slim
+
+# uv (pinned), git, and Node (for the claude CLI). curl only to fetch uv, then removed.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates curl nodejs npm \
+    && curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && mv /root/.local/bin/uv /usr/local/bin/uv \
+    && npm install -g @anthropic-ai/claude-code \
+    && apt-get purge -y curl \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
+# Caches live under the ephemeral HOME tmpfs (writable; rootfs is read-only at run).
+ENV UV_CACHE_DIR=/home/agent/.uv \
+    npm_config_cache=/home/agent/.npm
+
+WORKDIR /workspace
+# No ENTRYPOINT: the runner passes the full `claude -p …` argv as the command.

@@ -1,0 +1,33 @@
+.env
+.env.*
+!.env.example
+node_modules/
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+.next/
+dist/
+build/
+.DS_Store
+*.log
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+.coverage
+
+# Orchestrator run artifacts — never versioned (anti-replay of approval
+# tokens + state.json divergence, findings H1/H4). The review reports
+# (.runs/*-review.md) stay tracked for the audit.
+**/.approvals/
+**/.runs/state.json
+**/.runs/journal.jsonl
+
+# Raw client inputs feeding a feature (slides, transcripts, quotes…) live in
+# work/<feature>/assets/ and are NOT versioned by default: they are often sensitive
+# client data, the lab template stays generic/org-neutral, and the spec/design/tasks
+# derived from them are what gets committed. A deployment that wants them versioned
+# opts in by editing this rule. See docs/how-to/ingest-client-assets.md.
+work/**/assets/
