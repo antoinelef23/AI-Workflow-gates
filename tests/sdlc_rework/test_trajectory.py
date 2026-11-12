@@ -39,7 +39,9 @@ def repo(tmp_path):
     return tmp_path
 
 
-def commit(root, files: dict[str, str], subject: str):
+def commit(root, files: dict[str, str], subject: str, run: str = "auto"):
+    """An engine-made commit by default (`Run: auto` trailer, as orchestrate writes)."""
+    subject = f"{subject}\n\nWhy: test\n\nRun: {run}"
     for rel, content in files.items():
         p = root / rel
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -125,3 +127,40 @@ def test_unknown_commit_node_is_warn(repo, capsys):
     journal(repo, [OK_ATTEMPT, DONE])
     assert trajectory_guard.main(["work/feat", "--root", str(repo)]) == 0
     assert "T9" in capsys.readouterr().out
+
+
+# ------------------------------------------------------------------ Owner lane
+
+
+def test_owner_lane_done_after_signature_passes(repo):
+    # Owner-lane task: no agent attempt; the engine journals the verified signature.
+    journal(
+        repo,
+        [{"event": "owner_signed", "id": "T1"}, {**DONE, "lane": "owner"}],
+    )
+    assert trajectory_guard.main(["work/feat", "--root", str(repo)]) == 0
+
+
+def test_owner_lane_label_alone_does_not_excuse_a_forged_done(repo, capsys):
+    journal(repo, [{**DONE, "lane": "owner"}])  # `lane` is not a proof
+    assert trajectory_guard.main(["work/feat", "--root", str(repo)]) == 1
+    assert "BHV-2a" in capsys.readouterr().out
+
+
+def test_hand_commit_out_of_scope_is_not_engine_drift(repo):
+    # A documented hand commit (Run: owner) is reviewed at a checkpoint, not here.
+    commit(
+        repo, {"progress.md": "x\n"}, "feat(feat): T1 implement x [BHV-1]", run="owner"
+    )
+    journal(repo, [OK_ATTEMPT, DONE])
+    assert trajectory_guard.main(["work/feat", "--root", str(repo)]) == 0
+
+
+def test_owner_lane_proven_by_archived_signed_token(repo, capsys):
+    # Journal from before `owner_signed` existed: the archived token is the proof.
+    appr = repo / "work" / "feat" / ".approvals"
+    appr.mkdir()
+    (appr / "T1.handled-20261112154253").write_text("approved_by=owner\n")
+    journal(repo, [{**DONE, "lane": "owner"}])
+    assert trajectory_guard.main(["work/feat", "--root", str(repo)]) == 0
+    assert "archived signed token" in capsys.readouterr().out

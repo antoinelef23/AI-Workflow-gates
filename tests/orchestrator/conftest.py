@@ -25,6 +25,8 @@ TEST_SECRET = "test-approval-secret"
 
 SHIM = """#!/usr/bin/env bash
 # claude shim for the orchestrator tests — deterministic, instant.
+# The engine's pre-flight asks `claude --version` (>= 2.1.295, design ADR-6).
+if [ "$1" = "--version" ]; then echo "2.1.300 (Claude Code)"; exit 0; fi
 [ -n "${LAB_ROOT:-}" ] && echo "$@" >> "$LAB_ROOT/.shim/argv.log"
 PROMPT="$2"
 ID=""
@@ -69,7 +71,22 @@ def sandbox(tmp_path: Path) -> Path:
     (sb / "bin").mkdir()
     (sb / ".shim").mkdir()
     (sb / "justfile").write_text(JUSTFILE)
+    # Minimal plugin stub (manifest + rules + run settings) so the kit-mode pre-flight
+    # and the per-call guardrail options work in every test (design ADR-2, ADR-6).
+    (sb / "lab" / "plugin" / ".claude-plugin").mkdir(parents=True)
+    (sb / "lab" / "plugin" / ".claude-plugin" / "plugin.json").write_text(
+        '{"name": "fde-kit", "version": "0"}'
+    )
+    (sb / "lab" / "plugin" / "rules").mkdir()
+    (sb / "lab" / "plugin" / "rules" / "hard-rules.md").write_text(
+        "# Hard rules (stub)\n"
+    )
+    (sb / "lab" / "engine").mkdir(parents=True, exist_ok=True)
+    (sb / "lab" / "engine" / "run_settings.json").write_text("{}")
     (sb / "work" / "feat" / "spec.md").write_text(SPEC)
+    # The shim dir (scenarios, call log, counters) is harness state, not agent
+    # edits: keep it out of `git status` so the scope-leak check ignores it.
+    (sb / ".gitignore").write_text(".shim/\n")
     shim = sb / "bin" / "claude"
     shim.write_text(SHIM)
     shim.chmod(0o755)

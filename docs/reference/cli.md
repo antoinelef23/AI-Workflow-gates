@@ -11,6 +11,61 @@ orchestrator), [status-line.md](status-line.md) (live run state),
 
 ---
 
+## lab
+
+Entry point of the `fde-kit` package (`lab = "lab.engine.cli:main"`), installed with
+`uv tool install git+<kit repo>@v<x.y.z>`. How-to: [activate-an-instance.md](../how-to/activate-an-instance.md).
+
+```
+lab version
+lab init <project> --profile <solo|squad|regulated> [--dry-run]
+lab run <feature> [--project <path>] [orchestrate.py options]
+lab validate <feature> [--project <path>]
+```
+
+| Command | Effect |
+|---|---|
+| `version` | Prints the kit version (installed package metadata; falls back to `pyproject.toml` in a checkout). |
+| `init` | Activates an instance: computes the full plan, prints one line per file (`create` / `identical` / `skip`, never overwrite), applies it unless `--dry-run`. Creates `.lab/lab.toml`, `work/README.md`, `work/_templates/{spec,design,tasks}.template.md`, and the `evals` / `evals-collect` justfile recipes when absent (an existing `evals` recipe is kept). Writes nothing under `.claude/` and no `CLAUDE.md` / `AGENTS.md`. `--profile` is mandatory (absent: rc 1 listing the three profiles); the value is recorded only, its effect arrives in iteration 2. A second run reports "0 changement". |
+| `run` | Relay to `orchestrate.py`: every argument is passed through. |
+| `validate` | Same as `run … --validate` (plan-lint). |
+
+Exit codes: 0 success; 1 refusal (see pre-flight below); 2 usage error or unknown command.
+
+### Pre-flight of `lab run --project <instance>`
+
+Fail-closed, rc 1. Checked in order: kit root resolved; `lab/plugin/` present; `.lab/lab.toml`
+present and `kit_version` equal to the installed kit version (else `plugin X ≠ pinned kit Y`);
+`claude` CLI version recent enough; runner/instance combination allowed — `LAB_RUNNER=sandbox` with
+`--project` is refused (`sandbox + external instance not supported before iteration 2`). Without
+`--project` (kit mode) only the kit root, plugin and CLI checks apply.
+
+### What the engine passes on every agent call
+
+Through the single `claude_argv` builder: `--plugin-dir <lab/plugin>`,
+`--settings <lab/engine/run_settings.json>` (only the denies `Edit(**/.approvals/**)` and
+`Edit(**/.runs/**)`, no hook) and `--append-system-prompt <lab/plugin/rules/hard-rules.md>`.
+Never `--bare`. The guardrails therefore apply to an instance that has no `.claude/` and no
+`CLAUDE.md`. In kit mode under the sandbox, plugin and settings are given as cwd-relative paths.
+
+### `.lab/lab.toml`
+
+```toml
+schema_version = 1
+kit_version = "0.1.0"   # exact pin, compared with the installed kit version
+profile = "squad"       # solo | squad | regulated — recorded; applied from iteration 2
+```
+
+Upgrading the kit in an instance is an explicit commit that bumps `kit_version`.
+
+### Kit root (`LAB_ROOT`)
+
+The kit root is `LAB_ROOT` if set (test seam); otherwise the directory two levels above the engine
+package when it contains `lab/models/registry.toml` (true in a checkout and in `site-packages`);
+otherwise rc 1 ("broken install? — set LAB_ROOT to the kit directory").
+
+---
+
 ## orchestrate.py
 
 Background orchestrator. Reads a feature's `tasks.md`, builds the

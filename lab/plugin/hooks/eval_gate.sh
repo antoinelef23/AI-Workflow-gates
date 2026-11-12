@@ -11,8 +11,9 @@ INPUT=$(cat)
 ACTIVE=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('stop_hook_active',False))" 2>/dev/null || echo False)
 [ "$ACTIVE" = "True" ] && exit 0
 
-# Nothing to gate unless a gateable project exists (Python or a JS front/).
-[ -f pyproject.toml ] || [ -f front/package.json ] || exit 0
+# Nothing to gate unless a gateable project exists: Python, a JS front/, or a kit
+# instance (`.lab/lab.toml`, I-4) — no more silent exit 0 without pyproject.toml.
+[ -f pyproject.toml ] || [ -f front/package.json ] || [ -f .lab/lab.toml ] || exit 0
 
 # Only gate if code changed since the last commit (avoids paying for the evals on every turn).
 # --untracked-files=all: a NEW untracked package directory otherwise shows as a

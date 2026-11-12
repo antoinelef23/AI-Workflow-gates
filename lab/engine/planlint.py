@@ -9,16 +9,112 @@ walk away. Pure: takes the parsed nodes + the model registry, returns
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 from plan import SPEC_ID, Node, ancestors, paths_overlap
 from verify import parse_verify
 
 
+# Tools an agent may need that the default allowlist (runner.DEFAULT_ALLOWED_TOOLS)
+# does not grant — prompts that ask for them plan a task the agent cannot do.
+_UNGRANTED = {
+    "git mv": re.compile(r"\bgit mv\b"),
+    "git rm": re.compile(r"\bgit rm\b"),
+    # only when asked to RUN it ("add the recipe `just report`" is fine)
+    "just": re.compile(
+        r"\b(?:run|runs|running|launch|execute|lancer?|exécuter?)\b[^.\n]{0,25}?`?just\b",
+        re.I,
+    ),
+}
+
+
+_NEGATION = re.compile(r"\b(?:not|never|don't|n't|without|pas|jamais|sans)\b", re.I)
+
+
+def _asks(rx: re.Pattern, prompt: str) -> bool:
+    """A non-negated request: "do not try to run `just`" is the cure, not the ask."""
+    return any(
+        not _NEGATION.search(prompt[max(0, m.start() - 25) : m.start() + 8])
+        for m in rx.finditer(prompt)
+    )
+
+
+def protected_paths(project: Path) -> list[str]:
+    """Paths a headless agent (`claude -p`, nobody to answer a permission prompt)
+    cannot write: Claude Code treats `.claude/` and a plugin's agents / skills /
+    hooks / commands / manifest as sensitive. A plugin root is any tracked
+    `<dir>/.claude-plugin/plugin.json`. Found live: fde-kit T11 (2026-11-12)."""
+    roots = [".claude"]
+    out = subprocess.run(
+        ["git", "ls-files", "--", "*.claude-plugin/plugin.json"],
+        cwd=project,
+        capture_output=True,
+        text=True,
+    ).stdout
+    for manifest in out.splitlines():
+        plug = str(Path(manifest).parent.parent)
+        pre = "" if plug == "." else plug + "/"
+        roots += [f"{pre}{d}" for d in ("agents", "skills", "hooks", "commands")]
+        roots.append(f"{pre}.claude-plugin")
+    return roots
+
+
+def committed_task_ids(project: Path, feature: Path) -> set[str]:
+    """Tasks of `feature` that already have a commit in git history (canonical
+    subject `<type>(<feature>): Tn …`). Reproducible from a fresh checkout, unlike
+    the gitignored `.runs/state.json` — CI saw a done task re-linted (PR #1)."""
+    out = subprocess.run(
+        ["git", "log", "--format=%s"], cwd=project, capture_output=True, text=True
+    ).stdout
+    rx = re.compile(rf"^\w+\({re.escape(feature.name)}\):\s+(T\d+)\b")
+    return {m.group(1) for line in out.splitlines() if (m := rx.match(line))}
+
+
+def _capability_lint(
+    nodes: list[Node],
+    project: Path,
+    done: set[str],
+    errors: list[str],
+    warnings: list[str],
+) -> None:
+    """Plan a task only if its executor can perform it (lab-fix item 13: T6 had no
+    `git mv`, T7/T9 no `just`, T11 wrote protected paths — each blocked a run)."""
+    protected = protected_paths(project)
+    for n in nodes:
+        if n.is_checkpoint or n.id in done:
+            continue
+        if n.agent == "owner":
+            if not n.verify:
+                errors.append(
+                    f"{n.id}: Owner-lane task without verify — the engine needs a "
+                    "mechanical check to accept the Owner's work"
+                )
+            continue
+        hits = [f for f in n.files if any(paths_overlap(f, p) for p in protected)]
+        if hits:
+            errors.append(
+                f"{n.id}: files_touched {hits} are protected paths a headless agent "
+                "cannot write — set `**agent:** owner` for that part, or split the task"
+            )
+        asks = [t for t, rx in _UNGRANTED.items() if _asks(rx, n.prompt)]
+        if asks:
+            warnings.append(
+                f"{n.id}: the prompt asks for {asks}, outside the agent's allowlist — "
+                "state that the orchestrator runs it, or route the step to the Owner lane"
+            )
+
+
 def validate(
-    feature: Path, fm: dict, nodes: list[Node], registry
+    feature: Path,
+    fm: dict,
+    nodes: list[Node],
+    registry,
+    project: Path | None = None,
+    done: set[str] | None = None,
 ) -> tuple[list[str], list[str]]:
-    """Plan-lint. Returns (errors, warnings)."""
+    """Plan-lint. Returns (errors, warnings). `project` enables the capability
+    lint (agent vs protected paths / tool allowlist); `done` = nodes already done."""
     errors: list[str] = []
     warnings: list[str] = []
     by_id = {n.id: n for n in nodes}
@@ -197,5 +293,9 @@ def validate(
                 warnings.append(
                     f'{n.id}: model "{n.model}" not eligible for role {role} (registry: {m.roles})'
                 )
+
+    if project is not None:
+        done = set(done or ()) | committed_task_ids(project, feature)
+        _capability_lint(nodes, project, done, errors, warnings)
 
     return errors, warnings

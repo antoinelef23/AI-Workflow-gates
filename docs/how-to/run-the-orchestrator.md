@@ -119,7 +119,7 @@ Follow the run as it advances:
 
     tail -f work/<feature>/.runs/run.log
 
-The live status line (`.claude/statusline.py`, wired in `settings.json`) reflects
+The live status line (`lab/plugin/statusline.py`, wired once in your user settings) reflects
 the run state from `state.json`. See the [status-line reference](../reference/status-line.md).
 
 ### 7. Resume after a stop
@@ -155,7 +155,7 @@ Everything for a run lives under `work/<feature>/.runs/` and
 - `.approvals/CP-n` — a pending signed approval token; renamed to `.handled-…` once consumed.
 - `.approvals/CP-n.rejected` — a pending rejection; renamed to `.handled-…` once read.
 
-These paths are denied to the agents' edit tools by `.claude/settings.json`.
+These paths are denied to the agents' edit tools by the run settings (`lab/engine/run_settings.json`, passed on every call) and the plugin's path-guard hook.
 
 ## Troubleshooting
 

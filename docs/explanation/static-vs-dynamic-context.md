@@ -8,13 +8,13 @@
 ## The problem
 
 Every agent call pays for its **static context** on every turn: `CLAUDE.md`, the role's
-`.md` under `.claude/agents/`, and (for models on a non-`base` profile) the injected
+`.md` under `lab/plugin/agents/`, and (for models on a non-`base` profile) the injected
 profile from `lab/models/profiles/`. This payload has a natural ratchet: the standard
 remedy when an agent misbehaves is *add a rule*, and rules only ever accumulate. Too much
 static context wastes tokens **and dilutes signal** — the rules that matter drown among
 the ones that rarely apply.
 
-**Dynamic context** is loaded only when needed: skills (`.claude/skills/`, progressive
+**Dynamic context** is loaded only when needed: skills (`lab/plugin/skills/`, progressive
 disclosure), tool results, files the agent reads. It costs nothing on the turns that
 don't use it.
 

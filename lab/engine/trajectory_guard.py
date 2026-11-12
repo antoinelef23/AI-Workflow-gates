@@ -4,8 +4,9 @@ HOW it got there (work/sdlc-rework BHV-2, whitepaper: trajectory evaluation).
 Two mechanical FAIL conditions, from the two trajectory sources the lab persists
 (ADR-1: journal + git history, never session transcripts):
 
-  BHV-2a  a `task_done` with no prior successful `task_attempt` — a forged or
-          corrupt journal must never read as a healthy run;
+  BHV-2a  a `task_done` with no prior successful `task_attempt` (or, for an
+          Owner-lane task, no prior `owner_signed` — the verified signature) —
+          a forged or corrupt journal must never read as a healthy run;
   BHV-2b  an `[auto]` task commit touching files outside the node's
           `files_touched` ∪ the feature dir — scope drift that slipped past
           scoped_commit (same paths_overlap semantics).
@@ -25,13 +26,17 @@ import sys
 from pathlib import Path
 
 from journal_io import read_events
+from kit import kit_root
 from plan import parse_tasks_md, paths_overlap
 
 RETRY_SMELL = 3  # attempts from which a task smells like an expensive prompting loop
 
 
-def check_journal(events: list[dict]) -> tuple[list[str], list[str]]:
-    """BHV-2a (fails) + BHV-2c (warns) from the journal alone."""
+def check_journal(
+    events: list[dict], feature: Path | None = None
+) -> tuple[list[str], list[str]]:
+    """BHV-2a (fails) + BHV-2c (warns) from the journal (+ the feature's archived
+    approval tokens, for Owner-lane tasks journaled before `owner_signed` existed)."""
     fails: list[str] = []
     warns: list[str] = []
     ok_attempts: set[str] = set()
@@ -43,8 +48,21 @@ def check_journal(events: list[dict]) -> tuple[list[str], list[str]]:
             attempt_count[tid] = attempt_count.get(tid, 0) + 1
             if ev.get("ok"):
                 ok_attempts.add(tid)
+        elif kind == "owner_signed":  # Owner lane: the signature is the attempt
+            ok_attempts.add(tid)
         elif kind == "task_done":
-            if tid not in ok_attempts:
+            archived = (
+                feature is not None
+                and ev.get("lane") == "owner"
+                and any((feature / ".approvals").glob(f"{tid}.handled-*"))
+            )
+            if tid not in ok_attempts and archived:
+                # The engine archives a token only after verifying its signature.
+                warns.append(
+                    f"BHV-2a: {tid} (Owner lane) proven by its archived signed token, "
+                    "not by an `owner_signed` event (journal predates that event)"
+                )
+            elif tid not in ok_attempts:
                 fails.append(
                     f"BHV-2a: {tid} is `task_done` with no prior successful "
                     f"`task_attempt` — journal forged or corrupt"
@@ -81,11 +99,17 @@ def check_commits(root: Path, feature: Path) -> tuple[list[str], list[str]]:
 
     # The orchestrator's commit subject is canonical: `feat(<feature>): T<n> <title> [...]`
     subject_re = re.compile(rf"^\w+\({re.escape(feature.name)}\):\s+(T\d+)\b")
-    log = _git(root, "log", "--format=%H%x09%s")
+    # Only the engine's own commits (`Run: auto`) are checked, as documented: a hand
+    # commit (`Run: owner|human`) carries its own Why: and is reviewed at a checkpoint
+    # (fde-kit CP-5: T7's documented hand commit was flagged as drift).
+    log = _git(
+        root, "log", "--format=%H%x09%s%x09%(trailers:key=Run,valueonly,separator=%x20)"
+    )
     for line in log.splitlines():
-        sha, _, subject = line.partition("\t")
+        sha, _, rest = line.partition("\t")
+        subject, _, run = rest.partition("\t")
         m = subject_re.match(subject)
-        if not m:
+        if not m or run.strip() != "auto":
             continue
         node = by_id.get(m.group(1))
         if node is None:
@@ -112,7 +136,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = ap.parse_args(argv)
 
-    root = args.root or Path(__file__).resolve().parents[2]
+    root = args.root or kit_root()
     feature = Path(args.feature)
     if not feature.is_absolute():
         feature = root / feature
@@ -122,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[trajectory] no journal in {feature.name} — nothing to check")
         return 0
 
-    fails, warns = check_journal(events)
+    fails, warns = check_journal(events, feature)
     f2, w2 = check_commits(root, feature)
     fails += f2
     warns += w2

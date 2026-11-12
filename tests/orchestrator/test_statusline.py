@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-SL = REPO / ".claude" / "statusline.py"
+SL = REPO / "lab" / "plugin" / "statusline.py"  # moved by T15 (Owner lane)
 spec = importlib.util.spec_from_file_location("statusline", SL)
 sl = importlib.util.module_from_spec(spec)
 sys.modules["statusline"] = sl

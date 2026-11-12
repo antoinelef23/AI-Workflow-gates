@@ -23,9 +23,15 @@ planner = "m1"
 """
 
 
-def make_root(tmp_path, *, profile="base", context="", claude_chars=400):
-    (tmp_path / "CLAUDE.md").write_text("x" * claude_chars, encoding="utf-8")
-    agents = tmp_path / ".claude" / "agents"
+def make_root(
+    tmp_path, *, profile="base", context="", claude_chars=400, with_claude=True
+):
+    if with_claude:
+        (tmp_path / "CLAUDE.md").write_text("x" * claude_chars, encoding="utf-8")
+    rules = tmp_path / "lab" / "plugin" / "rules"
+    rules.mkdir(parents=True)
+    (rules / "hard-rules.md").write_text("r" * 400, encoding="utf-8")
+    agents = tmp_path / "lab" / "plugin" / "agents"
     agents.mkdir(parents=True)
     (agents / "planner.md").write_text("y" * 400, encoding="utf-8")
     models = tmp_path / "lab" / "models"
@@ -64,14 +70,24 @@ def test_declared_budget_respected_passes(tmp_path):
 
 
 def test_base_profile_not_counted_verbose_is(tmp_path):
-    root = make_root(tmp_path)  # base: CLAUDE.md(100) + planner.md(100) = 200
+    # base: rules(100) + CLAUDE.md(100) + planner.md(100) = 300
+    root = make_root(tmp_path)
     rows, _ = context_budget.measure(root)
-    assert rows["planner"]["tokens"] == 200
+    assert rows["planner"]["tokens"] == 300
 
     (tmp_path / "v").mkdir()
     root2 = make_root(tmp_path / "v", profile="verbose")
     rows2, _ = context_budget.measure(root2)
-    assert rows2["planner"]["tokens"] == 300  # + verbose.md(100)
+    assert rows2["planner"]["tokens"] == 400  # + verbose.md(100)
+
+
+def test_rules_file_counted_and_claude_md_optional(tmp_path):
+    # instance-like root: the rules file replaces CLAUDE.md in the static payload
+    root = make_root(tmp_path, with_claude=False)  # rules(100) + planner.md(100)
+    rows, _ = context_budget.measure(root)
+    assert rows["planner"]["tokens"] == 200
+    assert "CLAUDE.md" not in rows["planner"]["files"]
+    assert "lab/plugin/rules/hard-rules.md" in rows["planner"]["files"]
 
 
 def test_real_repo_measures_every_role():

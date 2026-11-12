@@ -30,7 +30,7 @@ Frontmatter schema:
 | `depends_on`, `parallel_group` (tasks) | `[T1, T2]` | richer than OKF's plain links — orchestration graph, beyond OKF scope |
 | — | — | OKF `title`, `description`, `tags`, `timestamp` (we don't use) |
 
-**Conformance check — `work/salle-booking/` bundle:** the three files would conform to
+**Conformance check — `examples/booking/work/salle-booking/` bundle:** the three files would conform to
 OKF v0.1 with one change (add `type:`) and would *gain* nothing required beyond that.
 Our `version:` + pointer + `depends_on` machinery is **orchestration semantics OKF does
 not model** (OKF links are undirected references, not a build DAG). `lab/models/` docs have

@@ -1,0 +1,12 @@
+{
+  "name": "fde-kit-marketplace",
+  "owner": { "name": "FDE Kit maintainers" },
+  "plugins": [
+    {
+      "name": "fde-kit",
+      "source": "./lab/plugin",
+      "description": "Portable agentic SDLC kit: agents, skills, guardrails and hard rules.",
+      "version": "0.1.0"
+    }
+  ]
+}

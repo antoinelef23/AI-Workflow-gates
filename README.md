@@ -29,15 +29,17 @@ ai-native-lab/
 │   │   ├── journal_io.py      # Shared .runs/journal.jsonl reader
 │   │   ├── runner.py          # AgentRunner interface (claude-cli | sandbox)
 │   │   └── sandbox_runner.py  # Hardened-container runner (LAB_RUNNER=sandbox)
+│   ├── plugin/                # The Claude Code plugin `fde-kit` (no `.claude/` in this repo)
+│   │   ├── .claude-plugin/    # plugin.json (version = the package version)
+│   │   ├── agents/            # Sub-agents: design-scout, planner, implementer, eval-runner, reviewer
+│   │   ├── skills/            # vibe-workshop (spec), commit (why→git), diataxis (docs)
+│   │   ├── hooks/             # hooks.json + guard_paths.sh, session_start.sh, eval_gate.sh, post_edit.sh
+│   │   ├── rules/             # hard-rules.md — the single source of the hard rules
+│   │   └── statusline.py      # Status line: live orchestrator run state (state.json)
 │   ├── templates/             # spec.md / design.md / tasks.md templates
 │   └── models/                # registry.toml, profiles/, EVOLUTION.md, scorecards/
 │
-├── .claude/
-│   ├── agents/                # Sub-agents: design-scout, planner, implementer, eval-runner, reviewer
-│   ├── hooks/                 # eval_gate.sh (merge gate) + post_edit.sh (lint)
-│   ├── statusline.py          # Status line: live orchestrator run state (state.json)
-│   ├── settings.json          # Hooks + statusLine + permission denies
-│   └── skills/                # vibe-workshop (spec), commit (why→git), diataxis (docs)
+├── .claude-plugin/marketplace.json  # The repo is its own plugin marketplace (source ./lab/plugin)
 ├── docs/                      # Diátaxis: tutorials/ how-to/ explanation/ reference/ (see docs/README.md)
 │
 │                              # ───────── Built with the lab (examples / product) ─────────
@@ -100,10 +102,10 @@ flowchart TD
 4. **Per-task verify**: the `verify` command in tasks.md materializes `done_when`. It is parsed to an argv list and run **without a shell** (no metacharacters, command + env-prefix allowlists) — checked mechanically after each agent, before the evals.
 5. **Failure containment**: failed/blocked only neutralizes dependents (`skipped`); other branches continue. The run always ends on a summary, never on a mid-course abort.
 6. **Scoped commits, why in git**: only the task's `files_touched` (+ the feature dir) are staged, under a lock — two parallel agents don't pollute each other, and the golden oracles can't be swept into a task commit. Out-of-scope changes are reported, not committed. Every commit follows the canonical format ([docs/reference/commit-format.md](docs/reference/commit-format.md)): a `Why:` body + git trailers (`Spec-IDs`, `Version-Bump`, …), the same shape the human `/commit` skill writes — so the *reasoning* behind a change (not just the diff) lives in git, where the reviewer/planner/scout agents recover it via `git log`/`blame`. The `version:` bump stays the *fusible* (intent); git carries the *why*.
-7. **Signed human approvals**: checkpoint approvals are HMAC-signed (`lab/engine/approve.sh`) and verified before they're honored, then consumed (no replay). **Fail-closed by default**: a plan with checkpoints refuses to start without `LAB_APPROVAL_SECRET` (opt-out `LAB_ALLOW_UNSIGNED_APPROVALS=1`). The secret is stripped from the agent's environment, and `.approvals/`/`.runs/` are denied to the agent's edit tools.
+7. **Signed human approvals**: checkpoint approvals are HMAC-signed (`lab/engine/approve.sh`) and verified before they're honored, then consumed (no replay). **Fail-closed by default**: a plan with checkpoints refuses to start without `LAB_APPROVAL_SECRET` (opt-out `LAB_ALLOW_UNSIGNED_APPROVALS=1`). The secret is stripped from the agent's environment, and `.approvals/`/`.runs/` are denied to the agent's edit tools (in orchestrated runs, by the run settings the engine passes with `--settings` on every call; interactively, by the plugin's path-guard hook).
 8. **Concurrency safety**: an OS `flock` (`.runs/orchestrator.lock`) fails a second run on the same feature fast; `state.json` is written atomically and resume tolerates a truncated file.
 9. **Documented `auto` checkpoints**: before every checkpoint, the `reviewer` report is written to `.runs/CP-n-review.md`. Auto = green evals AND `VERDICT: PASS`; on any doubt it falls back to human validation.
-10. **Session eval gate** (`.claude/settings.json`): `Stop`/`SubagentStop` hooks → an agent can't finish with changed code and red evals; `PostToolUse` → ruff on each edit.
+10. **Session guardrails** (plugin hooks, `lab/plugin/hooks/hooks.json`, wired through `${CLAUDE_PLUGIN_ROOT}`): `PreToolUse` → `guard_paths.sh` blocks edit tools on `.approvals/` and `.runs/`; `SessionStart` → injects the hard rules; `Stop`/`SubagentStop` → an agent can't finish with changed code and red evals; `PostToolUse` → ruff on each edit. **Known limit:** a write made by a subprocess (a script launched through Bash) is not blocked by the path guard — the sandbox remains the hard boundary.
 11. **Hash-pinned dependencies** (`just check-lock`, in `gate`/`gate-ci`): installs run `uv sync --locked` against the committed `uv.lock` (sha256) — a dependency cannot appear without a reviewable lockfile diff, a hallucinated package name fails resolution outright, and a package can't be silently swapped on the index without breaking its hash.
 12. **Trajectory guard** (`just check-trajectory work/<feature>`): checks HOW a run happened from the journal + git history — a `task_done` with no successful attempt (forged/corrupt journal) or a task commit outside its `files_touched` fails; retry-loops warn.
 
@@ -127,6 +129,10 @@ lab/engine/reject.sh CP-1 work/my-feature "the quote doesn't show the discount" 
 ```
 
 Recovery: state lives in `<feature>/.runs/state.json` — re-running the same command resumes where it stopped (`done` nodes don't replay; `blocked` nodes retry after you answer their open questions). Prerequisites: `claude` CLI authenticated, `uv` installed.
+
+## Use the kit on a client project
+
+The kit is one package (`uv tool install git+<kit repo>@v<x.y.z>`) that provides the `lab` CLI and the plugin (marketplace = this repo). A client project (instance) gets only `.lab/lab.toml`, `work/` and evals recipes — never agent tooling. See [activate an instance](docs/how-to/activate-an-instance.md). To work on the kit itself: `claude --plugin-dir lab/plugin`.
 
 ## Documentation
 
@@ -167,7 +173,7 @@ Fairness by construction (same prompts, isolated trials, measured metrics, no ch
 
 The orchestrator drives agents through an `AgentRunner` interface (`lab/engine/runner.py`), so the execution backend is swappable:
 
-- **`claude-cli`** (default) — runs on the **host**, gated by tool allowlists (`--allowedTools`, the `verify` allowlist, `.claude/settings.json` denies). An implementer that runs its own tests has code execution, so here the signed-approval boundary is *defense-in-depth that raises the bar*, not a hard boundary against a determined, code-executing agent.
+- **`claude-cli`** (default) — runs on the **host**, gated by tool allowlists (`--allowedTools`, the `verify` allowlist, the run-settings denies `lab/engine/run_settings.json`). An implementer that runs its own tests has code execution, so here the signed-approval boundary is *defense-in-depth that raises the bar*, not a hard boundary against a determined, code-executing agent.
 - **`sandbox`** (`LAB_RUNNER=sandbox`, see [docs/how-to/use-the-sandbox.md](docs/how-to/use-the-sandbox.md)) — runs the same call in a hardened container: only the repo is mounted, the approval secret is never passed in, egress is allowlisted, non-root + read-only rootfs + dropped caps. This makes the secret **unreachable** by the agent, which is what turns the approval crypto into a true boundary. Validated end-to-end on Docker (the secret is provably absent inside the container); the egress-allowlist proxy is operator infrastructure.
 
 Intended threat model: a **trusted-but-possibly-misaligned** agent on the host runner; a **malicious** agent under the sandbox runner.

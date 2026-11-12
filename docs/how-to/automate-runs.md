@@ -8,7 +8,7 @@ and follow the convention below.
 
 | Surface | When it runs | Role | Lives in |
 |---|---|---|---|
-| **Claude hooks** | In-session, after the agent edits / tries to stop | Model-facing, fast/advisory; may re-prompt the agent | `.claude/hooks/`, wired in `.claude/settings.json` |
+| **Claude hooks** | In-session, after the agent edits / tries to stop | Model-facing, fast/advisory; may re-prompt the agent | `lab/plugin/hooks/`, wired in `hooks.json` |
 | **git pre-commit** | Every commit, on the author's machine (opt-in) | Cheap, deterministic local gate; blocks bad commits early | `.githooks/`, enabled via `git config core.hooksPath .githooks` |
 | **CI** | Every PR + push to `main` | Authoritative, non-bypassable merge gate; the superset | `.github/workflows/gate.yml` |
 | **human-invoked** (`just`) | On demand by a person (or reused by CI) | Control surface + dev entry points; never auto-triggered | `justfile` |
@@ -20,7 +20,7 @@ invoke the underlying logic.
 
 ## Inventory
 
-### Claude hooks — `.claude/hooks/` (wired in `.claude/settings.json`)
+### Claude hooks — `lab/plugin/hooks/` (wired in `hooks.json` via `${CLAUDE_PLUGIN_ROOT}`)
 - **`eval_gate.sh`** — `Stop` / `SubagentStop`: if Python changed, runs `just evals`;
   red evals → exit 2 (the agent is sent back to fix). Also warns when code changed but
   no eval is collected (empty-gate). *Why here:* must intercept the agent mid-session.

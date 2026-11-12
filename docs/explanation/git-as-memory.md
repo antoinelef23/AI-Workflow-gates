@@ -132,7 +132,7 @@ re-litigating it." commit-format.md spells out the moves — read the history be
 
 ```bash
 git log --oneline -- work/<feature>/spec.md          # what amended the contract, when
-git log --format='%h %s%n%b' -- src/devis/calc.py    # full message incl. the Why: body
+git log --format='%h %s%n%b' -- examples/devis/src/devis/calc.py    # full message incl. the Why: body
 git blame -L <line>,<line> work/<feature>/spec.md    # who/why on a specific ID line
 git log --format='%(trailers:key=Version-Bump,valueonly)' -- work/<feature>/spec.md
 ```

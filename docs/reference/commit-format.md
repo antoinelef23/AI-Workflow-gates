@@ -17,11 +17,14 @@ got resolved — the reasoning a future reader (or agent) needs to NOT re-litiga
 this choice. Not "what changed" (the diff shows that) — WHY it changed.>
 
 Spec-IDs: INV-1, BHV-2, EVAL-3
-Artifacts: src/devis/calc.py, work/devis-pose/spec.md
+Artifacts: examples/devis/src/devis/calc.py, examples/devis/work/devis-pose/spec.md
 Version-Bump: spec.md 1.0.0→1.1.0
 Checkpoint: CP-1
 Run: auto
 ```
+
+(Paths in `Artifacts:` are relative to the repo the commit is made in — shown here from the kit
+root. A commit made from inside the `devis` instance would write `src/devis/calc.py`.)
 
 - **Subject** — `<type>(<feature>): <node> <title> [IDs]`. `type` follows
   [Conventional Commits](https://www.conventionalcommits.org/): feat/fix/docs/style/
@@ -57,7 +60,7 @@ Before challenging or re-deciding a choice, read the history rather than guessin
 
 ```bash
 git log --oneline -- work/<feature>/spec.md           # what amended the contract, when
-git log --format='%h %s%n%b' -- src/devis/calc.py     # full message incl. the Why: body line
+git log --format='%h %s%n%b' -- examples/devis/src/devis/calc.py     # full message incl. the Why: body line
 git blame -L <line>,<line> work/<feature>/spec.md     # who/why on a specific ID line
 git log --format='%(trailers:key=Version-Bump,valueonly)' -- work/<feature>/spec.md  # Version-Bump IS a trailer
 ```

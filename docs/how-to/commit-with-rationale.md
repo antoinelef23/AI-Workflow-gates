@@ -97,7 +97,8 @@ then the contiguous trailer block (`Spec-IDs:`, `Artifacts:`, `Version-Bump:` if
 `Checkpoint:` if any, `Run: owner`). The `Why:` is a body paragraph, **not** a trailer —
 keep it before the trailer block. Use `Run: owner` for a human `/commit`.
 
-Then commit, preserving the multi-line body:
+Then commit, preserving the multi-line body. (The example below is written from inside the
+`examples/devis` instance, so `Artifacts:` paths are relative to that instance.)
 
 ```bash
 git commit -m "$(cat <<'EOF'

@@ -62,23 +62,15 @@ from plan import (
     paths_overlap,
     skip_dependents,
 )
+from kit import kit_root, kit_version
 from registry import load_registry, resolve_model
 from runner import DEFAULT_ALLOWED_TOOLS, get_runner
 from verify import parse_verify
 
 
-# LAB_ROOT: override for tests (sandbox). Default: the repo root, found by walking up
-# from this file to the dir holding pyproject.toml — so the engine can live at any depth
-# (e.g. lab/engine/) without hard-coding parent levels.
-def _repo_root(start: Path | None = None) -> Path:
-    here = (start or Path(__file__)).resolve()
-    for p in (here, *here.parents):
-        if (p / "pyproject.toml").exists():
-            return p
-    return here.parent.parent.parent  # fallback: lab/engine/<file> -> repo root
-
-
-ROOT = Path(os.environ["LAB_ROOT"]) if os.environ.get("LAB_ROOT") else _repo_root()
+# ROOT = kit root: LAB_ROOT (test seam) else the dir holding lab/models/registry.toml —
+# resolved by the ONE function in kit.py (design ADR-5).
+ROOT = kit_root()
 # LAB is the framework root (engine, model registry, agent definitions, docs).
 # It is an alias of ROOT — kept distinct in intent so the prompts and the
 # add-dir grant read clearly.
@@ -115,6 +107,10 @@ COMMIT_LOCK = threading.Lock()
 LOG_LOCK = threading.Lock()
 COST_LOCK = threading.Lock()
 COST_TOTAL = {"usd": 0.0}
+# files_touched of the tasks currently running (parallel waves): a sibling's
+# in-flight edits are not a scope leak of the task being checked.
+RUNNING_LOCK = threading.Lock()
+RUNNING_FILES: dict[str, list[str]] = {}
 # fd of the inter-process flock kept open for the whole run (released on process
 # exit by the OS). Prevents two orchestrators from racing on the same feature.
 _ORCH_LOCK_FD: int | None = None
@@ -196,6 +192,85 @@ def journal(feature: Path, **event) -> None:
             fh.write(json.dumps(event, ensure_ascii=False) + "\n")
 
 
+# ---- kit guardrails on every agent call (spec BHV-2, INV-1; design ADR-2, ADR-10) ----
+
+PLUGIN_REL = Path("lab") / "plugin"
+RUN_SETTINGS_REL = Path("lab") / "engine" / "run_settings.json"
+RULES_REL = PLUGIN_REL / "rules" / "hard-rules.md"
+MIN_CLAUDE_VERSION = (2, 1, 295)  # `onFailure` hooks (design ADR-6)
+
+
+def guardrail_options() -> dict:
+    """Plugin dir, run settings and hard rules for EVERY agent call (implementer and
+    reviewer alike). Resolved from the KIT root (LAB), never from PROJECT (I-2). Kit mode
+    (PROJECT == LAB): cwd-relative paths, valid on the host and inside the sandbox's
+    /workspace (ADR-10). External instance: absolute paths under the kit. The engine never
+    passes `--bare`."""
+    external = PROJECT != LAB
+    base = LAB if external else Path()
+    return {
+        "plugin_dir": str(base / PLUGIN_REL),
+        "settings": str(base / RUN_SETTINGS_REL),
+        "append_system_prompt": (LAB / RULES_REL).read_text(encoding="utf-8"),
+    }
+
+
+def agent_file(role: str) -> Path:
+    """Agent definition for `role`, evaluated per call: always the plugin's
+    `lab/plugin/agents/<role>.md` (single source, ADR-3; no legacy fallback)."""
+    return LAB / PLUGIN_REL / "agents" / f"{role}.md"
+
+
+def _parse_version(text: str) -> tuple[int, ...] | None:
+    m = re.search(r"(\d+)\.(\d+)\.(\d+)", text)
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def preflight() -> list[str]:
+    """Fail-closed pre-flight (ADR-6, I-5). Returns the refusal messages (empty = go).
+    Order: kit root; plugin dir; (external instance) pin; claude CLI; runner/instance."""
+    external = PROJECT != LAB
+    plugin = LAB / PLUGIN_REL
+    if not plugin.is_dir():
+        return [
+            f"plugin directory {plugin} not found — the kit install is broken "
+            "(reinstall fde-kit or set LAB_ROOT to the kit)"
+        ]
+    for f in (LAB / RULES_REL, LAB / RUN_SETTINGS_REL):
+        if not f.is_file():
+            return [f"{f} not found — the kit install is broken"]
+    if external:
+        from lab_init import LabTomlError, read_lab_toml
+
+        try:
+            pinned = read_lab_toml(PROJECT)["kit_version"]
+        except LabTomlError as e:
+            return [str(e)]
+        running = kit_version()
+        if pinned != running:
+            return [
+                f"plugin {running} ≠ pinned kit {pinned} "
+                f"(.lab/lab.toml in {PROJECT}; upgrading the kit is an explicit commit of the instance)"
+            ]
+    try:
+        p = subprocess.run(
+            ["claude", "--version"], capture_output=True, text=True, timeout=60
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return [f"cannot run `claude --version`: {e}"]
+    found = _parse_version(p.stdout) if p.returncode == 0 else None
+    minimum = ".".join(map(str, MIN_CLAUDE_VERSION))
+    if found is None:
+        return [f"cannot read the claude CLI version (need >= {minimum})"]
+    if found < MIN_CLAUDE_VERSION:
+        return [
+            f"claude CLI {'.'.join(map(str, found))} is too old (need >= {minimum})"
+        ]
+    if external and (os.environ.get("LAB_RUNNER") or "").strip().lower() == "sandbox":
+        return ["sandbox + external instance not supported before iteration 2"]
+    return []
+
+
 def run_claude(
     prompt: str, resume: str | None = None, model: str | None = None
 ) -> dict:
@@ -225,6 +300,7 @@ def run_claude(
         timeout=TASK_TIMEOUT_S,
         env=child_env,
         add_dirs=add_dirs,
+        **guardrail_options(),
     )
     with COST_LOCK:
         COST_TOTAL["usd"] += r.cost_usd
@@ -347,6 +423,51 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
         )
 
 
+def _dirty_paths() -> set[str]:
+    """Paths (repo-relative) that differ from HEAD: modified, deleted, renamed
+    (both sides) and untracked — gitignored files excluded."""
+    out = subprocess.run(
+        ["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"],
+        cwd=PROJECT,
+        capture_output=True,
+        text=True,
+    ).stdout
+    paths: set[str] = set()
+    entries = out.split("\0")
+    i = 0
+    while i < len(entries):
+        e = entries[i]
+        i += 1
+        if len(e) < 4:
+            continue
+        paths.add(e[3:])
+        if e[0] in "RC" and i < len(entries):  # -z: rename source follows
+            paths.add(entries[i])
+            i += 1
+    return paths
+
+
+def _scope_leaks(node: Node, feature: Path, baseline: set[str]) -> list[str]:
+    """Changes this task made OUTSIDE its files_touched (plan gap found in CP-3).
+
+    `verify` and the eval gate run on the WORKING TREE, but scoped_commit only
+    stages files_touched + the feature dir: an out-of-scope edit that makes the
+    verify pass is silently left behind, so the committed tree can be red while
+    the run log says green. Excluded: what was already dirty before the task
+    (baseline), the feature dir (run log, reviews), and the files_touched of the
+    tasks running in parallel with it."""
+    feat = str(feature.relative_to(PROJECT))
+    with RUNNING_LOCK:
+        sibling = [f for nid, fs in RUNNING_FILES.items() if nid != node.id for f in fs]
+    return sorted(
+        p
+        for p in _dirty_paths() - baseline
+        if not paths_overlap(p, feat)
+        and not any(paths_overlap(p, f) for f in node.files)
+        and not any(paths_overlap(p, f) for f in sibling)
+    )
+
+
 def _commit_message(node: Node, feature: Path, real_ids: list[str]) -> str:
     """Canonical commit format (docs/reference/commit-format.md): subject + Why + trailers.
 
@@ -363,18 +484,25 @@ def _commit_message(node: Node, feature: Path, real_ids: list[str]) -> str:
     dw = node.done_when.strip().replace("\n", " ")
     subject = f"feat({feature.name}): {node.id} {title} {tag}"
     why = title + (f" — done when: {dw}" if dw else "")
+    # A rework carries the decision that triggered it: the checkpoint rejection
+    # reason belongs in git (hard rule "the why lives in git"), not only in the
+    # tasks.md run log (found at fde-kit CP-4: bc58ecd said nothing of it).
+    rm = re.search(r"OWNER REVIEW FEEDBACK \(rejection ([\w-]+)\): (.*)", node.rework)
+    if rm:
+        reason = rm.group(2).strip()
+        why += f"\nRework after the {rm.group(1)} rejection: {reason}"
     lines = [subject, "", f"Why: {why}", ""]
     if real_ids:
         lines.append(f"Spec-IDs: {', '.join(real_ids)}")
     if node.files:
         lines.append(f"Artifacts: {', '.join(node.files)}")
-    lines.append("Run: auto")
+    lines.append("Run: owner" if node.agent == "owner" else "Run: auto")
     return "\n".join(lines)
 
 
 def _build_base_prompt(node: Node, feature: Path) -> str:
     return (
-        f"You act as the implementer agent ({LAB}/.claude/agents/implementer.md). "
+        f"You act as the implementer agent ({agent_file('implementer')}). "
         f"Framework references (engineering rules, deployment standard, other agent files) "
         f"live under {LAB} — resolve any such path there, not under the project. "
         f"Read {feature}/spec.md then {feature}/design.md then {feature}/tasks.md. "
@@ -456,12 +584,77 @@ def _eval_gate(node: Node, real_ids: list[str]) -> tuple[bool, str]:
                     f"Convention: node-id `test_{missing[0].lower().replace('-', '_')}_<case>` "
                     "(lowercased ID, dashes→underscores)."
                 )
+    if ok and _just_has_recipe("lint-check"):
+        # The project's own non-mutating lint is part of "done": a task whose verify
+        # only runs its test (fde-kit T14) otherwise lands unformatted code that turns
+        # `gate-ci` red at the merge checkpoint. No recipe ⇒ no lint imposed.
+        lp = subprocess.run(
+            ["just", "lint-check"], cwd=PROJECT, capture_output=True, text=True
+        )
+        if lp.returncode != 0:
+            return False, (
+                "LINT RED: `just lint-check` (the project's own lint, part of the "
+                "merge gate) fails — fix formatting/lint in your files, without "
+                "touching files outside files_touched:\n"
+                + (lp.stdout + lp.stderr)[-2000:]
+            )
     return ok, out
+
+
+def run_owner_task(node: Node, feature: Path, dry: bool, real_ids: list[str]) -> str:
+    """Owner lane (`agent: owner`): work a headless agent cannot do — writes under
+    protected paths (the Claude Code config dir, a plugin's agents/skills/hooks) or commands outside
+    its allowlist. No agent is dispatched: the Owner does the task by hand, then
+    signs it with approve.sh. The engine still owns "done": the task's verify and
+    the eval gate must be green, then the scoped commit carries the work
+    (`Run: owner`). reject.sh on the task = the Owner gives up → blocked."""
+    if dry:
+        print(f"  [dry-run] OWNER TASK {node.id} — waits for a signed approval")
+        return "done"
+    rel = feature.relative_to(PROJECT)
+    notify(
+        f"OWNER TASK {node.id} — {node.title}: do it by hand (tasks.md prompt; scope: "
+        f"{', '.join(node.files)}), then lab/engine/approve.sh {node.id} {rel} "
+        f'(or reject.sh {node.id} {rel} "reason" to block it)'
+    )
+    outcome, info = _await_token(node, feature, "owner task")
+    if outcome == "approved":
+        # The Owner-lane counterpart of a successful task_attempt: the trajectory
+        # guard (BHV-2a) accepts a task_done only after one of the two.
+        journal(feature, event="owner_signed", id=node.id)
+    if outcome != "approved":
+        journal(
+            feature, event="task_blocked", id=node.id, reason=info.get("reason", "")
+        )
+        return "blocked"
+    passed, feedback, label = _run_verify(node)
+    ok, out = _eval_gate(node, real_ids) if passed else (False, feedback)
+    if not (passed and ok):
+        run_log(
+            feature,
+            node,
+            "owner",
+            f"owner task RED after signature ({label or 'evals'})",
+        )
+        journal(feature, event="task_failed", id=node.id)
+        notify(
+            f"{node.id}: signed but verify/evals red — fix and restart:\n{out[:500]}"
+        )
+        return "failed"
+    run_log(feature, node, "owner", "done by the Owner, verify + evals green")
+    scoped_commit(node, feature, _commit_message(node, feature, real_ids))
+    journal(feature, event="task_done", id=node.id, attempts=1, lane="owner")
+    return "done"
 
 
 def run_task(node: Node, feature: Path, dry: bool) -> str:
     """Returns done | failed | blocked. Per attempt: run the agent → parse the
     STATUS verdict → run verify → run the eval gate → scoped commit on green."""
+    if node.agent == "owner":
+        ids = list(
+            dict.fromkeys(s for t in node.implements for s in SPEC_ID.findall(t))
+        )
+        return run_owner_task(node, feature, dry, ids)
     if dry:
         print(
             f"  [dry-run] {RUNNER.name} run: {node.id} "
@@ -474,6 +667,24 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
     )
     mid = resolve_model("implementer", node.model, REGISTRY)
     base_prompt = _build_base_prompt(node, feature) + REGISTRY.profile_text(mid)
+    baseline = _dirty_paths()
+    with RUNNING_LOCK:
+        RUNNING_FILES[node.id] = list(node.files)
+    try:
+        return _run_task_attempts(node, feature, real_ids, base_prompt, mid, baseline)
+    finally:
+        with RUNNING_LOCK:
+            RUNNING_FILES.pop(node.id, None)
+
+
+def _run_task_attempts(
+    node: Node,
+    feature: Path,
+    real_ids: list[str],
+    base_prompt: str,
+    mid: str | None,
+    baseline: set[str],
+) -> str:
     session: str | None = None
     extra = ""
     for attempt in range(1, MAX_EVAL_RETRIES + 1):
@@ -532,6 +743,23 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
             continue
 
         ok, out = _eval_gate(node, real_ids)
+        leaks = _scope_leaks(node, feature, baseline) if ok else []
+        if leaks:
+            # Green, but only thanks to files the scoped commit will NOT carry.
+            listed = "\n".join(f"  - {p}" for p in leaks[:20])
+            extra = (
+                "\n\n⛔ SCOPE LEAK: verify/evals are green, but you changed files OUTSIDE "
+                f"this task's files_touched; they would be left out of the commit:\n{listed}\n"
+                "Revert those changes and make the task pass within files_touched. If that "
+                'is impossible, end with "STATUS: blocked — files_touched gap: <files>" '
+                "so the Owner amends the plan."
+            )
+            print(f"⚠️  {node.id}: scope leak — {', '.join(leaks[:5])}", flush=True)
+            run_log(feature, node, "implementer", f"SCOPE LEAK (t{attempt})")
+            journal(
+                feature, event="scope_leak", id=node.id, attempt=attempt, files=leaks
+            )
+            continue
         if ok:
             run_log(feature, node, "implementer", f"done, evals green (t{attempt})")
             scoped_commit(node, feature, _commit_message(node, feature, real_ids))
@@ -590,7 +818,7 @@ def run_review(cp: Node, feature: Path, dry: bool) -> tuple[str, Path, bool]:
     for i, mid in enumerate(models):
         lens = REVIEW_LENSES[i % len(REVIEW_LENSES)] if n > 1 else "full review"
         prompt = (
-            f"You act as the reviewer agent ({LAB}/.claude/agents/reviewer.md). Feature: {feature}. "
+            f"You act as the reviewer agent ({agent_file('reviewer')}). Feature: {feature}. "
             f"Checkpoint {cp.id} — {cp.title}. Tasks covered: {', '.join(cp.depends_on) or 'all'}. "
             f"REVIEW LENS imposed: {lens}. "
             f"Produce the report (✅/⚠️/❌ with file:line) and you MUST end with a "
@@ -637,12 +865,18 @@ def wait_checkpoint(
 ) -> tuple[str, dict]:
     """Returns ("approved", {}) or ("rejected", {reason, tasks})."""
     approval = feature / ".approvals" / node.id
-    rejection = feature / ".approvals" / f"{node.id}.rejected"
     if dry:
         print(
             f"  [dry-run] CHECKPOINT {node.id} (mode {node.mode}) — attend {approval}"
         )
         return "approved", {}
+
+    # A rejection already waiting (e.g. dropped while the engine was restarted) is
+    # honored BEFORE paying for a new review panel: rejecting is the conservative
+    # outcome, the review would change nothing. An approval is never short-cut —
+    # the review is regenerated first (self-hosting protocol).
+    if (feature / ".approvals" / f"{node.id}.rejected").exists():
+        return _await_token(node, feature, "checkpoint")
 
     verdict, report, self_only = run_review(node, feature, dry)
     evals_ok, _ = run_evals()
@@ -684,6 +918,15 @@ def wait_checkpoint(
         f'or lab/engine/reject.sh {node.id} {feature.relative_to(PROJECT)} "reason" [Tn …] '
         f"(reviewer report: {report.relative_to(PROJECT)}, verdict {verdict})"
     )
+    return _await_token(node, feature, "checkpoint")
+
+
+def _await_token(node: Node, feature: Path, kind: str) -> tuple[str, dict]:
+    """Block until the Owner signs `.approvals/<id>` (approve.sh) or drops
+    `.approvals/<id>.rejected` (reject.sh). Shared by checkpoints and Owner-lane
+    tasks. Returns ("approved", {}) or ("rejected", {reason, tasks})."""
+    approval = feature / ".approvals" / node.id
+    rejection = feature / ".approvals" / f"{node.id}.rejected"
     print(f"⏸  {node.id} — waiting for {approval} (or .rejected)", flush=True)
     while True:
         if rejection.exists():
@@ -692,7 +935,7 @@ def wait_checkpoint(
                 rejection.parent
                 / f"{node.id}.rejected.handled-{datetime.now():%Y%m%d%H%M%S}"
             )
-            run_log(feature, node, "owner", f"checkpoint REJECTED — {info['reason']}")
+            run_log(feature, node, "owner", f"{kind} REJECTED — {info['reason']}")
             journal(feature, event="checkpoint_rejected", id=node.id, **info)
             notify(
                 f"{node.id} rejected — reopening: {', '.join(info['tasks']) or 'all the checkpoint tasks'}"
@@ -722,7 +965,7 @@ def wait_checkpoint(
             approval.rename(
                 approval.parent / f"{node.id}.handled-{datetime.now():%Y%m%d%H%M%S}"
             )
-            run_log(feature, node, "owner", "checkpoint validated")
+            run_log(feature, node, "owner", f"{kind} validated")
             notify(f"{node.id} validated — resuming execution")
             return "approved", {}
         time.sleep(20)
@@ -759,7 +1002,16 @@ def main() -> int:
     feature = (PROJECT / args.feature).resolve()
     fm, nodes = parse_tasks_md(feature / "tasks.md")
 
-    errors, warnings = validate(feature, fm, nodes, REGISTRY)
+    try:  # nodes already done in a previous run: capability lint no longer applies
+        prev = json.loads(
+            (feature / ".runs" / "state.json").read_text(encoding="utf-8")
+        )
+        done_ids = {k for k, v in prev.items() if v == "done"}
+    except (OSError, json.JSONDecodeError, AttributeError):
+        done_ids = set()
+    errors, warnings = validate(
+        feature, fm, nodes, REGISTRY, project=PROJECT, done=done_ids
+    )
     if args.validate or errors or warnings:
         print(
             f"Plan-lint — {len(nodes)} nodes, frontmatter status: {fm.get('status', '∅')}"
@@ -805,6 +1057,13 @@ def main() -> int:
             "Export LAB_APPROVAL_SECRET (recommended) or, knowingly, "
             "LAB_ALLOW_UNSIGNED_APPROVALS=1 to allow unsigned tokens."
         )
+        return 1
+
+    # Pre-flight (fail-closed, before the lock): real runs AND --dry-run, never --validate.
+    refusals = preflight()
+    if refusals:
+        for m in refusals:
+            print(f"⛔ pre-flight: {m}", file=sys.stderr)
         return 1
 
     by_id = {n.id: n for n in nodes}

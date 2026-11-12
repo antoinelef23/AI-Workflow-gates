@@ -44,59 +44,71 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
-# Repo root = the dir holding pyproject.toml, found by walking up (the engine lives at
-# lab/engine/, the data — evals/, lab/models/ — hangs off the repo root).
-def _repo_root(start: Path | None = None) -> Path:
-    here = (start or Path(__file__)).resolve()
-    for p in (here, *here.parents):
-        if (p / "pyproject.toml").exists():
-            return p
-    return here.parent.parent.parent  # fallback: lab/engine/<file> -> repo root
+from kit import kit_root  # noqa: E402  (ADR-5: the one root resolver)
+from runner import claude_argv  # noqa: E402  (I-1: the single argv builder)
 
 
-# cases.py = framework code → resolved via the repo root (NOT via LAB_ROOT, which points at the data)
-sys.path.insert(0, str(_repo_root() / "evals" / "behavioral"))
+# cases.py = framework code → resolved from the kit's code location (NOT via LAB_ROOT, which points at the data)
+sys.path.insert(0, str(kit_root(honor_env=False) / "evals" / "behavioral"))
 from registry import load_registry  # noqa: E402
 
 # LAB_ROOT = data/config (registry, golden, outputs). The code lives near __file__.
-ROOT = Path(os.environ["LAB_ROOT"]) if os.environ.get("LAB_ROOT") else _repo_root()
+ROOT = kit_root()
 REGISTRY = load_registry(ROOT)
 TIMEOUT_S = int(os.environ.get("LAB_TASK_TIMEOUT", "1800"))
 ALLOWED = "Bash(uv:*),Bash(make:*),Bash(python3:*),Bash(mkdir:*),Bash(ls:*),Bash(cat:*),Bash(git:*)"
 
 ROLE_PROMPT = {
     "implementer": (
-        "You act as the implementer agent (.claude/agents/implementer.md). "
+        "You act as the implementer agent (.agent/implementer.md). "
         "Read the files in the current directory. {prompt} "
         "Strictly respect the files_touched scope. If the spec has gaps/is ambiguous, "
         "do not invent anything: record an OQ and end blocked. "
         'You MUST end with a single line "STATUS: done" or "STATUS: blocked — <reason>".'
     ),
     "reviewer": (
-        "You act as the reviewer agent (.claude/agents/reviewer.md). "
+        "You act as the reviewer agent (.agent/reviewer.md). "
         "Read the files in the current directory. {prompt} "
         'You MUST end with a single line "VERDICT: PASS", "VERDICT: WARN" or "VERDICT: BLOCK".'
     ),
 }
 
 
+# Source of the role files, from the kit CODE location (never LAB_ROOT). Each trial
+# gets a COPY in its temp cwd (.agent/<role>.md, see setup_fixture): no path into the
+# kit is ever shown to the graded model, and nothing outside its cwd is granted. An
+# absolute path + --add-dir told it where the kit is, and its Bash tools (python3,
+# cat, git) can read any file there, the answer keys under evals/ included
+# (EVOLUTION.md fairness rule; fde-kit CP-4 review).
+_AGENTS = kit_root(honor_env=False) / "lab" / "plugin" / "agents"
+
+
+def kit_options() -> dict:
+    """Same guardrail options as an orchestrated run (ADR-11, ADR-2): plugin dir, run
+    settings, hard rules appended. ABSOLUTE paths, resolved from the kit CODE location
+    (never LAB_ROOT, which may point at test data): each trial runs in its own temp cwd.
+    Never `--bare`."""
+    code = kit_root(honor_env=False)
+    return {
+        "plugin_dir": str(code / "lab" / "plugin"),
+        "settings": str(code / "lab" / "engine" / "run_settings.json"),
+        "append_system_prompt": (
+            code / "lab" / "plugin" / "rules" / "hard-rules.md"
+        ).read_text(encoding="utf-8"),
+    }
+
+
 def call_model(prompt: str, model: str, cwd: Path) -> dict:
     """A single isolated agent call (dedicated cwd). Returns {ok,text,cost_usd,duration_s}."""
-    cmd = [
-        "claude",
-        "-p",
+    cmd = claude_argv(
         prompt,
-        "--permission-mode",
-        "acceptEdits",
-        "--max-turns",
-        "60",
-        "--allowedTools",
-        ALLOWED,
-        "--output-format",
-        "json",
-        "--model",
-        model,
-    ]
+        model=model,
+        resume=None,
+        allowed_tools=ALLOWED.split(","),
+        max_turns=60,
+        permission_mode="acceptEdits",
+        **kit_options(),
+    )
     t0 = time.monotonic()
     try:
         p = subprocess.run(
@@ -129,9 +141,15 @@ def over_budget() -> bool:
     return False
 
 
-def setup_fixture(files: dict[str, str]) -> Path:
-    """Isolated directory + git baseline (the checkers rely on git status)."""
+def setup_fixture(files: dict[str, str], role: str | None = None) -> Path:
+    """Isolated directory + git baseline (the checkers rely on git status). With a
+    role, its agent file is copied to `.agent/<role>.md` and part of the baseline."""
     wd = Path(tempfile.mkdtemp(prefix="labeval-"))
+    if role:
+        files = {
+            **files,
+            f".agent/{role}.md": (_AGENTS / f"{role}.md").read_text(encoding="utf-8"),
+        }
     for rel, content in files.items():
         p = wd / rel
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -157,7 +175,7 @@ def run_behavioral(models: list[str], layers: set[str], profile_text) -> list[di
         for case in cases:
             if over_budget():
                 return results
-            wd = setup_fixture(case.files)
+            wd = setup_fixture(case.files, role=case.role)
             try:
                 prompt = ROLE_PROMPT[case.role].format(
                     prompt=case.prompt
@@ -210,7 +228,7 @@ def run_scorecard(models: list[str], runs: int, profile_text) -> list[dict]:
                     for p in task.rglob("*")
                     if p.is_file() and "goldeval" not in p.relative_to(task).parts
                 }
-                wd = setup_fixture(files)
+                wd = setup_fixture(files, role="implementer")
                 try:
                     prompt = ROLE_PROMPT["implementer"].format(
                         prompt="Carry out the task described in tasks.md against spec.md."

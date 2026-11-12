@@ -10,6 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from .conftest import approve, argv_log, run_orch, write_registry
 
 REPO = Path(__file__).resolve().parents[2]
@@ -26,6 +28,9 @@ def _load(mod_name: str, rel: str):
     spec.loader.exec_module(m)
     return m
 
+
+sys.path.insert(0, str(REPO / "lab" / "engine"))  # flat imports (kit, registry…)
+import kit  # noqa: E402
 
 cases = _load("cases", "evals/behavioral/cases.py")
 eval_models = _load("eval_models", "lab/engine/eval_models.py")
@@ -71,32 +76,33 @@ def test_orchestrator_passes_role_default_model(sandbox: Path) -> None:
     assert "--model test-model-x" in argv_log(sandbox)
 
 
-def test_repo_root_walks_up_to_nearest_pyproject(tmp_path: Path) -> None:
-    # core mechanism of the lab/ layout (#23): find the repo root by the pyproject.toml,
-    # so the engine can sit at any depth (lab/engine/) without hard-coded parent levels.
+def test_kit_root_follows_adr5_semantics(tmp_path: Path, monkeypatch) -> None:
+    # ADR-5: the root is LAB_ROOT, else parents[2] of kit.py holding the marker
+    # lab/models/registry.toml (checkout and site-packages alike) — never a pyproject walk-up.
+    monkeypatch.delenv("LAB_ROOT", raising=False)
     root = tmp_path / "proj"
     (root / "lab" / "engine").mkdir(parents=True)
+    (root / "lab" / "models").mkdir(parents=True)
+    (root / "lab" / "models" / "registry.toml").write_text("")
     (root / "pyproject.toml").write_text("")
-    assert orchestrate._repo_root(root / "lab" / "engine" / "x.py") == root.resolve()
+    assert kit.kit_root(here=root / "lab" / "engine" / "kit.py") == root.resolve()
 
-    # two nested pyproject.toml → stops at the NEAREST
-    inner = root / "sub" / "pkg"
-    inner.mkdir(parents=True)
-    (inner / "pyproject.toml").write_text("")
-    assert orchestrate._repo_root(inner / "a" / "y.py") == inner.resolve()
+    # a pyproject.toml without the marker is NOT a kit root → rc 1
+    bare = tmp_path / "bare"
+    (bare / "lab" / "engine").mkdir(parents=True)
+    (bare / "pyproject.toml").write_text("")
+    with pytest.raises(SystemExit) as e:
+        kit.kit_root(here=bare / "lab" / "engine" / "kit.py")
+    assert e.value.code == 1
 
-    # none found → 3-up fallback (lab/engine/<file> -> repo root)
-    bare = tmp_path / "bare" / "a" / "b" / "c"
-    bare.mkdir(parents=True)
-    assert orchestrate._repo_root(bare / "z.py") == (tmp_path / "bare" / "a").resolve()
-
-    # eval_models shares the same logic
-    assert eval_models._repo_root(root / "lab" / "engine" / "x.py") == root.resolve()
+    # LAB_ROOT (test seam) wins
+    monkeypatch.setenv("LAB_ROOT", str(bare))
+    assert kit.kit_root() == bare
 
 
 def test_live_modules_resolve_root_to_the_repo() -> None:
-    # the real modules must resolve ROOT to the actual repo (the pyproject dir), not
-    # lab/ or lab/engine/ — proves the walk-up fired correctly at import.
+    # the real modules resolve ROOT through kit.kit_root() — the actual repo
+    # (LAB_ROOT unset), not lab/ or site-packages.
     assert orchestrate.ROOT == REPO
     assert eval_models.ROOT == REPO
 

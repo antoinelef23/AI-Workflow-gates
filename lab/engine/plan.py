@@ -28,6 +28,10 @@ class Node:
     rework: str = ""  # Owner comment after a checkpoint rejection (passed to the agent)
     model: str = ""  # task model override (otherwise: registry role default)
     reviewers: int = 1  # size of the reviewer panel (checkpoint) — >=2 = majority vote
+    # Who executes a task: "implementer" (an agent, default) or "owner" — the
+    # Owner lane, for work a headless agent cannot do (protected paths such as
+    # `.claude/` or a plugin's agents/skills/hooks, tools outside its allowlist).
+    agent: str = "implementer"
 
 
 def parse_tasks_md(path: Path) -> tuple[dict, list[Node]]:
@@ -94,6 +98,9 @@ def parse_tasks_md(path: Path) -> tuple[dict, list[Node]]:
         mom = re.search(r"\*\*model\s*:?\*\*\s*`?([\w.\-]+)`?", body)
         if mom:
             node.model = mom.group(1)
+        am = re.search(r"\*\*agent\s*:?\*\*\s*`?(owner|implementer)\b", body)
+        if am and not is_cp:
+            node.agent = am.group(1)
         rm = re.search(r"\*\*reviewers\s*:?\*\*\s*(\d+)", body)
         if rm:
             node.reviewers = max(1, int(rm.group(1)))
