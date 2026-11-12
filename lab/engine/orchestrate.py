@@ -107,6 +107,10 @@ COMMIT_LOCK = threading.Lock()
 LOG_LOCK = threading.Lock()
 COST_LOCK = threading.Lock()
 COST_TOTAL = {"usd": 0.0}
+# files_touched of the tasks currently running (parallel waves): a sibling's
+# in-flight edits are not a scope leak of the task being checked.
+RUNNING_LOCK = threading.Lock()
+RUNNING_FILES: dict[str, list[str]] = {}
 # fd of the inter-process flock kept open for the whole run (released on process
 # exit by the OS). Prevents two orchestrators from racing on the same feature.
 _ORCH_LOCK_FD: int | None = None
@@ -422,6 +426,51 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
         )
 
 
+def _dirty_paths() -> set[str]:
+    """Paths (repo-relative) that differ from HEAD: modified, deleted, renamed
+    (both sides) and untracked — gitignored files excluded."""
+    out = subprocess.run(
+        ["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"],
+        cwd=PROJECT,
+        capture_output=True,
+        text=True,
+    ).stdout
+    paths: set[str] = set()
+    entries = out.split("\0")
+    i = 0
+    while i < len(entries):
+        e = entries[i]
+        i += 1
+        if len(e) < 4:
+            continue
+        paths.add(e[3:])
+        if e[0] in "RC" and i < len(entries):  # -z: rename source follows
+            paths.add(entries[i])
+            i += 1
+    return paths
+
+
+def _scope_leaks(node: Node, feature: Path, baseline: set[str]) -> list[str]:
+    """Changes this task made OUTSIDE its files_touched (plan gap found in CP-3).
+
+    `verify` and the eval gate run on the WORKING TREE, but scoped_commit only
+    stages files_touched + the feature dir: an out-of-scope edit that makes the
+    verify pass is silently left behind, so the committed tree can be red while
+    the run log says green. Excluded: what was already dirty before the task
+    (baseline), the feature dir (run log, reviews), and the files_touched of the
+    tasks running in parallel with it."""
+    feat = str(feature.relative_to(PROJECT))
+    with RUNNING_LOCK:
+        sibling = [f for nid, fs in RUNNING_FILES.items() if nid != node.id for f in fs]
+    return sorted(
+        p
+        for p in _dirty_paths() - baseline
+        if not paths_overlap(p, feat)
+        and not any(paths_overlap(p, f) for f in node.files)
+        and not any(paths_overlap(p, f) for f in sibling)
+    )
+
+
 def _commit_message(node: Node, feature: Path, real_ids: list[str]) -> str:
     """Canonical commit format (docs/reference/commit-format.md): subject + Why + trailers.
 
@@ -549,6 +598,24 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
     )
     mid = resolve_model("implementer", node.model, REGISTRY)
     base_prompt = _build_base_prompt(node, feature) + REGISTRY.profile_text(mid)
+    baseline = _dirty_paths()
+    with RUNNING_LOCK:
+        RUNNING_FILES[node.id] = list(node.files)
+    try:
+        return _run_task_attempts(node, feature, real_ids, base_prompt, mid, baseline)
+    finally:
+        with RUNNING_LOCK:
+            RUNNING_FILES.pop(node.id, None)
+
+
+def _run_task_attempts(
+    node: Node,
+    feature: Path,
+    real_ids: list[str],
+    base_prompt: str,
+    mid: str | None,
+    baseline: set[str],
+) -> str:
     session: str | None = None
     extra = ""
     for attempt in range(1, MAX_EVAL_RETRIES + 1):
@@ -607,6 +674,23 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
             continue
 
         ok, out = _eval_gate(node, real_ids)
+        leaks = _scope_leaks(node, feature, baseline) if ok else []
+        if leaks:
+            # Green, but only thanks to files the scoped commit will NOT carry.
+            listed = "\n".join(f"  - {p}" for p in leaks[:20])
+            extra = (
+                "\n\n⛔ SCOPE LEAK: verify/evals are green, but you changed files OUTSIDE "
+                f"this task's files_touched; they would be left out of the commit:\n{listed}\n"
+                "Revert those changes and make the task pass within files_touched. If that "
+                'is impossible, end with "STATUS: blocked — files_touched gap: <files>" '
+                "so the Owner amends the plan."
+            )
+            print(f"⚠️  {node.id}: scope leak — {', '.join(leaks[:5])}", flush=True)
+            run_log(feature, node, "implementer", f"SCOPE LEAK (t{attempt})")
+            journal(
+                feature, event="scope_leak", id=node.id, attempt=attempt, files=leaks
+            )
+            continue
         if ok:
             run_log(feature, node, "implementer", f"done, evals green (t{attempt})")
             scoped_commit(node, feature, _commit_message(node, feature, real_ids))

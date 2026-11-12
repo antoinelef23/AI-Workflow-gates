@@ -84,6 +84,9 @@ def sandbox(tmp_path: Path) -> Path:
     (sb / "lab" / "engine").mkdir(parents=True, exist_ok=True)
     (sb / "lab" / "engine" / "run_settings.json").write_text("{}")
     (sb / "work" / "feat" / "spec.md").write_text(SPEC)
+    # The shim dir (scenarios, call log, counters) is harness state, not agent
+    # edits: keep it out of `git status` so the scope-leak check ignores it.
+    (sb / ".gitignore").write_text(".shim/\n")
     shim = sb / "bin" / "claude"
     shim.write_text(SHIM)
     shim.chmod(0o755)

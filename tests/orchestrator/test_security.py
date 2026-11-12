@@ -245,15 +245,19 @@ def test_scoped_commit_does_not_commit_out_of_scope_golden(sandbox: Path) -> Non
 """,
     )
     r = run_orch(sandbox)
-    assert r.returncode == 0, r.stdout + r.stderr
+    # Since the scope-leak check, the out-of-scope edit stops the task itself
+    # (it is no longer "done, golden merely left uncommitted").
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "scope leak — evals/golden/g/check.sh" in r.stdout
+    assert state(sandbox)["T1"] == "failed"
 
     committed = subprocess.run(
-        ["git", "show", "--name-only", "--format=", "HEAD"],
+        ["git", "show", "HEAD:evals/golden/g/check.sh"],
         cwd=sandbox,
         capture_output=True,
         text=True,
     ).stdout
-    assert "evals/golden/g/check.sh" not in committed, (
+    assert committed == "echo ok\n", (
         f"the out-of-scope golden should not have been committed:\n{committed}"
     )
     # It stays modified in the tree (left uncommitted, not swallowed).

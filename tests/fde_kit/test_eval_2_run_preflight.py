@@ -71,6 +71,8 @@ def _make_kit(root: Path, *, plugin: bool = True) -> Path:
     """A minimal kit tree: shim claude + plugin stub (manifest + rules) + run settings."""
     (root / "bin").mkdir(parents=True)
     (root / ".shim").mkdir()
+    # Shim state is harness noise, not agent edits (engine scope-leak check).
+    (root / ".gitignore").write_text(".shim/\n")
     shim = root / "bin" / "claude"
     shim.write_text(SHIM)
     shim.chmod(0o755)
