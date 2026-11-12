@@ -18,14 +18,8 @@ import pytest
 REPO = Path(__file__).resolve().parents[2]
 GOLDEN = REPO / "evals" / "golden"
 
-# Correct reference for devis-calc = the real devis implementation: first existing of the
-# ADR-9 target (examples/devis) and the legacy location. The legacy candidate is
-# TRANSITIONAL (T5): T9 removes it once the demos have moved.
-_DEVIS_CALC_CANDIDATES = (
-    REPO / "examples" / "devis" / "src" / "devis" / "calc.py",
-    REPO / "src" / "devis" / "calc.py",
-)
-DEVIS_CALC = next(p for p in _DEVIS_CALC_CANDIDATES if p.exists())
+# Correct reference for devis-calc = the real devis implementation (ADR-9: examples/devis).
+DEVIS_CALC = REPO / "examples" / "devis" / "src" / "devis" / "calc.py"
 DEVIS_GOOD = DEVIS_CALC.read_text(encoding="utf-8")
 DEVIS_BAD = """
 def compute_quote(products_subtotal_eur, surface_m2):

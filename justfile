@@ -74,7 +74,7 @@ evals:
     else echo "[evals] no evals yet — skip"; fi
 
 # Brand guard: the lab stays generic — no client/brand proper nouns in committed
-# framework content. Scope excludes work/ and **/assets/ (usage a posteriori).
+# framework content. Scope excludes kit-root work/ and **/assets/ (usage a posteriori); examples/** is scanned.
 check-brand:
     python3 lab/engine/brand_guard.py --all
 
@@ -106,6 +106,17 @@ context-budget:
 gate: lint test evals check-brand check-lock
     @echo "✅ gate OK"
 
+# Examples are standalone instances (ADR-9): each is synced from its own lockfile and
+# gated by its own `just evals`. Stops at the first red example.
+examples-gate:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    shopt -s nullglob
+    for ex in examples/*/; do
+      echo "[examples-gate] ${ex}"
+      (cd "$ex" && uv sync --locked && just evals)
+    done
+
 # CI merge gate (non-mutating lint — drift fails CI instead of being auto-fixed).
-gate-ci: lint-check test evals check-brand check-lock
+gate-ci: lint-check test evals check-brand check-lock examples-gate
     @echo "✅ gate-ci OK"

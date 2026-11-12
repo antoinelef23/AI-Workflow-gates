@@ -31,4 +31,4 @@ build/
 # client data, the lab template stays generic/org-neutral, and the spec/design/tasks
 # derived from them are what gets committed. A deployment that wants them versioned
 # opts in by editing this rule. See docs/how-to/ingest-client-assets.md.
-work/**/assets/
+**/work/**/assets/

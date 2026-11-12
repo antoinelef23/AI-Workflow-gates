@@ -6,9 +6,11 @@ FRAMEWORK content. This makes it mechanical — a deterministic denylist
 (lab/engine/brand_denylist.txt) scanned over the committed lab content.
 
 SCOPE — the rule applies to the lab ITSELF, not to its usage a posteriori:
-  - `work/**` (real features built with the lab) and `**/assets/**` (raw client
-    inputs: transcripts, slides, quotes) legitimately contain brand names and are
-    EXCLUDED from the scan.
+  - kit-root `work/**` (real features built with the lab) and every `**/assets/**`
+    (raw client inputs: transcripts, slides, quotes) legitimately contain brand names
+    and are EXCLUDED from the scan.
+  - `examples/**` (including `examples/*/work/**`) IS scanned: the demo instances ship
+    with the kit and must stay generic (design ADR-9). Only their `assets/` are excluded.
   - The denylist file is the one sanctioned home for the names and is excluded too.
 
 NOTE: lab spec-ID prefixes (INV / BHV / EX / EVAL / NG / OQ / ADR) are vocabulary,
