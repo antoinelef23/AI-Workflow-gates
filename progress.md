@@ -130,6 +130,7 @@ Faits : 4 (`2b8f327`), 9 (`5a70c84`), 13 (`ed61c07`), 14 (`f4f151c`), 17 (`2f3fe
 24. `lab init` pas atomique : seul le justfile est restauré en cas d'échec (conforme ADR-8, mais surprenant).
 25. `46ab6dc` porte un tag `[BHV-7]` parasite (périmètre itération 4).
 26. `brand_denylist.txt` vide : `check-brand` passe à vide (voulu ? à confirmer avant la première mission).
+27. ✅ Vert en local, rouge en CI (PR #1) : le lint de capacité lisait les tâches « done » dans `.runs/state.json`, **gitignoré** — corrigé en les dérivant de l'historique git (`1dbfd26`). Règle à retenir : aucun contrôle de gate ne doit dépendre d'un état hors git.
 
 ## 9. Environnement (session cloud)
 
