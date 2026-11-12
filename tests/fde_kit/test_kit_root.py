@@ -227,7 +227,11 @@ def test_pyproject_packaging():
     p = tomllib.loads((REPO / "pyproject.toml").read_text())
     assert p["project"]["name"] == "fde-kit"
     assert "devis" not in p["project"]["description"].lower()
-    assert p["project"]["version"] == "0.1.0"
+    # One version, carried by the plugin manifest too (I-19) — never a literal here,
+    # or every kit bump breaks this test (T21, 0.1.0 -> 0.2.0).
+    plugin = (REPO / "lab" / "plugin" / ".claude-plugin" / "plugin.json").read_text()
+    assert f'"version": "{p["project"]["version"]}"' in plugin
+    assert p["project"]["version"].count(".") == 2
     assert p["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == ["lab"]
     assert p["project"]["scripts"]["lab"].startswith("lab.engine.cli")
     # T9: the transitional `pythonpath = ["src"]` is gone (no src/ left at the kit root)
