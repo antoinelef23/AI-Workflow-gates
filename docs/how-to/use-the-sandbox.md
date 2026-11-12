@@ -39,12 +39,31 @@ docker network create lab-egress   # + allowlist proxy, or an internal network
 LAB_RUNNER=sandbox LAB_APPROVAL_SECRET=… python3 lab/engine/orchestrate.py work/my-feature
 ```
 
-**Kit mode only in iteration 1.** The container mounts only the working directory, so it cannot
-see the kit when the instance is elsewhere: `LAB_RUNNER=sandbox` with `--project <instance>` is
-refused at pre-flight (rc 1, `sandbox + external instance not supported before iteration 2`), which
-keeps the guardrails guaranteed. In kit mode the engine passes the plugin and run settings as
-cwd-relative paths (`lab/plugin`, `lab/engine/run_settings.json`), valid on the host and in
-`/workspace`. See [activate-an-instance.md](activate-an-instance.md).
+## External instance
+
+With `--project <instance>` the sandbox mounts **two** directories:
+
+| Host | Container | Mode |
+|---|---|---|
+| the instance | `/workspace` (agent cwd) | read-write |
+| the kit root | `/kit` | **read-only** |
+
+The engine then passes `--plugin-dir /kit/lab/plugin` and
+`--settings /kit/lab/engine/run_settings.json`, so the guardrails apply in the container exactly as
+on the host, even though the instance has no `.claude/` and no `CLAUDE.md`. Extra directories that
+point inside the kit are translated to `/kit/…`; any other host path is refused. The agent can read
+the kit but not alter it. In kit mode (no `--project`) plugin and settings stay cwd-relative
+(`lab/plugin`, `lab/engine/run_settings.json`).
+
+```bash
+LAB_RUNNER=sandbox LAB_APPROVAL_SECRET=… lab run work/my-feature --project <instance>
+```
+
+The `regulated` profile requires this: `sandbox_required = true` makes a run without
+`LAB_RUNNER=sandbox` refuse to start (rc 1). See
+[choose-an-organization-profile.md](choose-an-organization-profile.md) and
+[policy-profiles.md](../reference/policy-profiles.md). Setup of the instance:
+[activate-an-instance.md](activate-an-instance.md).
 
 Tuning env: `LAB_SANDBOX_IMAGE` (default `lab-agent:latest`), `LAB_SANDBOX_NETWORK`
 (default `lab-egress`), `LAB_SANDBOX_MEMORY` (default `2g`). The agent's model

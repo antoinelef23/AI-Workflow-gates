@@ -902,3 +902,4 @@ T21 is an Owner-lane task.*
 | 2026-11-12 18:19 | T20 | implementer | SCOPE LEAK (t2) | |
 | 2026-11-12 18:26 | T22 | implementer | SCOPE LEAK (t1) | |
 | 2026-11-12 18:26 | T20 | implementer | done, evals green (t1) | |
+| 2026-11-12 18:26 | T22 | implementer | done, evals green (t2) | |
