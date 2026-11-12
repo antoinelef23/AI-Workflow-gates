@@ -884,3 +884,4 @@ T21 is an Owner-lane task.*
 | 2026-11-12 16:28 | T14 | implementer | done, evals green (t1) | |
 | 2026-11-12 16:49 | CP-5 | owner | checkpoint validated | |
 | 2026-11-12 17:54 | T16 | implementer | done, evals green (t1) | |
+| 2026-11-12 17:54 | T17 | implementer | done, evals green (t1) | |

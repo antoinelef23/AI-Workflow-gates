@@ -80,6 +80,11 @@ def _make_kit(root: Path, *, plugin: bool = True) -> Path:
     (root / "lab" / "engine" / "run_settings.json").write_text(
         '{"permissions": {"deny": ["Edit(**/.approvals/**)", "Edit(**/.runs/**)"]}}'
     )
+    # The kit is an instance of itself (ADR-16): its own explicit control level.
+    (root / ".lab").mkdir()
+    (root / ".lab" / "lab.toml").write_text(
+        f'schema_version = 1\nkit_version = "{kit.kit_version()}"\nprofile = "squad"\n'
+    )
     if plugin:
         (root / "lab" / "plugin" / ".claude-plugin").mkdir(parents=True)
         (root / "lab" / "plugin" / ".claude-plugin" / "plugin.json").write_text(
