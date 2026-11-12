@@ -48,7 +48,14 @@ def test_eval_2_guard_allows_ordinary_path(tmp_path):
 
 def test_eval_2_hooks_json_declares_existing_scripts():
     hooks = json.loads((HOOKS / "hooks.json").read_text())["hooks"]
-    assert set(hooks) == {"PreToolUse", "SessionStart"}
+    # T15 (Owner lane) wired the moved scripts; T11 asserts their entries in detail.
+    assert set(hooks) == {
+        "PreToolUse",
+        "SessionStart",
+        "PostToolUse",
+        "Stop",
+        "SubagentStop",
+    }
     pre = hooks["PreToolUse"][0]
     assert pre["matcher"] == "Edit|Write|MultiEdit|NotebookEdit"
     assert pre["hooks"][0]["onFailure"] == "block"
