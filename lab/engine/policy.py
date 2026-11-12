@@ -59,13 +59,34 @@ def _check_type(key: str, value, spec: dict) -> None:
         raise PolicyError(f"{key}={show(value)} has the wrong type")
 
 
+# BHV-3d: free-key bounds — key -> (integer only, minimum)
+BOUNDS = {
+    "max_task_attempts": (True, 1),
+    "max_parallel": (True, 1),
+    "max_cp_rejects": (True, 1),
+    "budget_usd": (False, 0),
+}
+
+
+def _check_bounds(key: str, value) -> None:
+    if key not in BOUNDS:
+        return
+    integer, minimum = BOUNDS[key]
+    kind = "an integer " if integer else "a number "
+    bound = f"must be {kind}>= {minimum}"
+    if integer and not isinstance(value, int):
+        raise PolicyError(f"{key}={show(value)} is out of bounds ({bound})")
+    if value < minimum:
+        raise PolicyError(f"{key}={show(value)} is out of bounds ({bound})")
+
+
 def _looser(strict: str, value, floor) -> bool:
     if floor is None:  # undeclared floor: nothing to be looser than
         return False
-    if strict == "true":
-        return value is not True
+    if strict == "true":  # looser only if the floor demands true and the value is false
+        return floor is True and value is False
     if strict == "false":
-        return value is not False
+        return floor is False and value is True
     if strict == "up":
         return value < floor
     if strict == "down":
@@ -106,6 +127,7 @@ def effective_policy(lab_toml: dict) -> dict[str, tuple[object, str]]:
         value = overrides[key]
         _check_type(key, value, spec)
         if spec["kind"] == "free":
+            _check_bounds(key, value)
             result[key] = (value, OVERRIDE_FREE)
             continue
         if _looser(spec["strict"], value, floor):

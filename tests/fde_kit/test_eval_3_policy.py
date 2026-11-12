@@ -174,3 +174,66 @@ def test_eval_3_cli_rc1_on_policy_error(tmp_path):
     p = _cli(tmp_path)
     assert p.returncode == 1
     assert "min_reviewers=1 is looser than floor 'regulated' (2)" in p.stderr
+
+
+# --- CP-6 delta (spec 0.7.0): equal-to-floor accepted, BHV-3d free-key bounds ---
+
+YES_NO_STRICT = {
+    "auto_checkpoints_allowed": False,
+    "sandbox_required": True,
+    "allow_force": False,
+}
+
+
+@pytest.mark.parametrize("profile", ["solo", "squad"])
+@pytest.mark.parametrize("key", sorted(YES_NO_STRICT))
+def test_eval_3_yes_no_safety_key_equal_to_floor_accepted(profile, key):
+    floor = policy.effective_policy(_lab(profile))[key][0]
+    eff = policy.effective_policy(_lab(profile, {key: floor}))
+    assert eff[key] == (floor, "override")
+
+
+@pytest.mark.parametrize("profile", ["solo", "squad"])
+@pytest.mark.parametrize("key", sorted(YES_NO_STRICT))
+def test_eval_3_yes_no_safety_key_strict_value_accepted(profile, key):
+    strict = YES_NO_STRICT[key]
+    assert policy.effective_policy(_lab(profile, {key: strict}))[key][0] is strict
+
+
+@pytest.mark.parametrize("key", sorted(YES_NO_STRICT))
+def test_eval_3_yes_no_safety_key_equal_to_regulated_floor_accepted(key):
+    strict = YES_NO_STRICT[key]  # regulated floor is the strict value
+    assert policy.effective_policy(_lab("regulated", {key: strict}))[key][0] is strict
+
+
+@pytest.mark.parametrize("key", ["max_task_attempts", "max_parallel", "max_cp_rejects"])
+@pytest.mark.parametrize("bad", [0, -1])
+def test_eval_3_bhv3d_int_bounds_refused(key, bad):
+    with pytest.raises(policy.PolicyError) as e:
+        policy.effective_policy(_lab("solo", {key: bad}))
+    msg = str(e.value)
+    assert key in msg and f"={bad}" in msg and ">= 1" in msg
+
+
+@pytest.mark.parametrize("key", ["max_task_attempts", "max_parallel", "max_cp_rejects"])
+def test_eval_3_bhv3d_int_bound_accepted_and_non_integer_refused(key):
+    assert policy.effective_policy(_lab("solo", {key: 1}))[key] == (
+        1,
+        "override (free key)",
+    )
+    with pytest.raises(policy.PolicyError, match=key):
+        policy.effective_policy(_lab("solo", {key: 1.5}))
+
+
+def test_eval_3_bhv3d_budget_bounds():
+    for bad in (-1, -0.5):
+        with pytest.raises(policy.PolicyError) as e:
+            policy.effective_policy(_lab("solo", {"budget_usd": bad}))
+        assert "budget_usd" in str(e.value) and f"={bad}" in str(e.value)
+        assert ">= 0" in str(e.value)
+    eff = policy.effective_policy(_lab("solo", {"budget_usd": 0}))
+    assert eff["budget_usd"] == (0, "override (free key)")
+    assert (
+        policy.effective_policy(_lab("solo", {"budget_usd": 12.5}))["budget_usd"][0]
+        == 12.5
+    )

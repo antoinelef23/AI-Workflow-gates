@@ -893,3 +893,5 @@ T21 is an Owner-lane task.*
 | 2026-11-12 17:54 | T17 | implementer | done, evals green (t1) | |
 | 2026-11-12 17:56 | T19 | implementer | done, evals green (t1) | |
 | 2026-11-12 17:59 | T18 | implementer | done, evals green (t1) | |
+| 2026-11-12 18:05 | CP-6 | owner | checkpoint REJECTED — policy.py _looser refuses a yes/no safety key EQUAL to its floor (solo + sandbox_required=false, solo + allow_force=true, squad + auto_checkpoints_allowed=true all rc 1 with a self-contradictory message): test 'looser than the floor', not 'is the strict value'. Spec 0.7.0 adds BHV-3d (free-key bounds: max_task_attempts/max_parallel/max_cp_rejects integers >= 1, budget_usd >= 0, else PolicyError naming key, value, bound) — in your scope, see the plan delta in your prompt. Add equal-to-floor tests per yes/no key on solo and squad, and one test per BHV-3d bound. | |
+| 2026-11-12 18:07 | T16 | implementer | done, evals green (t1) | |
