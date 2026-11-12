@@ -1,10 +1,10 @@
 ---
 type: spec
 feature: fde-kit
-version: 0.3.0
+version: 0.4.0
 status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by: Owner — 2026-11-12 (OQ-1..8 tranchées par QCM en session, spec 0.2.0 validée en l'état) ; amendement 0.3.0 (test goldfish) approuvé le 2026-11-12
+validated_by: Owner — 2026-11-12 (OQ-1..8 tranchées par QCM en session, spec 0.2.0 validée en l'état) ; amendement 0.3.0 (test goldfish) approuvé le 2026-11-12 ; amendement 0.4.0 (deux lecteurs goldfish) approuvé le 2026-11-12
 ---
 
 # Spec — Kit FDE portable : workflow agentique templatisé, profils d'organisation, retours arrière routés
@@ -32,7 +32,9 @@ d'évolution.
 - Test goldfish (BHV-8) : **mesure seule** sur les 3 premières features ; conservé — et
   éventuellement rendu bloquant — seulement si les features au score goldfish le plus haut
   empruntent moins les routes R3 (trou de spec) et R4 (ADR inapplicable) ; sinon retiré.
-  Décision Owner par amendement, au vu du rapport retro.
+  Le rapport rapproche séparément le score de chaque lecteur et les signaux croisés
+  (`ambiguity`, `fragile`) des emprunts R3/R4 : l'Owner décide quel lecteur ou quel signal
+  garder. Décision Owner par amendement, au vu du rapport retro.
 
 ## 2. Glossary
 
@@ -55,7 +57,9 @@ d'évolution.
 | Retro | `retro_record` | Résumé anonymisé d'un run (compteurs, durées, coûts, modèles, routes empruntées), stocké chez le FDE |
 | Agent goldfish | `goldfish_agent` | Agent lancé sans aucun contexte : ni règles dures, ni `CLAUDE.md`, ni historique git, ni autre fichier — seulement l'artefact testé |
 | Test goldfish | `goldfish_test` | Test de compréhension de la spec : un agent goldfish déduit les sorties masquées des exemples EX-n à partir des seules règles ; écart = ambiguïté probable |
-| Score goldfish | `goldfish_score` | Part des EX-n testables dont la sortie prédite égale la sortie attendue |
+| Lecteur goldfish | `goldfish_reader` | Un des deux agents goldfish lancés sur la même spec masquée : le **petit lecteur** (`small`, modèle du rôle `goldfish` du registre, tier `fast`) et le **lecteur implementer** (`implementer`, modèle du rôle `implementer`) |
+| Score goldfish | `goldfish_score` | Pour un lecteur : part des EX-n testables dont la sortie prédite égale la sortie attendue |
+| Signal croisé | `goldfish_signal` | Par EX testable, croisement des deux lecteurs : `ambiguity` (les deux se trompent), `fragile` (seul le petit lecteur se trompe), `anomaly` (seul le lecteur implementer se trompe), `clear` (aucun ne se trompe) |
 | Canari | `canary_marker` | Marqueur placé dans chaque source de contexte interdite au goldfish, pour prouver son isolement |
 
 ## 3. Invariants
@@ -89,8 +93,8 @@ d'évolution.
 - **INV-11** — Un `retro_record` n'est jamais écrit dans un repo (ni l'instance, ni le kit) : il vit
   dans le stockage local du FDE.
 - **INV-12** — Un agent goldfish ne reçoit que la spec masquée ; un `goldfish_score` n'est compté
-  que si l'isolement est **prouvé** par le canari (BHV-8b). Isolement non prouvé ⇒ test invalide,
-  jamais un score. Le test est en lecture seule : il ne modifie aucun artefact.
+  que si l'isolement est **prouvé** par le canari (BHV-8b) pour **chacun** des deux lecteurs.
+  Isolement non prouvé pour l'un d'eux ⇒ test invalide, jamais un score. Le test est en lecture seule : il ne modifie aucun artefact.
 
 ## 4. Behaviors
 
@@ -137,7 +141,7 @@ d'évolution.
   | `max_parallel` | libre | 3 | 3 | 2 | moteur |
   | `max_cp_rejects` | libre | 2 | 2 | 2 | moteur (route R7) |
   | `budget_usd` | libre · 0 = sans plafond | 0 | 0 | 0 | moteur |
-  | `goldfish_min_score` | sécurité · ↑ | non déclaré | non déclaré | non déclaré | critère de sortie spec (BHV-8c) — mesure seule tant que non déclaré |
+  | `goldfish_min_score` | sécurité · ↑ | non déclaré | non déclaré | non déclaré | critère de sortie spec (BHV-8c), porte sur le score du lecteur implementer — mesure seule tant que non déclaré |
 
 - **Edge cases :**
   - **BHV-3a** — Override d'une clé de sécurité plus laxiste que le plancher : refus, rc 1,
@@ -202,30 +206,38 @@ d'évolution.
 - **Then** un `retro_record` JSON anonymisé (INV-6) est écrit dans le stockage local du FDE, hors
   de tout repo (INV-11) ; `lab retro report` agrège tous les records locaux : taux de premier
   passage par rôle/modèle, **taux d'emprunt par route**, **interventions humaines hors
-  checkpoints prévus** (KPI), coût par feature, et **score goldfish par feature rapproché de ses
-  emprunts R3/R4** (critère de conservation de BHV-8) — ventilés par version du kit et par profil.
+  checkpoints prévus** (KPI), coût par feature, et **scores goldfish des deux lecteurs et
+  signaux croisés par feature, rapprochés de ses emprunts R3/R4** (critère de conservation de BHV-8) — ventilés par version du kit et par profil.
   Seul le rapport agrégé peut être partagé, manuellement, par le FDE.
 
 ### BHV-8 — Test goldfish de compréhension de la spec (`lab goldfish <feature>`)
 - **Given** une spec dont les exemples EX-n portent un `input` et un `expected_output`
 - **When** le test s'exécute (à la demande, ou dans le critère de sortie de la phase spec, BHV-4)
 - **Then** le moteur produit une copie de la spec où **tous** les `expected_output` des EX sont
-  masqués, la remet à un agent goldfish dans un répertoire temporaire ne contenant qu'elle, et lui
-  demande, pour chaque EX-n, la sortie attendue de son `input`. Il compare chaque prédiction à
-  l'`expected_output` réel et rapporte : `goldfish_score`, et pour chaque écart l'ID EX et les
-  champs divergents, présentés comme « ambiguïté probable de la spec ».
+  masqués, la remet à **deux lecteurs goldfish** — le petit lecteur et le lecteur implementer —,
+  chacun dans son propre répertoire temporaire ne contenant qu'elle, et leur demande, pour chaque
+  EX-n, la sortie attendue de son `input`. Il compare chaque prédiction à l'`expected_output` réel
+  et rapporte : le `goldfish_score` de chaque lecteur, le `goldfish_signal` de chaque EX testable,
+  et pour chaque écart l'ID EX, le lecteur et les champs divergents. Les EX `ambiguity` sont
+  présentés comme « ambiguïté probable de la spec », les EX `fragile` comme « spec implicite :
+  comprise seulement par le modèle le plus capable ».
 - **Edge cases :**
   - **BHV-8a** — Comparaison déterministe : un `expected_output` en mapping YAML est comparé champ
     par champ après normalisation (casse, espaces, types numériques) ; un scalaire est comparé
     après normalisation ; tout autre forme est comptée « non testable » (affichée, exclue du score).
   - **BHV-8b** — Preuve d'isolement : un `canary_marker` distinct est placé dans chaque source de
-    contexte interdite (règles dures, `CLAUDE.md`, message de commit récent) ; si la réponse du
-    goldfish contient un marqueur, le test est invalide, rc 1, quel que soit le score (INV-12).
+    contexte interdite (règles dures, `CLAUDE.md`, message de commit récent) ; si la réponse de
+    l'un des deux lecteurs contient un marqueur, le test est invalide, rc 1, quels que soient les
+    scores (INV-12).
   - **BHV-8c** — Sans `goldfish_min_score` déclaré dans la politique effective : rc 0 et rapport
-    (mesure seule). Déclaré et non atteint : rc 1, le critère de sortie de la phase spec échoue ;
-    la correction reste une décision humaine (INV-3).
+    (mesure seule). Déclaré et non atteint **par le lecteur implementer** : rc 1, le critère de
+    sortie de la phase spec échoue ; la correction reste une décision humaine (INV-3). Le score du
+    petit lecteur ne bloque jamais en 0.x : il est mesuré et rapporté.
   - **BHV-8d** — Spec sans aucun EX testable : rc 0, « 0 exemple testable », signalé comme
     faiblesse de la spec.
+  - **BHV-8e** — Les deux rôles pointent vers le même modèle (ou le rôle `goldfish` est absent du
+    registre) : un seul appel, rapport « lecteurs confondus — signal `fragile` indisponible »,
+    jamais deux appels au même modèle présentés comme deux lecteurs.
 
 ## 5. Examples
 
@@ -328,30 +340,36 @@ expected_output:
 covers: [BHV-6, BHV-6a]
 ```
 
-### EX-8 — Test goldfish
+### EX-8 — Test goldfish à deux lecteurs
 ```yaml
 input:
   spec_examples:
     EX-1: {input: {quantite: 12, prix_unitaire: 3.10}, expected_output: {total: 37.20}}
     EX-2: {input: {quantite: 0}, expected_output: {statut: refuse}}
     EX-3: {input: {remise: 5}, expected_output: "voir tableau"}     # non testable
-  goldfish_predictions:
-    EX-1: {total: 37.2}
-    EX-2: {statut: accepte}
-  canary_seen: false
+    EX-4: {input: {quantite: 5, prix_unitaire: 2.00, code_promo: ETE}, expected_output: {total: 9.00}}
+  predictions:
+    small:       {EX-1: {total: 37.2}, EX-2: {statut: accepte}, EX-4: {total: 10.00}}
+    implementer: {EX-1: {total: 37.2}, EX-2: {statut: refuse},  EX-4: {total: 10.00}}
+  canary_seen: {small: false, implementer: false}
   policy: {goldfish_min_score: non déclaré}
 expected_output:
-  goldfish_score: 0.5
-  ambiguities: ["EX-2: statut attendu 'refuse', prédit 'accepte'"]
+  goldfish_score: {small: 0.33, implementer: 0.67}
+  goldfish_signal: {EX-1: clear, EX-2: fragile, EX-4: ambiguity}
+  ambiguities: ["EX-4: total attendu 9.00, prédit 10.00 par les deux lecteurs"]
+  fragile: ["EX-2: statut attendu 'refuse', le petit lecteur prédit 'accepte'"]
   untestable: [EX-3]
   rc: 0
 ---
 input: {same, policy: {goldfish_min_score: 0.8}}
-expected_output: {rc: 1, phase_spec_exit_gate: failed}
+expected_output: {rc: 1, phase_spec_exit_gate: failed, cause: "implementer reader 0.67 < 0.8"}
 ---
-input: {same, canary_seen: true}
-expected_output: {rc: 1, verdict: "isolation not proven — test invalid", goldfish_score: absent}
-covers: [BHV-8, BHV-8a, BHV-8b, BHV-8c, INV-12]
+input: {same, canary_seen: {small: true, implementer: false}}
+expected_output: {rc: 1, verdict: "isolation not proven (small reader) — test invalid", goldfish_score: absent}
+---
+input: {same, registry: {goldfish: claude-x, implementer: claude-x}}
+expected_output: {calls: 1, note: "lecteurs confondus — signal fragile indisponible"}
+covers: [BHV-8, BHV-8a, BHV-8b, BHV-8c, BHV-8e, INV-12]
 ```
 
 ## 6. Non-goals
@@ -386,7 +404,7 @@ covers: [BHV-8, BHV-8a, BHV-8b, BHV-8c, INV-12]
 | EVAL-7 | deterministic | `retro export` écrit hors de tout repo, sans champ interdit, passe `brand_guard` ; `retro report` agrège EX-6 exactement, KPI inclus | BHV-7, INV-6, INV-11 | 100% |
 | EVAL-8 | deterministic | le package du kit n'embarque que le moteur ; `devis` et `booking` (code, triplets, tests) sous `examples/` ; `just gate-ci` vert après migration | INV-9 | 100% |
 | EVAL-9 | deterministic | une tâche (shim) qui modifie `spec.md` ou `design.md` échoue ; le commit scopé ne stage jamais spec/design | INV-10 | 100% |
-| EVAL-10 | deterministic | shim goldfish : la spec masquée ne contient aucun `expected_output` ; le répertoire de travail du goldfish ne contient qu'elle ; EX-8 reproduit exactement (score, écarts, non testables, rc) ; canari vu ⇒ rc 1 sans score ; bloquant seulement si déclaré | BHV-8, BHV-8a, BHV-8b, BHV-8c, BHV-8d, INV-12 | 100% |
+| EVAL-10 | deterministic | shim goldfish : la spec masquée ne contient aucun `expected_output` ; chaque lecteur a son répertoire ne contenant qu'elle ; EX-8 reproduit exactement (deux scores, signaux croisés, écarts, non testables, rc) ; canari vu par un lecteur ⇒ rc 1 sans score ; seuil appliqué au seul lecteur implementer ; lecteurs confondus ⇒ un seul appel | BHV-8, BHV-8a, BHV-8b, BHV-8c, BHV-8d, BHV-8e, INV-12 | 100% |
 
 ## 8. Open questions
 
@@ -416,3 +434,4 @@ covers: [BHV-8, BHV-8a, BHV-8b, BHV-8c, INV-12]
 | 0.1.0 | 2026-11-12 | Owner + agent | Brouillon issu de l'audit du workflow existant (ce qui marche, trous vérifiés) — à itérer sur les OQ |
 | 0.2.0 | 2026-11-12 | Owner | OQ-1..8 tranchées par QCM : distribution 100 % plugin, ce repo = kit, profils solo/squad/regulated avec clés de sécurité vs libres, plan_delta toujours humain, OQ agent → `.runs/` via le moteur, reset ciblé, retros locales, KPI mesuré d'abord. Ajouts INV-8..11, BHV-1e, BHV-2a/b, BHV-3c, BHV-6a/b, EX-7, EVAL-8/9, NG-6 ; BHV-1a retiré |
 | 0.3.0 | 2026-11-12 | Owner | Test goldfish emprunté au pattern Elephant/Goldfish (idée seule, aucun code ni grille repris) après revue critique : ses contrôles d'origine sont consultatifs, on n'en garde que la partie rendue mesurable. Ajouts BHV-8, INV-12, EX-8, EVAL-10, NG-7, clé `goldfish_min_score`, critère de conservation en §1 |
+| 0.4.0 | 2026-11-12 | Owner | Deux lecteurs goldfish (petit modèle + modèle de l'implementer) au lieu d'un : « goldfish » = sans mémoire, pas moins capable ; un petit modèle seul confondrait erreur de raisonnement et ambiguïté. Le croisement distingue `ambiguity` (signal fort) de `fragile` (spec implicite). Seuil éventuel sur le seul lecteur implementer ; choix final du signal par corrélation R3/R4. Rôle `goldfish` au registre. Ajouts BHV-8e, signal croisé ; BHV-7, BHV-8, INV-12, EX-8, EVAL-10 amendés |
