@@ -125,3 +125,21 @@ def test_unknown_commit_node_is_warn(repo, capsys):
     journal(repo, [OK_ATTEMPT, DONE])
     assert trajectory_guard.main(["work/feat", "--root", str(repo)]) == 0
     assert "T9" in capsys.readouterr().out
+
+
+# ------------------------------------------------------------------ Owner lane
+
+
+def test_owner_lane_done_after_signature_passes(repo):
+    # Owner-lane task: no agent attempt; the engine journals the verified signature.
+    journal(
+        repo,
+        [{"event": "owner_signed", "id": "T1"}, {**DONE, "lane": "owner"}],
+    )
+    assert trajectory_guard.main(["work/feat", "--root", str(repo)]) == 0
+
+
+def test_owner_lane_label_alone_does_not_excuse_a_forged_done(repo, capsys):
+    journal(repo, [{**DONE, "lane": "owner"}])  # `lane` is not a proof
+    assert trajectory_guard.main(["work/feat", "--root", str(repo)]) == 1
+    assert "BHV-2a" in capsys.readouterr().out

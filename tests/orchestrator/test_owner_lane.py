@@ -116,6 +116,13 @@ def test_owner_task_is_never_dispatched_to_an_agent_and_commits_on_green(
         text=True,
     ).stdout
     assert "owner.txt" in shown
+    events = [
+        json.loads(ln)["event"]
+        for ln in (sandbox / "work" / "feat" / ".runs" / "journal.jsonl")
+        .read_text()
+        .splitlines()
+    ]
+    assert events.index("owner_signed") < events.index("task_done")  # guard BHV-2a
 
 
 def test_owner_task_signed_but_red_is_failed(sandbox: Path) -> None:

@@ -4,8 +4,9 @@ HOW it got there (work/sdlc-rework BHV-2, whitepaper: trajectory evaluation).
 Two mechanical FAIL conditions, from the two trajectory sources the lab persists
 (ADR-1: journal + git history, never session transcripts):
 
-  BHV-2a  a `task_done` with no prior successful `task_attempt` — a forged or
-          corrupt journal must never read as a healthy run;
+  BHV-2a  a `task_done` with no prior successful `task_attempt` (or, for an
+          Owner-lane task, no prior `owner_signed` — the verified signature) —
+          a forged or corrupt journal must never read as a healthy run;
   BHV-2b  an `[auto]` task commit touching files outside the node's
           `files_touched` ∪ the feature dir — scope drift that slipped past
           scoped_commit (same paths_overlap semantics).
@@ -44,6 +45,8 @@ def check_journal(events: list[dict]) -> tuple[list[str], list[str]]:
             attempt_count[tid] = attempt_count.get(tid, 0) + 1
             if ev.get("ok"):
                 ok_attempts.add(tid)
+        elif kind == "owner_signed":  # Owner lane: the signature is the attempt
+            ok_attempts.add(tid)
         elif kind == "task_done":
             if tid not in ok_attempts:
                 fails.append(

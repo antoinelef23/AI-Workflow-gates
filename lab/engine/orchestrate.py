@@ -597,6 +597,10 @@ def run_owner_task(node: Node, feature: Path, dry: bool, real_ids: list[str]) ->
         f'(or reject.sh {node.id} {rel} "reason" to block it)'
     )
     outcome, info = _await_token(node, feature, "owner task")
+    if outcome == "approved":
+        # The Owner-lane counterpart of a successful task_attempt: the trajectory
+        # guard (BHV-2a) accepts a task_done only after one of the two.
+        journal(feature, event="owner_signed", id=node.id)
     if outcome != "approved":
         journal(
             feature, event="task_blocked", id=node.id, reason=info.get("reason", "")
