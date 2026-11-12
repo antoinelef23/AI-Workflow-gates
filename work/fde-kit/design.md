@@ -5,7 +5,7 @@ version: 0.3.0
 status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
 validated_by: FDE — 2026-11-12 (validé en session par QCM ; plugin sous lab/plugin/ confirmé) ; amendement 0.3.0 (OQ-9..11 du planner) approuvé le 2026-11-12
-spec: ./spec.md          # version : 0.3.0
+spec: ./spec.md          # version : 0.4.0
 ---
 
 # Design — Kit FDE portable
