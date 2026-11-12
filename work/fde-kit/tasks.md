@@ -4,7 +4,7 @@ feature: fde-kit
 version: 0.1.0
 status: approved         # proposed | approved | in_progress | done
 generated_by: planner (session 2026-11-12)
-approved_by: Owner — 2026-11-12 (QCM en session ; CP-1..CP-5 bloquants ; exécution dans la session cloud, checkpoints signés sur instruction de l'Owner ; delta 2026-11-12 approuvé (« Amender le plan ») : prompts T7 et T9 — `verify` exécuté par l'orchestrateur, l'agent vérifie avec `uv run pytest -m eval`, sans lancer `just`)
+approved_by: Owner — 2026-11-12 (QCM en session ; CP-1..CP-5 bloquants ; exécution dans la session cloud, checkpoints signés sur instruction de l'Owner ; delta 2026-11-12 approuvé (« Amender le plan ») : prompts T7 et T9 — `verify` exécuté par l'orchestrateur, l'agent vérifie avec `uv run pytest -m eval`, sans lancer `just` ; delta CP-3 (rejet → T9) : `tests/fde_kit/test_kit_root.py` ajouté aux files_touched de T9 — il asserte le `pythonpath` transitoire que T9 retire)
 spec: ./spec.md          # version : 0.6.0
 design: ./design.md      # version : 0.4.0
 ---
@@ -433,7 +433,7 @@ test collection (T5) and T10's test is not an eval.
 - **parallel_group:** H
 - **implements:** [INV-9, EVAL-8]
 - **anchored_on:** ADR-9, I-17, I-18
-- **files_touched:** `justfile`, `.gitignore`, `lab/engine/brand_guard.py`, `pyproject.toml`, `tests/golden/test_oracle_integrity.py`, `tests/fde_kit/test_eval_8_examples.py`
+- **files_touched:** `justfile`, `.gitignore`, `lab/engine/brand_guard.py`, `pyproject.toml`, `tests/golden/test_oracle_integrity.py`, `tests/fde_kit/test_eval_8_examples.py`, `tests/fde_kit/test_kit_root.py`
 - **prompt:**
   > Per spec INV-9 / EVAL-8 and design ADR-9: (1) kit `justfile`: recipe `examples-gate` looping over
   > `examples/*/` — `uv sync --locked` then `just evals` inside each, failing on the first red —
