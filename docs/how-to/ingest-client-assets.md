@@ -10,7 +10,7 @@ work/<feature>/assets/      (or work/<domain>/<feature>/assets/)
 └── screens/…
 ```
 
-During the early iterations (typically the [spec workshop](../../.claude/skills/vibe-workshop/SKILL.md)),
+During the early iterations (typically the [spec workshop](../../lab/plugin/skills/vibe-workshop/SKILL.md)),
 you read `assets/` and turn it into the structured triplet — `spec.md`, `design.md`,
 `tasks.md`. The assets are the *source*; the triplet is the *derived contract*.
 

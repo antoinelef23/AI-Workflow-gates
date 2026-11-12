@@ -1,8 +1,28 @@
 # Agents & Skills Reference
 
-Austere lookup of the lab's sub-agents (`.claude/agents/*.md`), skills
-(`.claude/skills/*/SKILL.md`), and the hook + status-line wiring
-(`.claude/settings.json`, `.claude/hooks/*`, `.claude/statusline.py`).
+Austere lookup of the kit's plugin `fde-kit` (`lab/plugin/`): sub-agents
+(`lab/plugin/agents/*.md`), skills (`lab/plugin/skills/*/SKILL.md`), hard rules
+(`lab/plugin/rules/hard-rules.md`), and the hook + status-line wiring
+(`lab/plugin/hooks/hooks.json`, `lab/plugin/hooks/*.sh`, `lab/plugin/statusline.py`).
+The repo has no `.claude/` directory.
+
+## Plugin layout
+
+```
+lab/plugin/
+├── .claude-plugin/plugin.json   # name = fde-kit, version = package version
+├── agents/                      # the 5 sub-agents
+├── skills/                      # vibe-workshop, commit, diataxis
+├── hooks/                       # hooks.json + the scripts it calls
+├── rules/hard-rules.md          # single source of the hard rules (method, vocabulary)
+└── statusline.py
+```
+
+The repo root holds `.claude-plugin/marketplace.json` (one entry, source `./lab/plugin`), so the
+repo is its own marketplace. Package version = `plugin.json` version = marketplace entry. Interactive
+use: install the plugin, or `claude --plugin-dir lab/plugin` when developing the kit. Orchestrated
+runs: the engine passes `--plugin-dir`, `--settings lab/engine/run_settings.json` and
+`--append-system-prompt <hard-rules.md>` on every agent call (never `--bare`).
 
 For how these pieces orchestrate together, see
 [../explanation/architecture.md](../explanation/architecture.md). For usage, see
@@ -10,7 +30,7 @@ the how-to guides linked per row.
 
 ## Sub-agents
 
-Each file in `.claude/agents/` declares a sub-agent in YAML front matter
+Each file in `lab/plugin/agents/` declares a sub-agent in YAML front matter
 (`name`, `description`, optional `tools`, `version`). The `tools` column lists
 the front-matter `tools:` field; "(inherited)" means the field is absent and the
 agent inherits the caller's tool set.
@@ -40,7 +60,7 @@ escalates to the Owner on the 3rd consecutive `FAIL` on the same task.
 
 ## Skills
 
-Each file in `.claude/skills/<name>/SKILL.md` declares a skill in YAML front
+Each file in `lab/plugin/skills/<name>/SKILL.md` declares a skill in YAML front
 matter (`name`, `description`).
 
 | Skill | Purpose | When |
@@ -51,24 +71,29 @@ matter (`name`, `description`).
 
 ## Hooks & status line
 
-Wired in `.claude/settings.json`. Hook scripts live in `.claude/hooks/`; the
-status-line script is `.claude/statusline.py`. The variable
-`$CLAUDE_PROJECT_DIR` resolves to the repo root.
+Declared in `lab/plugin/hooks/hooks.json`; every command is referenced through
+`${CLAUDE_PLUGIN_ROOT}` (e.g. `bash "${CLAUDE_PLUGIN_ROOT}"/hooks/eval_gate.sh`), so it resolves
+wherever the plugin is installed. The status-line script is `lab/plugin/statusline.py`.
 
 ### Hooks
 
-| Event | Matcher | Command | Fires on / behavior |
+| Event | Matcher | Script | Fires on / behavior |
 | --- | --- | --- | --- |
-| `PostToolUse` | `Edit\|Write\|MultiEdit` | `bash $CLAUDE_PROJECT_DIR/.claude/hooks/post_edit.sh` | After an edit/write/multi-edit. Runs `uv run ruff check --fix` then `uv run ruff format` on the modified file if it is `*.py` and `uv` + `pyproject.toml` exist. Informative, always exits 0 (never blocks). |
-| `SubagentStop` | (none) | `bash $CLAUDE_PROJECT_DIR/.claude/hooks/eval_gate.sh` | When a sub-agent finishes. The automatic merge gate (see below). |
-| `Stop` | (none) | `bash $CLAUDE_PROJECT_DIR/.claude/hooks/eval_gate.sh` | When the main agent finishes. The automatic merge gate (see below). |
+| `PreToolUse` | `Edit\|Write\|MultiEdit\|NotebookEdit` | `hooks/guard_paths.sh` | Before an edit tool runs. Exits 2 when `tool_input.file_path` is under `.approvals/` or `.runs/`; `"onFailure": "block"` makes a failure of the hook itself blocking (fail-closed). |
+| `SessionStart` | (none) | `hooks/session_start.sh` | At session start. Injects `rules/hard-rules.md` into the context (no rules file needed in the instance). |
+| `PostToolUse` | `Edit\|Write\|MultiEdit` | `hooks/post_edit.sh` | After an edit/write/multi-edit. Runs `uv run ruff check --fix` then `uv run ruff format` on the modified file if it is `*.py` and `uv` + `pyproject.toml` exist. Informative, always exits 0 (never blocks). |
+| `SubagentStop` | (none) | `hooks/eval_gate.sh` | When a sub-agent finishes. The automatic merge gate (see below). |
+| `Stop` | (none) | `hooks/eval_gate.sh` | When the main agent finishes. The automatic merge gate (see below). |
+
+Known limit: a write made by a subprocess (a script launched through Bash) is not blocked by
+`guard_paths.sh`. The sandbox is the hard boundary (see [../how-to/use-the-sandbox.md](../how-to/use-the-sandbox.md)).
 
 #### `eval_gate.sh` behavior
 
 The merge gate, fired on `Stop` and `SubagentStop`:
 
-- Exits 0 immediately if `stop_hook_active` is true (avoids re-run loops), if no
-  `pyproject.toml` exists, or if `git status --porcelain --untracked-files=all`
+- Exits 0 immediately if `stop_hook_active` is true (avoids re-run loops), if neither
+  `pyproject.toml` nor `.lab/lab.toml` exists, or if `git status --porcelain --untracked-files=all`
   shows no changed `*.py`/`*.toml` file.
 - Otherwise runs `just evals`. Non-zero exit → prints `⛔ EVAL GATE RED` plus the
   last 40 lines of output to stderr and **exits 2** (the agent is sent back to
@@ -80,10 +105,13 @@ The merge gate, fired on `Stop` and `SubagentStop`:
 
 ### Status line
 
+A plugin cannot declare the main status line: wire it once in your **user** settings
+(`~/.claude/settings.json`), pointing at the script of the kit checkout or installed plugin:
+
 ```json
 "statusLine": {
   "type": "command",
-  "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/statusline.py\""
+  "command": "python3 /path/to/fde-kit/lab/plugin/statusline.py"
 }
 ```
 
@@ -95,9 +123,10 @@ stdlib, read-only, never raises. Full output format and glyphs:
 
 ### Permission denies
 
-`settings.json` also denies all `Write`/`Edit`/`MultiEdit`/`NotebookEdit`
-operations matching `**/.approvals/**` and `**/.runs/**` (those directories are
-written only by the orchestrator, not by agents).
+A plugin cannot carry permission denies. Orchestrated runs get them from
+`lab/engine/run_settings.json`, passed with `--settings` on every call:
+`Edit(**/.approvals/**)` and `Edit(**/.runs/**)` (no hook in that file). Those directories are
+written only by the orchestrator, not by agents. Interactively, `guard_paths.sh` plays that role.
 
 ## See also
 

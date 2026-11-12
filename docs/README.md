@@ -20,6 +20,7 @@ serving a different reader need. Pick by what you're trying to do:
 
 *Task-oriented — you know what you want.*
 
+- [Activate the kit on a client project](how-to/activate-an-instance.md)
 - [Run the orchestrator on a feature](how-to/run-the-orchestrator.md)
 - [Organize features by domain](how-to/organize-features-by-domain.md)
 - [Ingest raw client inputs into the artifacts](how-to/ingest-client-assets.md)
@@ -41,11 +42,11 @@ serving a different reader need. Pick by what you're trying to do:
 
 *Information-oriented — dry, accurate lookup.*
 
-- [CLI](reference/cli.md) — `orchestrate.py` flags, `just` recipes, helper scripts.
+- [CLI](reference/cli.md) — `lab init|run|validate|version`, `.lab/lab.toml`, `orchestrate.py` flags, `just` recipes, helper scripts.
 - [Environment variables](reference/environment.md) — every `LAB_*` / sandbox variable.
 - [Commit format](reference/commit-format.md) — the canonical commit shape (subject + `Why:` body + trailers).
-- [Status line](reference/status-line.md) — what `.claude/statusline.py` shows.
-- [Agents & skills](reference/agents-and-skills.md) — sub-agents, skills, hooks.
+- [Status line](reference/status-line.md) — what `lab/plugin/statusline.py` shows.
+- [Agents & skills](reference/agents-and-skills.md) — the plugin: sub-agents, skills, hooks.
 
 ---
 

@@ -670,3 +670,5 @@ test collection (T5) and T10's test is not an eval.
 | 2026-11-12 15:53 | T13 | implementer | done, evals green (t1) | |
 | 2026-11-12 15:56 | CP-4 | owner | checkpoint REJECTED — Second pass (CP-4 review item 1): my previous note over-granted. --add-dir <kit root> lets live trials read the answer keys (evals/golden/*/goldeval/check.sh, evals/behavioral/cases.py) — breaks the EVOLUTION.md fairness rule. In eval_models.py: grant ONLY the agents dir — add_dirs=[<kit code root>/lab/plugin/agents] — never the kit root. Also make the role path brace-safe: pass it as a .format() argument (e.g. {agents}) instead of baking it into ROLE_PROMPT before .format() (item 2). In tests/fde_kit/test_eval_models_argv.py assert, for behavioral and chain: the single --add-dir ends with lab/plugin/agents and no --add-dir covers evals/ or the kit root; the prompt cites the absolute role file. Do not touch orchestrate.py. | |
 | 2026-11-12 15:57 | T13 | implementer | done, evals green (t1) | |
+| 2026-11-12 16:17 | CP-4 | owner | checkpoint validated | |
+| 2026-11-12 16:19 | T14 | implementer | done, evals green (t1) | |

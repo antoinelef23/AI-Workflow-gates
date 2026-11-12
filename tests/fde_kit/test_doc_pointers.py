@@ -30,3 +30,20 @@ def test_docs_do_not_cite_demo_paths_without_examples_prefix():
             if any(p.search(line) for p in BARE):
                 offenders.append(f"{md.relative_to(DOCS.parent)}:{n}: {line.strip()}")
     assert not offenders, "bare demo paths:\n" + "\n".join(offenders)
+
+
+# The kit ships as a plugin under lab/plugin/ (design ADR-1, ADR-3): there is no `.claude/`
+# tree in the kit any more, so no doc may point at one. The user-level `~/.claude/settings.json`
+# (where the FDE wires the status line) is not the kit's and stays allowed.
+ROOT = DOCS.parent
+STALE_CLAUDE = re.compile(r"(?<!~/)\.claude/(agents|hooks|skills|settings\.json|statusline\.py)")
+
+
+def test_docs_do_not_reference_the_removed_kit_dot_claude():
+    offenders = []
+    files = [ROOT / "README.md", *sorted(DOCS.rglob("*.md"))]
+    for md in files:
+        for n, line in enumerate(md.read_text(encoding="utf-8").splitlines(), 1):
+            if STALE_CLAUDE.search(line):
+                offenders.append(f"{md.relative_to(ROOT)}:{n}: {line.strip()}")
+    assert not offenders, "stale .claude/ references:\n" + "\n".join(offenders)
