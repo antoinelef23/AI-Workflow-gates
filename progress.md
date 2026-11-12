@@ -1,4 +1,4 @@
-# Progress — passation de session (2026-11-12)
+# Progress — passation de session (2026-11-12, mise à jour session 2)
 
 > Point d'entrée pour reprendre le travail dans une nouvelle session. Branche :
 > `ccr-d4884d69-odjnuk`. Lire ensuite, dans l'ordre : `work/fde-kit/spec.md` →
@@ -48,63 +48,81 @@ spike promptfoo, ADR-12).
 eval-runner `claude-haiku-5-5`. Preuve = non-régression (pas supériorité : n=1 par golden).
 Scorecards : `lab/models/scorecards/2026-11-12-*.md|jsonl`.
 
-## 5. État du run (itération 1)
+## 5. État du run (itération 1) — session 2 (redémarrage complet demandé par l'Owner)
 
-| Nœud | État | Commit |
+Le `state.json` n'avait pas survécu au changement de session : l'Owner a choisi un **rejeu
+complet** pour observer tout le workflow. T1–T10 ont été rejoués (commits « journal seul »,
+travail déjà présent : `15f628c`…`0b09785`), puis la suite a avancé.
+
+| Nœud | État | Commit(s) |
 |---|---|---|
-| T1–T4 | ✅ done (1ᵉʳ essai) | `efcc57d` `318d5c6` `81cbfee` `2a04e35` |
-| CP-1 | ✅ approuvé (WARN sans bloquant ; contrôle live plugin OK) | `7b32145` |
-| T5 | ✅ done | `89d2532` |
-| CP-2 | ✅ approuvé (aucune PR ouverte vérifiée) | `b62cdde` |
-| T6 | ✅ done — **déplacement fait à la main** (exception autorisée « une seule fois », agent sans droit `git mv`) | `90fb9f9` (+ `c2aebe2` auto) |
-| **T7** | 🛑 **blocked** dans `state.json` — travail fait, vérif verte (1063 evals lancées par Claude), mais l'agent refusait de conclure sans lancer `just` lui-même | commité à la main sur instruction de l'Owner (changement de compte) — voir `git log -1 -- examples/devis/pyproject.toml` |
-| T8, T10 | ✅ done | `6f3948d` `a44e003` |
-| T9, CP-3, T11–T14, CP-4, CP-5 | ⏭ skipped (dépendent de T7) | — |
+| T1–T10, CP-1, CP-2 | ✅ (rejeu) | réel : `efcc57d`…`a44e003` ; rejeu : `15f628c`…`0b09785` |
+| T7 | ✅ débloqué par le delta de plan `e86d8c4` (vérif laissée à l'orchestrateur) | `d7b434a` |
+| T9 | ✅ après **rejet CP-3** (test hors scope → delta `314bf39`) | `e8da4a2` + `cda972e` |
+| CP-3 | ✅ (gate-ci + audit du move + dry-runs faits côté Owner) | `1f183f0` |
+| T15 | ✅ **voie Owner** (fichiers protégés `.claude/` → `lab/plugin/`) | `f93438a` (+ `2be6b62`) |
+| T11 | ✅ (scindé : partie agent, après blocage chemins protégés) | `50f9c61` |
+| T12, T13 | ✅ ; T13 retravaillé après **2 rejets CP-4** (accès des essais aux clés de réponse) | `a243a5d`, `ac9aed9` |
+| **CP-4** | ⏸ en attente — campagne live behavioral + chain (3 modèles de prod) en cours | — |
+| T14, CP-5 | ⏳ | — |
 
-Coût agents du run : **9,88 $** (journal) ; total session ≈ 29 $ avec campagne et contrôles.
-`state.json` et `journal.jsonl` sont dans `work/fde-kit/.runs/` (gitignorés).
+Contrôles live CP-4 faits : **EX-5 ✅** (un `claude -p` avec l'argv du run ne peut pas écrire
+`.approvals/CP-1` — refusé par le hook `guard_paths` du plugin) ; **BHV-2b ✅** (une session
+`--plugin-dir lab/plugin` reçoit les 8 règles via SessionStart) ; **`--settings` sous `--bare` :
+non concluant** (`--bare` n'accepte pas l'auth OAuth de la session ; le moteur ne passe jamais
+`--bare`).
 
-## 6. Prochaine action (décidée, PAS encore faite)
+## 6. Améliorations du workflow faites pendant ce run (hors plan, Owner)
 
-**Delta de plan approuvé par l'Owner** (« Amender le plan ») pour T7 **et** T9 : ajouter à leur
-prompt « la vérification (`verify`) est exécutée par l'orchestrateur après toi ; vérifie
-localement avec l'équivalent `uv run pytest -m eval` (dans `examples/<x>`) — n'essaie pas de
-lancer `just` ». Puis :
+Chaque blocage du run a été transformé en garde-fou du moteur (le pourquoi est dans chaque commit) :
 
-1. Modifier les prompts de T7 et T9 dans `work/fde-kit/tasks.md` + noter le delta dans
-   `approved_by` ; `bash .githooks/pre-commit && git commit` (format canonique, Why: plan gap).
-2. Les fichiers de T7 (`examples/devis/{pyproject.toml,uv.lock,justfile,.lab/,work/README.md,work/_templates/}`)
-   sont **commités** (exception manuelle demandée par l'Owner avant changement de compte). À la
-   reprise, T7 est rejoué : l'agent trouve le travail fait, l'orchestrateur lance la vérif et
-   confirme ; le commit auto de T7 sera vide ou ne contiendra que le journal du run.
-3. Relancer le run (reprend à T7) :
-   ```bash
-   export LAB_APPROVAL_SECRET="$(openssl rand -hex 32)"   # nouveau secret : l'ancien vivait dans le scratchpad
-   python3 lab/engine/orchestrate.py work/fde-kit          # ou en détaché + guetteur sur le log
-   ```
-4. **CP-3** (bloquant) : relire le commit de déplacement pur `90fb9f9` (content_guard aveugle aux
-   fichiers déplacés), `lab run --project examples/<x> --dry-run` sur les deux exemples, puis
-   **redémarrage obligatoire** de l'orchestrateur avant T11 (bascule `.claude/` → `lab/plugin/`).
-5. **CP-4** : campagne live behavioral + chain lancée par l'Owner (facturée, ADR-11).
-6. **CP-5** : merge, humain.
+| Commit | Amélioration | Déclencheur |
+|---|---|---|
+| `f4f151c` | **Scope leak** : une tâche verte grâce à des fichiers hors `files_touched` est renvoyée à l'agent (sinon le commit est rouge alors que le journal dit vert) | CP-3 BLOCK (T9) |
+| `ed61c07` | **Voie Owner** (`**agent:** owner`) + **lint de capacité** (tâche agent sur chemin protégé = erreur ; prompt demandant `git mv`/`git rm`/`just` = warning) | T11 bloqué (3ᵉ cas après T6, T7) |
+| `94f273e` | Trajectory guard : `owner_signed` journalisé = preuve d'une tâche Owner | revue CP-4 |
+| `2f3fe92` | Le `Why:` d'un commit auto de rework cite le rejet de checkpoint | revue CP-4 |
+| `4bf2b48` | Essais de modèles : fichier de rôle copié dans le cwd de l'essai, plus de chemin du kit ni d'`--add-dir` (équité EVOLUTION.md) | revue CP-4 (3 passes) |
 
-Signature d'un checkpoint : `LAB_APPROVAL_SECRET=… bash lab/engine/approve.sh CP-n work/fde-kit`.
+Leçons de planification : une tâche scindée doit rester verte à chaque étape (T15 a dû absorber
+deux lignes de test) ; un rejet doit prescrire le **besoin** (« le modèle lit son fichier de
+rôle sans voir les clés »), pas un mécanisme (l'`--add-dir` prescrit a ouvert une fuite).
 
-## 7. Lot de correctifs du lab (hors plan — à traiter dans une feature séparée)
+## 7. Prochaine action
+
+1. Lire les scorecards de la campagne (`lab/models/scorecards/<date>-*.md`) ; si pas de
+   violation de chaîne de commandement → signer **CP-4** (`approve.sh CP-4 work/fde-kit`).
+2. **T14** (docs du kit : plugin, CLI, installation sans `.claude/` ; corriger aussi la syntaxe
+   `just eval-models` — paramètres **positionnels** : `just eval-models behavioral 1 <modèles>`).
+3. **CP-5** : merge — **humain, toujours**.
+4. Avant CP-5 : `just check-trajectory` est rouge pour des raisons historiques (T15 journalisé
+   avant `94f273e` ; `progress.md` touché par le commit manuel de T7) — à acter dans le dossier.
+
+Signature : `LAB_APPROVAL_SECRET=… bash lab/engine/approve.sh <CP-n|Tn> work/fde-kit` (secret de
+session dans le scratchpad — régénérer à la reprise ; les jetons non consommés deviennent invalides).
+
+## 8. Lot de correctifs du lab (hors plan)
+
+Faits dans cette session : 4 (`2b8f327`), 13 (`ed61c07`), et les nouveaux 14–17 ci-dessous marqués ✅.
 
 1. plan-lint : la vérif d'existence d'un ID de spec matche aussi les IDs supprimés cités dans le changelog.
-2. `work/sdlc-rework/tasks.md` : 17 erreurs plan-lint (chevauchement `justfile`, `tests/sdlc_rework/`) ; plan-lint seulement informatif en CI.
+2. `work/sdlc-rework/tasks.md` : 17 erreurs plan-lint ; plan-lint seulement informatif en CI.
 3. Couverture d'evals (`eval_covers`) cherchée dans toute la suite, pas par feature.
-4. `orchestrator.lock` non ignoré — **corrigé** (`2b8f327`).
-5. `--dry-run` écrit un faux `run_end` dans le journal.
-6. `eval_models.py` compte une erreur d'API comme un échec (dont 3 fausses violations de chaîne).
+5. `--dry-run` écrit un faux `run_end` dans le journal (encore observé : il fausse `just report`).
+6. `eval_models.py` compte une erreur d'API comme un échec.
 7. Cas `BEH-eval-correct` : demande un fichier hors `files_touched`.
-8. Golden `remise-paliers` échoue pour 5 modèles sur 6 (oracle ou tâche à revoir).
-9. `guard_paths.sh` ignore `notebook_path` (CP-1, écart 2).
-10. Pré-vol : compare la version du kit, pas celle de `plugin.json` (CP-1, écart 3).
-11. `LAB_ROOT` relatif + `--project` sur le même dossier (CP-1, écart 4).
-12. `scoped_commit` stage tout le dossier de la feature (rapports de relecture régénérés embarqués dans les commits de tâche) (CP-2, écart 1).
-13. Le planner ne vérifie pas que chaque tâche tient dans les outils autorisés des agents (T6 `git mv`, T7/T9 `just`) — premier cas concret pour l'`improver`.
+8. Golden `remise-paliers` échoue pour 5 modèles sur 6.
+9. `guard_paths.sh` ignore `notebook_path`.
+10. Pré-vol : compare la version du kit, pas celle de `plugin.json` (à trancher : texte BHV-2a vs ADR-2).
+11. `LAB_ROOT` relatif + `--project` sur le même dossier.
+12. `scoped_commit` stage tout le dossier de la feature (rapports de revue embarqués dans les commits de tâche).
+14. ✅ Vérif sur l'arbre de travail ≠ contenu du commit (`f4f151c`).
+15. Le reviewer ne peut lancer ni `just` ni `git` (approbation demandée) : les revues CP retombent sur la lecture de code. Même famille que 13 → voie Owner / allowlist reviewer.
+16. Rejeu complet : commits « journal seul » avec des `Artifacts:` faux (le trailer recopie `files_touched`, pas les fichiers réellement modifiés).
+17. ✅ `Why:` des commits auto de rework (`2f3fe92`).
+18. Syntaxe `just eval-models layer=… live=1` des docs/plans fausse (paramètres positionnels).
+19. Isolation des essais de modèles : `--plugin-dir`/`--settings` restent des chemins du kit dans l'argv et l'environnement des hooks ; confinement complet = bac à sable OS (candidat ADR).
+20. Un rejet de checkpoint consomme vite le budget (max 2) quand c'est la **prescription** du rejet qui est fausse : prévoir un « amendement de note de rejet » ou un rejet qui ne compte pas.
 
 ## 8. Environnement (session cloud)
 
