@@ -614,3 +614,4 @@ test collection (T5) and T10's test is not an eval.
 | 2026-11-12 13:43 | T5 | implementer | done, evals green (t1) | |
 | 2026-11-12 13:47 | CP-2 | owner | checkpoint validated | |
 | 2026-11-12 13:48 | T6 | implementer | BLOCKED — permission to run `git mv` was refused (not a spec question; no OQ raised) | |
+| 2026-11-12 13:51 | T6 | implementer | done, evals green (t1) | |
