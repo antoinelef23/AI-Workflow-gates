@@ -132,3 +132,32 @@ def test_build_docker_argv_skips_user_when_none():
         uid_gid=None,
     )
     assert "--user" not in argv
+
+
+def test_sandbox_runner_passes_guardrail_options_through(monkeypatch, tmp_path):
+    """Kit mode (ADR-10): cwd-relative plugin/settings/rules reach the container's claude argv."""
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+
+        class P:
+            returncode = 0
+            stdout = '{"result": "ok"}'
+            stderr = ""
+
+        return P()
+
+    monkeypatch.setattr(sb.subprocess, "run", fake_run)
+    sb.SandboxedClaudeRunner().run(
+        "p",
+        cwd=tmp_path,
+        plugin_dir="lab/plugin",
+        settings="lab/engine/run_settings.json",
+        append_system_prompt="RULES",
+    )
+    argv = seen["argv"]
+    assert argv[argv.index("--plugin-dir") + 1] == "lab/plugin"
+    assert argv[argv.index("--settings") + 1] == "lab/engine/run_settings.json"
+    assert argv[argv.index("--append-system-prompt") + 1] == "RULES"
+    assert "--bare" not in argv

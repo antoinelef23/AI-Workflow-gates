@@ -62,7 +62,7 @@ from plan import (
     paths_overlap,
     skip_dependents,
 )
-from kit import kit_root
+from kit import kit_root, kit_version
 from registry import load_registry, resolve_model
 from runner import DEFAULT_ALLOWED_TOOLS, get_runner
 from verify import parse_verify
@@ -188,6 +188,88 @@ def journal(feature: Path, **event) -> None:
             fh.write(json.dumps(event, ensure_ascii=False) + "\n")
 
 
+# ---- kit guardrails on every agent call (spec BHV-2, INV-1; design ADR-2, ADR-10) ----
+
+PLUGIN_REL = Path("lab") / "plugin"
+RUN_SETTINGS_REL = Path("lab") / "engine" / "run_settings.json"
+RULES_REL = PLUGIN_REL / "rules" / "hard-rules.md"
+MIN_CLAUDE_VERSION = (2, 1, 295)  # `onFailure` hooks (design ADR-6)
+
+
+def guardrail_options() -> dict:
+    """Plugin dir, run settings and hard rules for EVERY agent call (implementer and
+    reviewer alike). Resolved from the KIT root (LAB), never from PROJECT (I-2). Kit mode
+    (PROJECT == LAB): cwd-relative paths, valid on the host and inside the sandbox's
+    /workspace (ADR-10). External instance: absolute paths under the kit. The engine never
+    passes `--bare`."""
+    external = PROJECT != LAB
+    base = LAB if external else Path()
+    return {
+        "plugin_dir": str(base / PLUGIN_REL),
+        "settings": str(base / RUN_SETTINGS_REL),
+        "append_system_prompt": (LAB / RULES_REL).read_text(encoding="utf-8"),
+    }
+
+
+def agent_file(role: str) -> Path:
+    """Agent definition for `role`, evaluated per call: `lab/plugin/agents/<role>.md`
+    if it exists, else the legacy `.claude/agents/<role>.md`. The legacy branch is
+    TRANSITIONAL (lets the engine loaded in memory survive the cutover move); T11
+    deletes it."""
+    plugin = LAB / PLUGIN_REL / "agents" / f"{role}.md"
+    return plugin if plugin.is_file() else LAB / ".claude" / "agents" / f"{role}.md"
+
+
+def _parse_version(text: str) -> tuple[int, ...] | None:
+    m = re.search(r"(\d+)\.(\d+)\.(\d+)", text)
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def preflight() -> list[str]:
+    """Fail-closed pre-flight (ADR-6, I-5). Returns the refusal messages (empty = go).
+    Order: kit root; plugin dir; (external instance) pin; claude CLI; runner/instance."""
+    external = PROJECT != LAB
+    plugin = LAB / PLUGIN_REL
+    if not plugin.is_dir():
+        return [
+            f"plugin directory {plugin} not found — the kit install is broken "
+            "(reinstall fde-kit or set LAB_ROOT to the kit)"
+        ]
+    for f in (LAB / RULES_REL, LAB / RUN_SETTINGS_REL):
+        if not f.is_file():
+            return [f"{f} not found — the kit install is broken"]
+    if external:
+        from lab_init import LabTomlError, read_lab_toml
+
+        try:
+            pinned = read_lab_toml(PROJECT)["kit_version"]
+        except LabTomlError as e:
+            return [str(e)]
+        running = kit_version()
+        if pinned != running:
+            return [
+                f"plugin {running} ≠ pinned kit {pinned} "
+                f"(.lab/lab.toml in {PROJECT}; upgrading the kit is an explicit commit of the instance)"
+            ]
+    try:
+        p = subprocess.run(
+            ["claude", "--version"], capture_output=True, text=True, timeout=60
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return [f"cannot run `claude --version`: {e}"]
+    found = _parse_version(p.stdout) if p.returncode == 0 else None
+    minimum = ".".join(map(str, MIN_CLAUDE_VERSION))
+    if found is None:
+        return [f"cannot read the claude CLI version (need >= {minimum})"]
+    if found < MIN_CLAUDE_VERSION:
+        return [
+            f"claude CLI {'.'.join(map(str, found))} is too old (need >= {minimum})"
+        ]
+    if external and (os.environ.get("LAB_RUNNER") or "").strip().lower() == "sandbox":
+        return ["sandbox + external instance not supported before iteration 2"]
+    return []
+
+
 def run_claude(
     prompt: str, resume: str | None = None, model: str | None = None
 ) -> dict:
@@ -217,6 +299,7 @@ def run_claude(
         timeout=TASK_TIMEOUT_S,
         env=child_env,
         add_dirs=add_dirs,
+        **guardrail_options(),
     )
     with COST_LOCK:
         COST_TOTAL["usd"] += r.cost_usd
@@ -366,7 +449,7 @@ def _commit_message(node: Node, feature: Path, real_ids: list[str]) -> str:
 
 def _build_base_prompt(node: Node, feature: Path) -> str:
     return (
-        f"You act as the implementer agent ({LAB}/.claude/agents/implementer.md). "
+        f"You act as the implementer agent ({agent_file('implementer')}). "
         f"Framework references (engineering rules, deployment standard, other agent files) "
         f"live under {LAB} — resolve any such path there, not under the project. "
         f"Read {feature}/spec.md then {feature}/design.md then {feature}/tasks.md. "
@@ -582,7 +665,7 @@ def run_review(cp: Node, feature: Path, dry: bool) -> tuple[str, Path, bool]:
     for i, mid in enumerate(models):
         lens = REVIEW_LENSES[i % len(REVIEW_LENSES)] if n > 1 else "full review"
         prompt = (
-            f"You act as the reviewer agent ({LAB}/.claude/agents/reviewer.md). Feature: {feature}. "
+            f"You act as the reviewer agent ({agent_file('reviewer')}). Feature: {feature}. "
             f"Checkpoint {cp.id} — {cp.title}. Tasks covered: {', '.join(cp.depends_on) or 'all'}. "
             f"REVIEW LENS imposed: {lens}. "
             f"Produce the report (✅/⚠️/❌ with file:line) and you MUST end with a "
@@ -797,6 +880,13 @@ def main() -> int:
             "Export LAB_APPROVAL_SECRET (recommended) or, knowingly, "
             "LAB_ALLOW_UNSIGNED_APPROVALS=1 to allow unsigned tokens."
         )
+        return 1
+
+    # Pre-flight (fail-closed, before the lock): real runs AND --dry-run, never --validate.
+    refusals = preflight()
+    if refusals:
+        for m in refusals:
+            print(f"⛔ pre-flight: {m}", file=sys.stderr)
         return 1
 
     by_id = {n.id: n for n in nodes}

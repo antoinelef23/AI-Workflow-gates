@@ -154,6 +154,9 @@ class SandboxedClaudeRunner(AgentRunner):
         timeout: int = 2400,
         env: dict | None = None,
         add_dirs: list[str] | None = None,
+        plugin_dir: str | None = None,
+        settings: str | None = None,
+        append_system_prompt: str | None = None,
     ) -> RunResult:
         # NOTE: add_dirs (host paths outside the workspace, e.g. the LAB when building an
         # external project) is intentionally NOT forwarded — the sandbox bind-mounts ONLY
@@ -168,6 +171,10 @@ class SandboxedClaudeRunner(AgentRunner):
             allowed_tools=allowed_tools,
             max_turns=max_turns,
             permission_mode=permission_mode,
+            # Kit mode only (ADR-10): cwd-relative paths, valid inside /workspace.
+            plugin_dir=plugin_dir,
+            settings=settings,
+            append_system_prompt=append_system_prompt,
         )
         argv = build_docker_argv(
             image=self.image,

@@ -54,6 +54,9 @@ def claude_argv(
     max_turns: int,
     permission_mode: str,
     add_dirs: list[str] | None = None,
+    plugin_dir: str | None = None,
+    settings: str | None = None,
+    append_system_prompt: str | None = None,
 ) -> list[str]:
     """Build the `claude -p` argv. Shared by the host and sandbox runners so the
     agent-facing command is identical in both.
@@ -61,7 +64,12 @@ def claude_argv(
     add_dirs grants the agent read access to directories outside its cwd — used when
     the build runs in an external project (cwd=PROJECT) but the agent must read the
     framework files under the LAB. Empty/None by default, so the in-repo path and every
-    test produce an unchanged argv."""
+    test produce an unchanged argv.
+
+    plugin_dir / settings / append_system_prompt carry the kit guardrails into the call
+    (design ADR-2: `--plugin-dir`, `--settings` for the denies, `--append-system-prompt`
+    for the hard rules). None by default ⇒ the argv is byte-identical to before. The
+    engine never passes `--bare`."""
     cmd = [
         "claude",
         "-p",
@@ -81,6 +89,12 @@ def claude_argv(
         cmd += ["--model", model]
     if resume:
         cmd += ["--resume", resume]
+    if plugin_dir:
+        cmd += ["--plugin-dir", plugin_dir]
+    if settings:
+        cmd += ["--settings", settings]
+    if append_system_prompt:
+        cmd += ["--append-system-prompt", append_system_prompt]
     return cmd
 
 
@@ -116,6 +130,9 @@ class AgentRunner(abc.ABC):
         timeout: int = 2400,
         env: dict | None = None,
         add_dirs: list[str] | None = None,
+        plugin_dir: str | None = None,
+        settings: str | None = None,
+        append_system_prompt: str | None = None,
     ) -> RunResult: ...
 
 
@@ -141,6 +158,9 @@ class ClaudeCliRunner(AgentRunner):
         timeout: int = 2400,
         env: dict | None = None,
         add_dirs: list[str] | None = None,
+        plugin_dir: str | None = None,
+        settings: str | None = None,
+        append_system_prompt: str | None = None,
     ) -> RunResult:
         cmd = claude_argv(
             prompt,
@@ -150,6 +170,9 @@ class ClaudeCliRunner(AgentRunner):
             max_turns=max_turns,
             permission_mode=permission_mode,
             add_dirs=add_dirs,
+            plugin_dir=plugin_dir,
+            settings=settings,
+            append_system_prompt=append_system_prompt,
         )
         try:
             p = subprocess.run(
