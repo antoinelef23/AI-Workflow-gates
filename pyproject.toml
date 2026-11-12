@@ -19,6 +19,7 @@ packages = ["lab"]
 dev = ["pytest", "ruff"]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 pythonpath = ["src"]
 markers = [
     "eval: eval test derived from spec.md §7 — merge gate (just evals)",
