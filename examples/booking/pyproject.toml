@@ -1,0 +1,22 @@
+[project]
+name = "booking"
+version = "0.1.0"
+description = "Meeting-room booking demo (salle-booking) — standalone instance of the FDE kit"
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/booking"]
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+markers = [
+    "eval: eval test derived from spec.md §7 — merge gate (just evals)",
+]
