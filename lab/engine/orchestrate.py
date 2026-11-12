@@ -492,7 +492,7 @@ def _commit_message(node: Node, feature: Path, real_ids: list[str]) -> str:
         lines.append(f"Spec-IDs: {', '.join(real_ids)}")
     if node.files:
         lines.append(f"Artifacts: {', '.join(node.files)}")
-    lines.append("Run: auto")
+    lines.append("Run: owner" if node.agent == "owner" else "Run: auto")
     return "\n".join(lines)
 
 
@@ -583,9 +583,56 @@ def _eval_gate(node: Node, real_ids: list[str]) -> tuple[bool, str]:
     return ok, out
 
 
+def run_owner_task(node: Node, feature: Path, dry: bool, real_ids: list[str]) -> str:
+    """Owner lane (`agent: owner`): work a headless agent cannot do — writes under
+    protected paths (`.claude/`, a plugin's agents/skills/hooks) or commands outside
+    its allowlist. No agent is dispatched: the Owner does the task by hand, then
+    signs it with approve.sh. The engine still owns "done": the task's verify and
+    the eval gate must be green, then the scoped commit carries the work
+    (`Run: owner`). reject.sh on the task = the Owner gives up → blocked."""
+    if dry:
+        print(f"  [dry-run] OWNER TASK {node.id} — waits for a signed approval")
+        return "done"
+    rel = feature.relative_to(PROJECT)
+    notify(
+        f"OWNER TASK {node.id} — {node.title}: do it by hand (tasks.md prompt; scope: "
+        f"{', '.join(node.files)}), then lab/engine/approve.sh {node.id} {rel} "
+        f'(or reject.sh {node.id} {rel} "reason" to block it)'
+    )
+    outcome, info = _await_token(node, feature, "owner task")
+    if outcome != "approved":
+        journal(
+            feature, event="task_blocked", id=node.id, reason=info.get("reason", "")
+        )
+        return "blocked"
+    passed, feedback, label = _run_verify(node)
+    ok, out = _eval_gate(node, real_ids) if passed else (False, feedback)
+    if not (passed and ok):
+        run_log(
+            feature,
+            node,
+            "owner",
+            f"owner task RED after signature ({label or 'evals'})",
+        )
+        journal(feature, event="task_failed", id=node.id)
+        notify(
+            f"{node.id}: signed but verify/evals red — fix and restart:\n{out[:500]}"
+        )
+        return "failed"
+    run_log(feature, node, "owner", "done by the Owner, verify + evals green")
+    scoped_commit(node, feature, _commit_message(node, feature, real_ids))
+    journal(feature, event="task_done", id=node.id, attempts=1, lane="owner")
+    return "done"
+
+
 def run_task(node: Node, feature: Path, dry: bool) -> str:
     """Returns done | failed | blocked. Per attempt: run the agent → parse the
     STATUS verdict → run verify → run the eval gate → scoped commit on green."""
+    if node.agent == "owner":
+        ids = list(
+            dict.fromkeys(s for t in node.implements for s in SPEC_ID.findall(t))
+        )
+        return run_owner_task(node, feature, dry, ids)
     if dry:
         print(
             f"  [dry-run] {RUNNER.name} run: {node.id} "
@@ -796,7 +843,6 @@ def wait_checkpoint(
 ) -> tuple[str, dict]:
     """Returns ("approved", {}) or ("rejected", {reason, tasks})."""
     approval = feature / ".approvals" / node.id
-    rejection = feature / ".approvals" / f"{node.id}.rejected"
     if dry:
         print(
             f"  [dry-run] CHECKPOINT {node.id} (mode {node.mode}) — attend {approval}"
@@ -843,6 +889,15 @@ def wait_checkpoint(
         f'or lab/engine/reject.sh {node.id} {feature.relative_to(PROJECT)} "reason" [Tn …] '
         f"(reviewer report: {report.relative_to(PROJECT)}, verdict {verdict})"
     )
+    return _await_token(node, feature, "checkpoint")
+
+
+def _await_token(node: Node, feature: Path, kind: str) -> tuple[str, dict]:
+    """Block until the Owner signs `.approvals/<id>` (approve.sh) or drops
+    `.approvals/<id>.rejected` (reject.sh). Shared by checkpoints and Owner-lane
+    tasks. Returns ("approved", {}) or ("rejected", {reason, tasks})."""
+    approval = feature / ".approvals" / node.id
+    rejection = feature / ".approvals" / f"{node.id}.rejected"
     print(f"⏸  {node.id} — waiting for {approval} (or .rejected)", flush=True)
     while True:
         if rejection.exists():
@@ -851,7 +906,7 @@ def wait_checkpoint(
                 rejection.parent
                 / f"{node.id}.rejected.handled-{datetime.now():%Y%m%d%H%M%S}"
             )
-            run_log(feature, node, "owner", f"checkpoint REJECTED — {info['reason']}")
+            run_log(feature, node, "owner", f"{kind} REJECTED — {info['reason']}")
             journal(feature, event="checkpoint_rejected", id=node.id, **info)
             notify(
                 f"{node.id} rejected — reopening: {', '.join(info['tasks']) or 'all the checkpoint tasks'}"
@@ -881,7 +936,7 @@ def wait_checkpoint(
             approval.rename(
                 approval.parent / f"{node.id}.handled-{datetime.now():%Y%m%d%H%M%S}"
             )
-            run_log(feature, node, "owner", "checkpoint validated")
+            run_log(feature, node, "owner", f"{kind} validated")
             notify(f"{node.id} validated — resuming execution")
             return "approved", {}
         time.sleep(20)
@@ -918,7 +973,16 @@ def main() -> int:
     feature = (PROJECT / args.feature).resolve()
     fm, nodes = parse_tasks_md(feature / "tasks.md")
 
-    errors, warnings = validate(feature, fm, nodes, REGISTRY)
+    try:  # nodes already done in a previous run: capability lint no longer applies
+        prev = json.loads(
+            (feature / ".runs" / "state.json").read_text(encoding="utf-8")
+        )
+        done_ids = {k for k, v in prev.items() if v == "done"}
+    except (OSError, json.JSONDecodeError, AttributeError):
+        done_ids = set()
+    errors, warnings = validate(
+        feature, fm, nodes, REGISTRY, project=PROJECT, done=done_ids
+    )
     if args.validate or errors or warnings:
         print(
             f"Plan-lint — {len(nodes)} nodes, frontmatter status: {fm.get('status', '∅')}"
