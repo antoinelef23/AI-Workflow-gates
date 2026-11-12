@@ -4,7 +4,7 @@ feature: fde-kit
 version: 0.1.0
 status: approved         # proposed | approved | in_progress | done
 generated_by: planner (session 2026-11-12)
-approved_by: Owner — 2026-11-12 (QCM en session ; CP-1..CP-5 bloquants ; exécution dans la session cloud, checkpoints signés sur instruction de l'Owner ; delta 2026-11-12 approuvé (« Amender le plan ») : prompts T7 et T9 — `verify` exécuté par l'orchestrateur, l'agent vérifie avec `uv run pytest -m eval`, sans lancer `just` ; delta CP-3 (rejet → T9) : `tests/fde_kit/test_kit_root.py` ajouté aux files_touched de T9 — il asserte le `pythonpath` transitoire que T9 retire)
+approved_by: Owner — 2026-11-12 (QCM en session ; CP-1..CP-5 bloquants ; exécution dans la session cloud, checkpoints signés sur instruction de l'Owner ; delta 2026-11-12 approuvé (« Amender le plan ») : prompts T7 et T9 — `verify` exécuté par l'orchestrateur, l'agent vérifie avec `uv run pytest -m eval`, sans lancer `just` ; delta CP-3 (rejet → T9) : `tests/fde_kit/test_kit_root.py` ajouté aux files_touched de T9 — il asserte le `pythonpath` transitoire que T9 retire ; delta T11 bloqué : T11 scindé — T15 (agent: owner, chemins protégés) puis T11 (moteur + tests, + lab_init.py et test_eval_2_run_preflight.py))
 spec: ./spec.md          # version : 0.6.0
 design: ./design.md      # version : 0.4.0
 ---
@@ -129,7 +129,8 @@ flowchart TD
     T8 --> T9
     T10 --> T9
     T9 --> CP3{{CP-3 migration audit + mandatory restart · blocking}}
-    CP3 --> T11[T11 Cutover .claude to lab/plugin]
+    CP3 --> T15[T15 OWNER move protected files]
+    T15 --> T11[T11 Cutover engine + tests]
     T11 --> T12[T12 Hard rules single source]
     T12 --> T13[T13 eval_models via claude_argv]
     T13 --> CP4{{CP-4 ADR-11 live campaign · blocking}}
@@ -468,34 +469,51 @@ test collection (T5) and T10's test is not an eval.
 - **self_hosting:** MANDATORY before approving — T11 deletes `.claude/` and T12 moves the hard rules out of CLAUDE.md; only a post-T4 engine still gives agents their role file, denies and rules after that. Stop the orchestrator while it waits here, restart `python3 lab/engine/orchestrate.py work/fde-kit` (do it even if you already restarted at CP-1 — idempotent), read the review it re-generates, then approve. A process started before T4's commit must never run T11.
 - **on_reject:** `lab/engine/reject.sh CP-3 work/fde-kit "reason" [Tn …]`; a non-pure T6 is reopened as T6, never fixed by a follow-up content commit folded into it.
 
-### T11 — Cutover: `.claude/` → `lab/plugin/` (agents, skills, hooks, status line); engine paths follow
-- **agent:** implementer
+### T15 — Owner lane: move the protected files (`.claude/` → `lab/plugin/`) and wire the plugin hooks
+- **agent:** owner
 - **depends_on:** [CP-3]
 - **parallel_group:** I
 - **implements:** [BHV-2, INV-1]
+- **anchored_on:** ADR-3, ADR-4, I-3, I-4, E-1, E-4
+- **files_touched:** `.claude`, `lab/plugin/agents`, `lab/plugin/skills`, `lab/plugin/hooks`, `lab/plugin/statusline.py`
+- **prompt:**
+  > *Plan delta (T11 blocked 2026-11-12): these paths are protected — a headless agent cannot write
+  > `.claude/` nor a plugin's agents/skills/hooks — so this part is the Owner's (engine Owner lane).*
+  > Per ADR-3, move WITHOUT any content change (`git mv`, renames at 100%): `.claude/agents/*.md` →
+  > `lab/plugin/agents/`, `.claude/skills/**` → `lab/plugin/skills/`, `.claude/hooks/eval_gate.sh` and
+  > `post_edit.sh` → `lab/plugin/hooks/`, `.claude/statusline.py` → `lab/plugin/statusline.py` (OQ-9
+  > option a); delete `.claude/settings.json` (I-3). Then, ADR-4: `lab/plugin/hooks/hooks.json` gains
+  > `Stop` / `SubagentStop` → `eval_gate.sh` and `PostToolUse` → `post_edit.sh`, through
+  > `"${CLAUDE_PLUGIN_ROOT}"`; `eval_gate.sh` also fires when `.lab/lab.toml` exists (I-4 `:15`).
+  > Commit by hand (canonical format, `Run: owner`), then `lab/engine/approve.sh T15 work/fde-kit`.
+- **done_when:** every moved file exists at its new path; hooks.json carries Stop, SubagentStop, PostToolUse; kit evals green
+- **verify:** `ls lab/plugin/agents/implementer.md lab/plugin/skills/commit/SKILL.md lab/plugin/hooks/eval_gate.sh lab/plugin/hooks/post_edit.sh lab/plugin/statusline.py`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### T11 — Cutover: engine paths and tests follow the plugin (agent part of the cutover)
+- **agent:** implementer
+- **depends_on:** [T15]
+- **parallel_group:** I
+- **implements:** [BHV-2, INV-1]
 - **anchored_on:** ADR-3, ADR-4, I-3, I-4, I-15, E-1, E-4
-- **files_touched:** `.claude`, `lab/plugin/agents`, `lab/plugin/skills`, `lab/plugin/hooks`, `lab/plugin/statusline.py`, `lab/engine/orchestrate.py`, `lab/engine/eval_models.py`, `lab/engine/context_budget.py`, `tests/orchestrator/test_hooks.py`, `tests/orchestrator/test_statusline.py`, `tests/sdlc_rework/test_context_budget.py`, `tests/fde_kit/test_eval_2_plugin.py`, `tests/fde_kit/test_plugin_cutover.py`
+- **files_touched:** `lab/engine/orchestrate.py`, `lab/engine/eval_models.py`, `lab/engine/context_budget.py`, `lab/engine/lab_init.py`, `tests/orchestrator/test_hooks.py`, `tests/orchestrator/test_statusline.py`, `tests/sdlc_rework/test_context_budget.py`, `tests/fde_kit/test_eval_2_plugin.py`, `tests/fde_kit/test_eval_2_run_preflight.py`, `tests/fde_kit/test_plugin_cutover.py`
 - **prompt:**
   > The engine in memory MUST be post-T4 (restart enforced at CP-3): it resolves agent files per call
-  > and passes plugin, run settings and rules itself — that is what makes this deletion safe mid-run.
-  > Per spec BHV-2 / INV-1 and design ADR-3 / ADR-4 / I-15, move WITHOUT any content change (ADR-3:
-  > form only; content changes follow lab/models/EVOLUTION.md): `.claude/agents/*.md` →
-  > `lab/plugin/agents/`, `.claude/skills/**` → `lab/plugin/skills/`, `.claude/hooks/eval_gate.sh`
-  > and `post_edit.sh` → `lab/plugin/hooks/`, `.claude/statusline.py` → per OQ-9 (planner default
-  > `lab/plugin/statusline.py`); delete `.claude/settings.json` — the kit's `.claude/` disappears,
-  > with its inert Write/MultiEdit/NotebookEdit denies (I-3). Then, in this same task: `hooks.json`
-  > gains `Stop` / `SubagentStop` → `eval_gate.sh` and `PostToolUse` → `post_edit.sh`, through
-  > `"${CLAUDE_PLUGIN_ROOT}"` (ADR-4); `eval_gate.sh` also fires when `.lab/lab.toml` exists (no
-  > more silent exit 0 without `pyproject.toml`, I-4 `:15`); delete the TRANSITIONAL legacy
-  > `.claude/agents` branch of T4's agent-file resolver; eval_models.py ROLE_PROMPT and
-  > context_budget.py:27-32 point to `lab/plugin/agents/` (I-15); fix the test paths
-  > (tests/orchestrator/test_hooks.py HOOK, test_statusline.py, the tests/sdlc_rework/test_context_budget.py
-  > fixture); extend tests/fde_kit/test_eval_2_plugin.py with the new hooks.json entries; add an
-  > eval_gate case on an instance with `.lab/lab.toml` and no `pyproject.toml` (red evals ⇒ exit 2).
-  > Add `tests/fde_kit/test_plugin_cutover.py`: `git ls-files .claude` is empty (the filesystem may
-  > still hold an untracked `__pycache__`) and no engine file references `.claude/`. Do NOT touch
-  > CLAUDE.md, AGENTS.md or docs (T12 / T14).
-- **done_when:** no tracked file under `.claude/`; agent and skill files byte-identical at their new path (renames at 100%); plugin hooks complete; orchestrator, sdlc_rework and fde_kit suites green
+  > and passes plugin, run settings and rules itself. *Plan delta: the file moves, the `.claude/`
+  > deletion and the hooks.json / eval_gate.sh changes are ALREADY DONE by the Owner (T15) — do not
+  > touch `.claude/` nor `lab/plugin/` (protected paths, you cannot write them).* Per spec BHV-2 /
+  > INV-1 and design ADR-3 / ADR-4 / I-15: delete the TRANSITIONAL legacy `.claude/agents` branch of
+  > T4's agent-file resolver, and update the test asserting that fallback
+  > (tests/fde_kit/test_eval_2_run_preflight.py); eval_models.py ROLE_PROMPT and
+  > context_budget.py:27-32 point to `lab/plugin/agents/` (I-15); the `lab_init.py` docstring stops
+  > citing `.claude/`; fix the test paths (tests/orchestrator/test_hooks.py HOOK, test_statusline.py,
+  > the tests/sdlc_rework/test_context_budget.py fixture); extend tests/fde_kit/test_eval_2_plugin.py
+  > with the Stop / SubagentStop / PostToolUse hooks.json entries; add an eval_gate case on an
+  > instance with `.lab/lab.toml` and no `pyproject.toml` (red evals ⇒ exit 2). Add
+  > `tests/fde_kit/test_plugin_cutover.py`: `git ls-files .claude` is empty (the filesystem may still
+  > hold an untracked `__pycache__`) and no engine file references `.claude/`. Do NOT touch CLAUDE.md,
+  > AGENTS.md or docs (T12 / T14). Check with `uv run pytest`; the orchestrator runs `verify`.
+- **done_when:** no tracked file under `.claude/`; no engine file references `.claude/`; plugin hooks complete and tested; orchestrator, sdlc_rework and fde_kit suites green
 - **verify:** `uv run pytest -q tests/orchestrator tests/sdlc_rework tests/fde_kit`
 - **status:** ☐ pending → ☐ running → ☐ done
 
@@ -581,7 +599,7 @@ test collection (T5) and T10's test is not an eval.
 - **status:** ☐ pending → ☐ running → ☐ done
 
 ### CP-5 — CHECKPOINT: merge (human, final)
-- **trigger:** automatic when [T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14] are done
+- **trigger:** automatic when [T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T15, T11, T12, T13, T14] are done
 - **validator:** Owner (PR review)
 - **mode:** blocking — *the merge is always human (CLAUDE.md; plan-lint refuses `auto` on a final checkpoint).*
 - **reviewers:** 3 — *planner proposal: one panelist per lens (correctness / spec-design conformance / robustness) for a structural change of this size; the Owner may lower it.*
@@ -637,3 +655,5 @@ test collection (T5) and T10's test is not an eval.
 | 2026-11-12 14:46 | T9 | implementer | done, evals green (t1) | |
 | 2026-11-12 15:30 | CP-3 | owner | checkpoint REJECTED — T9: tests/fde_kit/test_kit_root.py:233 still asserts the removed pythonpath, so gate-ci is red at e8da4a2. The file is now in your files_touched (plan delta 314bf39); the fix is already in the working tree — confirm it and let the commit carry it. | |
 | 2026-11-12 15:31 | T9 | implementer | done, evals green (t1) | |
+| 2026-11-12 15:34 | CP-3 | owner | checkpoint validated | |
+| 2026-11-12 15:35 | T11 | implementer | BLOCKED — shell denied writes under lab/plugin and .claude (sensitive-file permission); also scope conflicts: lab_init.py docstring and test_eval_2_run_preflight.py outside files_touched | |
