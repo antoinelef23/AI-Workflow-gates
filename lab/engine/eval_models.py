@@ -60,18 +60,24 @@ ALLOWED = "Bash(uv:*),Bash(make:*),Bash(python3:*),Bash(mkdir:*),Bash(ls:*),Bash
 
 ROLE_PROMPT = {
     "implementer": (
-        "You act as the implementer agent (lab/plugin/agents/implementer.md). "
+        "You act as the implementer agent ({agents}/implementer.md). "
         "Read the files in the current directory. {prompt} "
         "Strictly respect the files_touched scope. If the spec has gaps/is ambiguous, "
         "do not invent anything: record an OQ and end blocked. "
         'You MUST end with a single line "STATUS: done" or "STATUS: blocked — <reason>".'
     ),
     "reviewer": (
-        "You act as the reviewer agent (lab/plugin/agents/reviewer.md). "
+        "You act as the reviewer agent ({agents}/reviewer.md). "
         "Read the files in the current directory. {prompt} "
         'You MUST end with a single line "VERDICT: PASS", "VERDICT: WARN" or "VERDICT: BLOCK".'
     ),
 }
+
+
+# Role files are cited by ABSOLUTE path (each trial runs in its own temp cwd), resolved
+# like kit_options() from the kit CODE location, never LAB_ROOT.
+_AGENTS = str(kit_root(honor_env=False) / "lab" / "plugin" / "agents")
+ROLE_PROMPT = {k: v.replace("{agents}", _AGENTS) for k, v in ROLE_PROMPT.items()}
 
 
 def kit_options() -> dict:
@@ -81,6 +87,7 @@ def kit_options() -> dict:
     Never `--bare`."""
     code = kit_root(honor_env=False)
     return {
+        "add_dirs": [str(code)],  # as a real run's --add-dir LAB: role file readable
         "plugin_dir": str(code / "lab" / "plugin"),
         "settings": str(code / "lab" / "engine" / "run_settings.json"),
         "append_system_prompt": (

@@ -72,6 +72,14 @@ def _assert_run_options(argv: list[str]) -> None:
     assert argv[argv.index("--model") + 1] == "m1"
     assert "--allowedTools" in argv
     assert "--bare" not in argv
+    # the role file is cited by absolute path and readable from the temp cwd
+    assert argv[argv.index("--add-dir") + 1] == str(REPO)
+    prompt = argv[argv.index("-p") + 1]
+    assert any(
+        str(REPO / "lab" / "plugin" / "agents" / f"{r}.md") in prompt
+        for r in ("implementer", "reviewer")
+    )
+    assert "(lab/plugin/agents/" not in prompt
 
 
 def test_behavioral_trial_argv_carries_run_options(tmp_path: Path) -> None:

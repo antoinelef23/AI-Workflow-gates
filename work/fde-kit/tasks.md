@@ -666,3 +666,5 @@ test collection (T5) and T10's test is not an eval.
 | 2026-11-12 15:45 | T11 | implementer | done, evals green (t1) | |
 | 2026-11-12 15:47 | T12 | implementer | done, evals green (t1) | |
 | 2026-11-12 15:48 | T13 | implementer | done, evals green (t1) | |
+| 2026-11-12 15:52 | CP-4 | owner | checkpoint REJECTED — ADR-11 not fully met (CP-4 review item 1): live trials cannot read their role file. ROLE_PROMPT cites lab/plugin/agents/<role>.md relative to the kit, but each trial runs in a temp labeval-* cwd and call_model passes no add_dirs. Fix in eval_models.py only: cite the role file by its ABSOLUTE path resolved like kit_options() (kit_root(honor_env=False)), and pass add_dirs=[that kit root] to claude_argv, as a real run passes --add-dir LAB. Add one shim assertion in tests/fde_kit/test_eval_models_argv.py for both (absolute agent path in the prompt + --add-dir in argv), for the behavioral and chain layers. Do not touch orchestrate.py (sharing paths with guardrail_options is out of scope). | |
+| 2026-11-12 15:53 | T13 | implementer | done, evals green (t1) | |
