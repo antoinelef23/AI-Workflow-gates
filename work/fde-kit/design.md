@@ -1,10 +1,10 @@
 ---
 type: design
 feature: fde-kit
-version: 0.1.0
-status: draft            # draft | validated | superseded
+version: 0.2.0
+status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by:            # FDE — vide tant que draft
+validated_by: FDE — 2026-11-12 (validé en session par QCM ; plugin sous lab/plugin/ confirmé)
 spec: ./spec.md          # version : 0.3.0
 ---
 
@@ -110,7 +110,7 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
 ## 4. ADRs — Architecture Decision Records
 
 ### ADR-1 — Un paquet, une version : moteur + plugin dans `fde-kit`
-- **Status:** proposed
+- **Status:** accepted
 - **Context:** le kit doit voyager avec le FDE (OQ-1) et le run doit utiliser exactement le
   plugin de la version épinglée (INV-7). Deux artefacts versionnés séparément dériveraient.
 - **Decision:** le plugin vit sous `lab/plugin/` (`.claude-plugin/plugin.json`, `agents/`,
@@ -126,7 +126,7 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
   isolé d'un `uv tool`, à revoir si le kit devient une dépendance importée.
 
 ### ADR-2 — Runs orchestrés : le moteur fournit plugin, interdictions et règles à chaque appel
-- **Status:** proposed (décision Owner : `--plugin-dir` explicite)
+- **Status:** accepted (décision Owner : `--plugin-dir` explicite)
 - **Context:** `--add-dir` ne charge ni hooks ni denies ; un plugin ne peut pas porter de denies ;
   le chargement implicite des plugins utilisateur par `-p` risque de disparaître (`--bare`).
 - **Decision:** `claude_argv` (constructeur unique) ajoute, quand le moteur le demande :
@@ -144,7 +144,7 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
   `--plugin-dir` remplace un plugin installé de même nom : pas de double chargement.
 
 ### ADR-3 — Une seule source pour les règles dures
-- **Status:** proposed (décision Owner : `plugin/` source unique)
+- **Status:** accepted (décision Owner : `plugin/` source unique)
 - **Context:** ADR-5 de sdlc-rework interdit une seconde source de vérité ; l'instance ne doit
   contenir aucun fichier de règles (INV-8).
 - **Decision:** la méthode portable (les 3 artefacts, règles dures, vocabulaire) va dans
@@ -164,7 +164,7 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
   livraison des règles change ⇒ ré-évaluation de la chaîne de commandement (ADR-11).
 
 ### ADR-4 — Garde-fous interactifs portés par les hooks du plugin
-- **Status:** proposed
+- **Status:** accepted
 - **Context:** en session interactive, le plugin ne peut pas déclarer de denies (E-2) et les
   hooks actuels échouent ouverts en instance (I-4).
 - **Decision:** `lab/plugin/hooks/hooks.json` déclare : `PreToolUse` sur
@@ -180,7 +180,7 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
   bloquée : limite connue du modèle de confiance (README), la sandbox reste la vraie frontière.
 
 ### ADR-5 — Le kit retrouve sa racine, qu'il soit cloné ou installé
-- **Status:** proposed
+- **Status:** accepted
 - **Context:** installé par `uv tool`, `_repo_root()` remonte jusqu'à `site-packages` et le
   registre se charge vide sans erreur (constat design-scout).
 - **Decision:** racine du kit = `LAB_ROOT` si défini (seam de test conservé), sinon
@@ -193,7 +193,7 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
   uniquement.
 
 ### ADR-6 — Pré-vol fail-closed : versions et combinaisons interdites
-- **Status:** proposed
+- **Status:** accepted
 - **Context:** BHV-2a, INV-7 ; une CLI trop ancienne ignore `onFailure`.
 - **Decision:** avant le verrou, `lab run --project <instance>` vérifie dans l'ordre : racine du
   kit résolue (ADR-5) ; `lab/plugin/` présent ; `.lab/lab.toml` présent et `kit_version` =
@@ -205,7 +205,7 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
   — rejeté : INV-7 demande un pin exact.
 
 ### ADR-7 — `lab init` : plan d'abord, jamais d'écrasement
-- **Status:** proposed
+- **Status:** accepted
 - **Decision:** `lab init <project> --profile <p> [--dry-run]` calcule le plan complet, classe
   chaque fichier (`create` / `identical` / `skip` — jamais `overwrite`), l'affiche une ligne par
   fichier, puis l'applique sauf en `--dry-run`. Fichiers : `.lab/lab.toml`
@@ -217,7 +217,7 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
 - **Anchored on:** E-13, I-6, I-7, I-13.
 
 ### ADR-8 — Recettes d'evals dans un justfile existant (sans référence — délibéré)
-- **Status:** proposed
+- **Status:** accepted
 - **Context:** E-14 ; BHV-1b, BHV-1e.
 - **Decision:** justfile absent ⇒ créé depuis un modèle. Justfile présent ⇒ lu avec
   `just --justfile <project>/justfile --dump --dump-format json` (fichier explicite : pas de
@@ -230,7 +230,7 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
 - **Alternatives considered:** `import 'lab.just'` (rejeté : redéfinition ⇒ justfile cassé, vérifié).
 
 ### ADR-9 — Les exemples sont des instances autonomes
-- **Status:** proposed (décision Owner)
+- **Status:** accepted (décision Owner)
 - **Decision:** `examples/devis/` (features `devis-pose`, `export-devis`) et `examples/booking/`
   (`salle-booking`), chacun avec son `pyproject.toml`, son `uv.lock`, son `.lab/lab.toml` et son
   justfile **produits par `lab init`**, ses `work/`, `src/`, `tests/` et ses docs produit
@@ -251,7 +251,7 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
   migration est un déplacement pur (`git mv`, aucune modification de contenu), relu au checkpoint.
 
 ### ADR-10 — Sandbox en itération 1 : mode kit conservé, instance externe refusée
-- **Status:** proposed (décision Owner)
+- **Status:** accepted (décision Owner)
 - **Context:** le conteneur ne monte que le répertoire de travail, avec un home vide (I-16).
 - **Decision:** en mode kit, le moteur passe plugin et settings en **chemins relatifs au cwd**
   (`lab/plugin`, `lab/engine/run_settings.json`), valides sur l'hôte comme dans `/workspace` :
@@ -261,7 +261,7 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
   profil `regulated` exige la sandbox.
 
 ### ADR-11 — La gouvernance des modèles mesure le contexte de production
-- **Status:** proposed
+- **Status:** accepted
 - **Context:** `eval_models.py:83-99,132-148` construit son propre argv, sans règles ni agents :
   la couche chaîne de commandement (éliminatoire) ne teste pas le canal de livraison des règles,
   qui change avec ADR-2/ADR-3.
@@ -311,3 +311,4 @@ Sans objet (outillage en ligne de commande, pas d'interface).
 | Version | Date | Author | Change |
 |---|---|---|---|
 | 0.1.0 | 2026-11-12 | Owner + design-scout | Design de l'itération 1 (kit portable) : ADR-1..11, dont 4 décisions Owner par QCM (plugin explicite en run, `lab/plugin` source unique, exemples en instances autonomes, sandbox + instance refusée) |
+| 0.2.0 | 2026-11-12 | FDE | Design validé : ADR-1..11 acceptés, emplacement `lab/plugin/` confirmé |
