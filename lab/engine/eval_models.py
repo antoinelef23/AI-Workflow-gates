@@ -45,6 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
 from kit import kit_root  # noqa: E402  (ADR-5: the one root resolver)
+from runner import claude_argv  # noqa: E402  (I-1: the single argv builder)
 
 
 # cases.py = framework code → resolved from the kit's code location (NOT via LAB_ROOT, which points at the data)
@@ -73,23 +74,32 @@ ROLE_PROMPT = {
 }
 
 
+def kit_options() -> dict:
+    """Same guardrail options as an orchestrated run (ADR-11, ADR-2): plugin dir, run
+    settings, hard rules appended. ABSOLUTE paths, resolved from the kit CODE location
+    (never LAB_ROOT, which may point at test data): each trial runs in its own temp cwd.
+    Never `--bare`."""
+    code = kit_root(honor_env=False)
+    return {
+        "plugin_dir": str(code / "lab" / "plugin"),
+        "settings": str(code / "lab" / "engine" / "run_settings.json"),
+        "append_system_prompt": (
+            code / "lab" / "plugin" / "rules" / "hard-rules.md"
+        ).read_text(encoding="utf-8"),
+    }
+
+
 def call_model(prompt: str, model: str, cwd: Path) -> dict:
     """A single isolated agent call (dedicated cwd). Returns {ok,text,cost_usd,duration_s}."""
-    cmd = [
-        "claude",
-        "-p",
+    cmd = claude_argv(
         prompt,
-        "--permission-mode",
-        "acceptEdits",
-        "--max-turns",
-        "60",
-        "--allowedTools",
-        ALLOWED,
-        "--output-format",
-        "json",
-        "--model",
-        model,
-    ]
+        model=model,
+        resume=None,
+        allowed_tools=ALLOWED.split(","),
+        max_turns=60,
+        permission_mode="acceptEdits",
+        **kit_options(),
+    )
     t0 = time.monotonic()
     try:
         p = subprocess.run(
