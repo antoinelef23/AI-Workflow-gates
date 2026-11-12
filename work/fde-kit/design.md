@@ -1,10 +1,10 @@
 ---
 type: design
 feature: fde-kit
-version: 0.2.0
+version: 0.3.0
 status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by: FDE — 2026-11-12 (validé en session par QCM ; plugin sous lab/plugin/ confirmé)
+validated_by: FDE — 2026-11-12 (validé en session par QCM ; plugin sous lab/plugin/ confirmé) ; amendement 0.3.0 (OQ-9..11 du planner) approuvé le 2026-11-12
 spec: ./spec.md          # version : 0.3.0
 ---
 
@@ -154,7 +154,9 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
   développement du kit) et pointe vers le fichier de règles. Le `.claude/` du kit disparaît :
   on développe le kit avec `--plugin-dir lab/plugin`. Les agents `.md` sont déplacés sans
   modification de contenu (forme) ; toute modification de contenu suit la boucle
-  `lab/models/EVOLUTION.md`.
+  `lab/models/EVOLUTION.md`. La status line (`.claude/statusline.py`) part dans
+  `lab/plugin/statusline.py` : un plugin ne peut pas définir la status line principale (E-2), le
+  FDE la câble une fois dans ses réglages utilisateur (OQ-9).
 - **Anchored on:** I-12, E-7.
 - **Alternatives considered:** garder les règles dans CLAUDE.md et les faire lire par le plugin
   (rejeté par l'Owner : le kit ne se développerait pas avec son propre outillage).
@@ -197,7 +199,7 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
 - **Context:** BHV-2a, INV-7 ; une CLI trop ancienne ignore `onFailure`.
 - **Decision:** avant le verrou, `lab run --project <instance>` vérifie dans l'ordre : racine du
   kit résolue (ADR-5) ; `lab/plugin/` présent ; `.lab/lab.toml` présent et `kit_version` =
-  version du kit, sinon rc 1 avec le message « kit X ≠ pinned Y » ; `claude --version` ≥ 2.1.295 ;
+  version du kit, sinon rc 1 avec le message de la spec EX-5 « plugin X ≠ pinned kit Y » ; `claude --version` ≥ 2.1.295 ;
   combinaison runner/instance autorisée (ADR-10). En mode kit (sans `--project`), seules les
   vérifications de racine, de plugin et de CLI s'appliquent.
 - **Anchored on:** E-10 (forme du message), I-5.
@@ -206,10 +208,13 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
 
 ### ADR-7 — `lab init` : plan d'abord, jamais d'écrasement
 - **Status:** accepted
-- **Decision:** `lab init <project> --profile <p> [--dry-run]` calcule le plan complet, classe
+- **Decision:** `lab init <project> --profile <p> [--dry-run]` (`--profile` obligatoire : absent ⇒ rc 1
+  listant `solo`, `squad`, `regulated` — le niveau de contrôle est toujours un choix explicite, OQ-11) calcule le plan complet, classe
   chaque fichier (`create` / `identical` / `skip` — jamais `overwrite`), l'affiche une ligne par
   fichier, puis l'applique sauf en `--dry-run`. Fichiers : `.lab/lab.toml`
-  (`schema_version = 1`, `kit_version`, `profile`), `work/` (README + templates du triplet), et
+  (`schema_version = 1`, `kit_version`, `profile`), `work/README.md` et `work/_templates/{spec,design,tasks}.template.md` (jamais nommés
+  `spec.md`/`design.md`/`tasks.md` : le pre-commit et `ci_checks.sh` prendraient `work/` pour une
+  feature et plan-lint rejette le modèle brut — OQ-10), et
   les recettes du justfile (ADR-8). Rien sous `.claude/`, pas de `CLAUDE.md`/`AGENTS.md`, pas
   de workflow CI (INV-8). Second lancement : tout est `identical` ⇒ « 0 changement ».
   Profils acceptés en itération 1 : `solo`, `squad`, `regulated` (valeur seulement enregistrée ;
@@ -232,7 +237,7 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
 ### ADR-9 — Les exemples sont des instances autonomes
 - **Status:** accepted (décision Owner)
 - **Decision:** `examples/devis/` (features `devis-pose`, `export-devis`) et `examples/booking/`
-  (`salle-booking`), chacun avec son `pyproject.toml`, son `uv.lock`, son `.lab/lab.toml` et son
+  (`salle-booking`), chacun avec son `pyproject.toml`, son `uv.lock`, son `.lab/lab.toml` (profil `squad`, OQ-11) et son
   justfile **produits par `lab init`**, ses `work/`, `src/`, `tests/` et ses docs produit
   (`docs/export-notes.md`, `docs/export-usage.md` partent dans `examples/devis/docs/`). Pilotés par
   `lab run --project examples/<x>`. Les chemins `files_touched`/`verify` des triplets restent
@@ -281,7 +286,7 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
 - **`lab/engine/run_settings.json`** : `{"permissions": {"deny": ["Edit(**/.approvals/**)", "Edit(**/.runs/**)"]}}` — aucun hook.
 - **`lab/plugin/.claude-plugin/plugin.json`** : `name = "fde-kit"`, `version` = version du paquet.
 - **`.claude-plugin/marketplace.json`** (racine du repo) : une entrée `fde-kit`, source `./lab/plugin`.
-- **CLI** : `lab init <project> [--profile p] [--dry-run]` ; `lab run <feature> [--project p] [options d'orchestrate]` ;
+- **CLI** : `lab init <project> --profile <solo|squad|regulated> [--dry-run]` ; `lab run <feature> [--project p] [options d'orchestrate]` ;
   `lab validate <feature> [--project p]` ; `lab version`.
 
 ## 6. Design System & Global Ready
@@ -312,3 +317,4 @@ Sans objet (outillage en ligne de commande, pas d'interface).
 |---|---|---|---|
 | 0.1.0 | 2026-11-12 | Owner + design-scout | Design de l'itération 1 (kit portable) : ADR-1..11, dont 4 décisions Owner par QCM (plugin explicite en run, `lab/plugin` source unique, exemples en instances autonomes, sandbox + instance refusée) |
 | 0.2.0 | 2026-11-12 | FDE | Design validé : ADR-1..11 acceptés, emplacement `lab/plugin/` confirmé |
+| 0.3.0 | 2026-11-12 | FDE | Trous relevés par le planner tranchés : status line dans le plugin câblée par le FDE (OQ-9, ADR-3), modèles `work/_templates/*.template.md` (OQ-10, ADR-7), `--profile` obligatoire et exemples en `squad` (OQ-11, ADR-7/9) ; message d'ADR-6 aligné sur EX-5 |
