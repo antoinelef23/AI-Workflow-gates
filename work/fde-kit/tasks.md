@@ -475,7 +475,7 @@ test collection (T5) and T10's test is not an eval.
 - **parallel_group:** I
 - **implements:** [BHV-2, INV-1]
 - **anchored_on:** ADR-3, ADR-4, I-3, I-4, E-1, E-4
-- **files_touched:** `.claude`, `lab/plugin/agents`, `lab/plugin/skills`, `lab/plugin/hooks`, `lab/plugin/statusline.py`
+- **files_touched:** `.claude`, `lab/plugin/agents`, `lab/plugin/skills`, `lab/plugin/hooks`, `lab/plugin/statusline.py`, `tests/orchestrator/test_statusline.py`, `tests/fde_kit/test_eval_2_plugin.py`
 - **prompt:**
   > *Plan delta (T11 blocked 2026-11-12): these paths are protected — a headless agent cannot write
   > `.claude/` nor a plugin's agents/skills/hooks — so this part is the Owner's (engine Owner lane).*
@@ -485,6 +485,10 @@ test collection (T5) and T10's test is not an eval.
   > option a); delete `.claude/settings.json` (I-3). Then, ADR-4: `lab/plugin/hooks/hooks.json` gains
   > `Stop` / `SubagentStop` → `eval_gate.sh` and `PostToolUse` → `post_edit.sh`, through
   > `"${CLAUDE_PLUGIN_ROOT}"`; `eval_gate.sh` also fires when `.lab/lab.toml` exists (I-4 `:15`).
+  > Keep the tree green at this step: repoint `tests/orchestrator/test_statusline.py`'s `SL` (it
+  > reads the file at collection — the kit evals cannot even be collected otherwise); every other
+  > path follow-up is T11's. Same for the exact hook-event set pinned by
+  > `test_eval_2_hooks_json_declares_existing_scripts` (T11 then asserts each new entry).
   > Commit by hand (canonical format, `Run: owner`), then `lab/engine/approve.sh T15 work/fde-kit`.
 - **done_when:** every moved file exists at its new path; hooks.json carries Stop, SubagentStop, PostToolUse; kit evals green
 - **verify:** `ls lab/plugin/agents/implementer.md lab/plugin/skills/commit/SKILL.md lab/plugin/hooks/eval_gate.sh lab/plugin/hooks/post_edit.sh lab/plugin/statusline.py`
