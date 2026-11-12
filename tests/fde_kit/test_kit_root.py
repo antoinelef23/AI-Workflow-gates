@@ -230,4 +230,5 @@ def test_pyproject_packaging():
     assert p["project"]["version"] == "0.1.0"
     assert p["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == ["lab"]
     assert p["project"]["scripts"]["lab"].startswith("lab.engine.cli")
-    assert p["tool"]["pytest"]["ini_options"]["pythonpath"] == ["src"]
+    # T9: the transitional `pythonpath = ["src"]` is gone (no src/ left at the kit root)
+    assert "pythonpath" not in p["tool"]["pytest"]["ini_options"]

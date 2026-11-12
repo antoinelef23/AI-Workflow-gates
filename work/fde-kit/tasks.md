@@ -635,3 +635,5 @@ test collection (T5) and T10's test is not an eval.
 | 2026-11-12 14:44 | T7 | implementer | done, evals green (t1) | |
 | 2026-11-12 14:44 | T8 | implementer | done, evals green (t1) | |
 | 2026-11-12 14:46 | T9 | implementer | done, evals green (t1) | |
+| 2026-11-12 15:30 | CP-3 | owner | checkpoint REJECTED — T9: tests/fde_kit/test_kit_root.py:233 still asserts the removed pythonpath, so gate-ci is red at e8da4a2. The file is now in your files_touched (plan delta 314bf39); the fix is already in the working tree — confirm it and let the commit carry it. | |
+| 2026-11-12 15:31 | T9 | implementer | done, evals green (t1) | |
