@@ -24,6 +24,7 @@ build/
 **/.approvals/
 **/.runs/state.json
 **/.runs/journal.jsonl
+**/.runs/orchestrator.lock
 
 # Raw client inputs feeding a feature (slides, transcripts, quotes…) live in
 # work/<feature>/assets/ and are NOT versioned by default: they are often sensitive
