@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Context budget — measures the STATIC context payload per role: the files every
-agent call pays for on every turn (CLAUDE.md + role `.md` + non-base context
-profile). The static/dynamic boundary is a versioned design decision
+agent call pays for on every turn (the plugin's hard-rules file + CLAUDE.md when
+present + role `.md` + non-base context profile). The static/dynamic boundary is a versioned design decision
 (docs/explanation/static-vs-dynamic-context.md); this tool makes its cost visible
 so the "add a rule every time the agent misbehaves" ratchet has a counterweight.
 
@@ -29,7 +29,13 @@ def approx_tokens(text: str) -> int:
 def static_files(root: Path, role: str, profile: str) -> list[Path]:
     """The files injected on EVERY call for a role. `base` profile = no injection
     (lab/models/profiles/base.md documents itself as doc-only)."""
-    files = [root / "CLAUDE.md", root / "lab" / "plugin" / "agents" / f"{role}.md"]
+    # the rules file is injected on every call (SessionStart / --append-system-prompt,
+    # ADR-2/ADR-3); CLAUDE.md is counted only when present (kit mode — an instance has none)
+    files = [
+        root / "lab" / "plugin" / "rules" / "hard-rules.md",
+        root / "CLAUDE.md",
+        root / "lab" / "plugin" / "agents" / f"{role}.md",
+    ]
     if profile and profile != "base":
         files.append(root / "lab" / "models" / "profiles" / f"{profile}.md")
     return [f for f in files if f.is_file()]
