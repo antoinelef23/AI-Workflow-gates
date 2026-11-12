@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 
 from journal_io import read_events
+from kit import kit_root
 from plan import parse_tasks_md, paths_overlap
 
 RETRY_SMELL = 3  # attempts from which a task smells like an expensive prompting loop
@@ -112,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = ap.parse_args(argv)
 
-    root = args.root or Path(__file__).resolve().parents[2]
+    root = args.root or kit_root()
     feature = Path(args.feature)
     if not feature.is_absolute():
         feature = root / feature

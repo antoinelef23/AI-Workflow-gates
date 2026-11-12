@@ -19,6 +19,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+from kit import kit_root
+
 
 def approx_tokens(text: str) -> int:
     return (len(text) + 3) // 4
@@ -56,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
         "--root", type=Path, default=None, help="repo root override (tests)"
     )
     args = ap.parse_args(argv)
-    root = args.root or Path(__file__).resolve().parents[2]
+    root = args.root or kit_root()
 
     rows, budget = measure(root)
     over: list[str] = []

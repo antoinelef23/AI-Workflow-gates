@@ -12,7 +12,7 @@ wheels = [
 ]
 
 [[package]]
-name = "devis-lab"
+name = "fde-kit"
 version = "0.1.0"
 source = { editable = "." }
 

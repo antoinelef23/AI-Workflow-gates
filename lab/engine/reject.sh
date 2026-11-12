@@ -8,7 +8,7 @@ CP="${1:?usage: reject.sh CP-n <feature_dir> \"reason\" [Tn ...]}"
 FEATURE="${2:?usage: reject.sh CP-n <feature_dir> \"reason\" [Tn ...]}"
 REASON="${3:?give a reason — it is passed verbatim to the agents}"
 shift 3
-ROOT="$(cd "$(dirname "$0")" && git rev-parse --show-toplevel)"  # lab repo root (engine lives at lab/engine/)
+ROOT="$(python3 "$(dirname "$0")/kit.py" root)"  # kit root: LAB_ROOT, else the checkout / installed kit (ADR-5)
 # External-project support (see approve.sh): resolve the feature under
 # LAB_PROJECT_ROOT when set; an absolute FEATURE is honored as-is; default = lab repo.
 if [[ "$FEATURE" = /* ]]; then FEATURE_DIR="$FEATURE"; else FEATURE_DIR="${LAB_PROJECT_ROOT:-$ROOT}/$FEATURE"; fi

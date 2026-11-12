@@ -6,7 +6,7 @@
 set -euo pipefail
 CP="${1:?usage: approve.sh CP-n <feature_dir>}"
 FEATURE="${2:?usage: approve.sh CP-n <feature_dir>}"
-ROOT="$(cd "$(dirname "$0")" && git rev-parse --show-toplevel)"  # lab repo root (engine lives at lab/engine/)
+ROOT="$(python3 "$(dirname "$0")/kit.py" root)"  # kit root: LAB_ROOT, else the checkout / installed kit (ADR-5)
 # External-project support: when the build lives in another repo (the engine's
 # --project / LAB_PROJECT_ROOT), resolve the feature there. An absolute FEATURE is
 # honored as-is. Unset + relative FEATURE ⇒ the lab repo (back-compat, unchanged).

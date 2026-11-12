@@ -20,10 +20,7 @@ from collections import Counter
 from pathlib import Path
 
 from journal_io import read_events
-
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+from kit import kit_root
 
 
 def discover_features(root: Path) -> list[Path]:
@@ -150,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = ap.parse_args(argv)
 
-    root = args.root or _repo_root()
+    root = args.root or kit_root()
     feats = [root / f if not Path(f).is_absolute() else Path(f) for f in args.features]
     if not feats:
         feats = discover_features(root)

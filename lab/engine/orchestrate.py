@@ -62,23 +62,15 @@ from plan import (
     paths_overlap,
     skip_dependents,
 )
+from kit import kit_root
 from registry import load_registry, resolve_model
 from runner import DEFAULT_ALLOWED_TOOLS, get_runner
 from verify import parse_verify
 
 
-# LAB_ROOT: override for tests (sandbox). Default: the repo root, found by walking up
-# from this file to the dir holding pyproject.toml — so the engine can live at any depth
-# (e.g. lab/engine/) without hard-coding parent levels.
-def _repo_root(start: Path | None = None) -> Path:
-    here = (start or Path(__file__)).resolve()
-    for p in (here, *here.parents):
-        if (p / "pyproject.toml").exists():
-            return p
-    return here.parent.parent.parent  # fallback: lab/engine/<file> -> repo root
-
-
-ROOT = Path(os.environ["LAB_ROOT"]) if os.environ.get("LAB_ROOT") else _repo_root()
+# ROOT = kit root: LAB_ROOT (test seam) else the dir holding lab/models/registry.toml —
+# resolved by the ONE function in kit.py (design ADR-5).
+ROOT = kit_root()
 # LAB is the framework root (engine, model registry, agent definitions, docs).
 # It is an alias of ROOT — kept distinct in intent so the prompts and the
 # add-dir grant read clearly.

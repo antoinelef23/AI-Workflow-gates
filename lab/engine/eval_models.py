@@ -44,22 +44,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
-# Repo root = the dir holding pyproject.toml, found by walking up (the engine lives at
-# lab/engine/, the data — evals/, lab/models/ — hangs off the repo root).
-def _repo_root(start: Path | None = None) -> Path:
-    here = (start or Path(__file__)).resolve()
-    for p in (here, *here.parents):
-        if (p / "pyproject.toml").exists():
-            return p
-    return here.parent.parent.parent  # fallback: lab/engine/<file> -> repo root
+from kit import kit_root  # noqa: E402  (ADR-5: the one root resolver)
 
 
-# cases.py = framework code → resolved via the repo root (NOT via LAB_ROOT, which points at the data)
-sys.path.insert(0, str(_repo_root() / "evals" / "behavioral"))
+# cases.py = framework code → resolved from the kit's code location (NOT via LAB_ROOT, which points at the data)
+sys.path.insert(0, str(kit_root(honor_env=False) / "evals" / "behavioral"))
 from registry import load_registry  # noqa: E402
 
 # LAB_ROOT = data/config (registry, golden, outputs). The code lives near __file__.
-ROOT = Path(os.environ["LAB_ROOT"]) if os.environ.get("LAB_ROOT") else _repo_root()
+ROOT = kit_root()
 REGISTRY = load_registry(ROOT)
 TIMEOUT_S = int(os.environ.get("LAB_TASK_TIMEOUT", "1800"))
 ALLOWED = "Bash(uv:*),Bash(make:*),Bash(python3:*),Bash(mkdir:*),Bash(ls:*),Bash(cat:*),Bash(git:*)"
