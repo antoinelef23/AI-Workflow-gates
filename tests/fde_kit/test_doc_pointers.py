@@ -36,7 +36,9 @@ def test_docs_do_not_cite_demo_paths_without_examples_prefix():
 # tree in the kit any more, so no doc may point at one. The user-level `~/.claude/settings.json`
 # (where the FDE wires the status line) is not the kit's and stays allowed.
 ROOT = DOCS.parent
-STALE_CLAUDE = re.compile(r"(?<!~/)\.claude/(agents|hooks|skills|settings\.json|statusline\.py)")
+STALE_CLAUDE = re.compile(
+    r"(?<!~/)\.claude/(agents|hooks|skills|settings\.json|statusline\.py)"
+)
 
 
 def test_docs_do_not_reference_the_removed_kit_dot_claude():

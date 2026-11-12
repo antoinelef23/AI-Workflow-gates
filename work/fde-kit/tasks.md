@@ -672,3 +672,5 @@ test collection (T5) and T10's test is not an eval.
 | 2026-11-12 15:57 | T13 | implementer | done, evals green (t1) | |
 | 2026-11-12 16:17 | CP-4 | owner | checkpoint validated | |
 | 2026-11-12 16:19 | T14 | implementer | done, evals green (t1) | |
+| 2026-11-12 16:27 | CP-5 | owner | checkpoint REJECTED — gate-ci red: ruff format --check fails on tests/fde_kit/test_doc_pointers.py (line 39, the regex line you added). Run `uv run ruff format tests/fde_kit/test_doc_pointers.py` (whitespace only, inside your files_touched) and confirm `uv run ruff format --check .` and `uv run ruff check .` are clean. Nothing else to change. | |
+| 2026-11-12 16:28 | T14 | implementer | done, evals green (t1) | |
