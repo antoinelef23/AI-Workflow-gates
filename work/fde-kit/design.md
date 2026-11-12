@@ -1,19 +1,21 @@
 ---
 type: design
 feature: fde-kit
-version: 0.4.0
+version: 0.5.0
 status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by: FDE — 2026-11-12 (validé en session par QCM ; plugin sous lab/plugin/ confirmé) ; amendement 0.3.0 (OQ-9..11 du planner) approuvé le 2026-11-12 ; amendement 0.4.0 (spike promptfoo) approuvé le 2026-11-12
+validated_by: FDE — 2026-11-12 (validé en session par QCM ; plugin sous lab/plugin/ confirmé) ; amendement 0.3.0 (OQ-9..11 du planner) approuvé le 2026-11-12 ; amendement 0.4.0 (spike promptfoo) approuvé le 2026-11-12 ; amendement 0.5.0 (itération 2 : profils, sandbox d'instance, kit-instance — 3 décisions Owner par QCM) approuvé le 2026-11-12
 spec: ./spec.md          # version : 0.6.0
 ---
 
 # Design — Kit FDE portable
 
-> **Périmètre de cette version : itération 1 « kit portable »** — BHV-1 (+1b..1e), BHV-2 (+2a, 2b),
-> INV-1, INV-7, INV-8, INV-9, EVAL-1, EVAL-2, EVAL-8. Les itérations 2 (profils, BHV-3),
-> 3 (workflow de bout en bout, retours arrière, test goldfish : BHV-4..6, BHV-8) et
-> 4 (retro, BHV-7) seront conçues à leur tour, par amendement de ce document.
+> **Périmètre de cette version : itérations 1 « kit portable » (livrée, `v0.1.0`) et 2 « profils
+> d'organisation »** — itération 1 : BHV-1 (+1b..1e), BHV-2 (+2a, 2b), INV-1, INV-7, INV-8, INV-9,
+> EVAL-1, EVAL-2, EVAL-8 ; itération 2 : BHV-3 (+3a..3c), INV-2, INV-3 (volet profils), INV-5,
+> EX-1, EVAL-3 (ADR-13..16, ADR-10 remplacé par ADR-15). Les itérations 3 (workflow de bout en
+> bout, retours arrière, test goldfish : BHV-4..6, BHV-8) et 4 (retro, improver : BHV-7, BHV-12)
+> seront conçues à leur tour, par amendement de ce document.
 >
 > Source : rapport `design-scout` du 2026-11-12 (références vérifiées dans la doc officielle,
 > le code source de Copier/Black et des essais locaux) + 4 décisions Owner prises par QCM.
@@ -78,6 +80,12 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
 | I-17 | Découverte des features | `.githooks/pre-commit:24-27`, `ci_checks.sh:22-25` | Scannent déjà `examples/` | — |
 | I-18 | Contenu du wheel | `pyproject.toml:12-13` | `packages = ["lab"]` embarque engine, models, templates et `lab/plugin/` | Nom/description du démo (`pyproject.toml:2,4`) |
 | I-19 | Versions qui doivent concorder | `tests/sdlc_rework/test_lockfile.py:14-35` | Test de cohérence version paquet = `plugin.json` = entrée marketplace | — |
+| I-20 | Constantes du moteur | `orchestrate.py:91-94` (`MAX_EVAL_RETRIES`, `MAX_PARALLEL`, `MAX_CP_REJECTS`, `BUDGET_USD`) | Deviennent des lectures de la politique effective (ADR-14) | Constantes de module figées au chargement : la politique est résolue après `--project` |
+| I-21 | Règle de plan qui protège le merge | `planlint.py:265-267` (CP final/merge en `mode: auto` ⇒ erreur) | Même forme pour les clés de sécurité appliquées par plan-lint (ADR-14) ; INV-5 n'a **pas** de clé | — |
+| I-22 | Refus au démarrage | `orchestrate.py:229-271` `preflight()`, `:269-270` refus sandbox + instance | Accueille `sandbox_required` / `allow_force` (ADR-14) ; le refus `:269-270` disparaît (ADR-15) | — |
+| I-23 | `--force` | `orchestrate.py:986-989`, `:1035` (ignore statut `approved` + erreurs de lint) | C'est cette porte que `allow_force = false` ferme | — |
+| I-24 | Montage sandbox | `sandbox_runner.py:112-115` (`-v <ws>:/workspace:rw`), `:161-164` (`add_dirs` non transmis) | Ajout d'un second montage, kit en lecture seule (ADR-15) | Transmettre des chemins hôte à l'intérieur du conteneur |
+| I-25 | Paramètres d'un TOML d'instance | `lab_init.py` (écrit `.lab/lab.toml`), I-6 | `[overrides]` et `[overrides.routes]` lus avec `tomllib` (ADR-13) | Une clé inconnue ignorée en silence (I-6 `registry.py:55-56`) |
 
 ### 2.2 Open source / external references
 
@@ -95,6 +103,9 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
 | E-10 | Pin exact, refus nommant les deux versions | Black (MIT) | `required-version` : « The required version X does not match the running version Y! », exit 1 | `black/__init__.py:671-681` (26.10.1) |
 | E-11 | Moteur en CLI | uv tools + `[project.scripts]` | `uv tool install git+<repo>@<tag>` ; `importlib.metadata.version()` | aide locale uv 0.11.32 + essai |
 | E-13 | Scaffolding idempotent sans écrasement | Copier (MIT) — pattern seul, pas de dépendance | Classement create / identical / conflict avant écriture ; `--pretend` ; fichier de réponses = version du modèle épinglée dans le projet | `copier/_main.py:531-598`, `:505-512`, `:378-385` (9.19.1) |
+| E-15 | Garde-fou plancher qu'un niveau inférieur ne peut qu'affiner | AWS Organizations — service control policies | Une SCP ne donne aucun droit : elle borne ; les droits effectifs d'un compte sont l'intersection de ce que permettent toutes les couches ⇒ une couche basse ne peut que **resserrer** (pour nous : plancher ⊕ override = valeur la plus stricte, clé par clé) | docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_scps.html |
+| E-16 | Trois niveaux nommés et cumulatifs | Kubernetes — Pod Security Standards | `privileged` / `baseline` / `restricted` : niveaux nommés, chacun plus strict que le précédent, choisis explicitement par namespace (pour nous : `solo` / `squad` / `regulated`, choix explicite à `lab init`) | kubernetes.io/docs/concepts/security/pod-security-standards/ |
+| E-17 | Monter un répertoire en lecture seule dans un conteneur | Docker — bind mounts | `-v <src>:<dst>:ro` (ou `--mount type=bind,src=…,dst=…,readonly`) : le conteneur lit, n'écrit pas | docs.docker.com/engine/storage/bind-mounts/ |
 | E-14 | Ajouter une recette à un justfile existant | **aucune référence** | `import` d'un `lab.just` redéfinissant `evals` casse le justfile entier (vérifié, just 1.59.0) ⇒ ADR-8 délibéré | — |
 
 ## 3. Stack
@@ -256,7 +267,7 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
   migration est un déplacement pur (`git mv`, aucune modification de contenu), relu au checkpoint.
 
 ### ADR-10 — Sandbox en itération 1 : mode kit conservé, instance externe refusée
-- **Status:** accepted (décision Owner)
+- **Status:** superseded by ADR-15 (itération 2) — accepted (décision Owner) pour l'itération 1
 - **Context:** le conteneur ne monte que le répertoire de travail, avec un home vide (I-16).
 - **Decision:** en mode kit, le moteur passe plugin et settings en **chemins relatifs au cwd**
   (`lab/plugin`, `lab/engine/run_settings.json`), valides sur l'hôte comme dans `/workspace` :
@@ -295,19 +306,86 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
   prévoir, comme `uv.lock`) ; télémétrie et partage de résultats à désactiver explicitement pour les
   missions client.
 
+### ADR-13 — Politique effective : plancher monotone ⊕ overrides, clé par clé
+- **Status:** accepted
+- **Context:** BHV-3 / INV-2 : trois profils nommés, une instance peut durcir, jamais assouplir ; les
+  clés libres (performance, coût) restent réglables.
+- **Decision:** les profils sont des **données** : `lab/engine/policy_profiles.toml`
+  (`schema_version = 1`), une entrée par clé avec `kind = "safety" | "free"`, la direction stricte
+  (`strict = "true" | "false" | "up" | "down"`) et la valeur par profil — la table de BHV-3 telle
+  quelle. Module `lab/engine/policy.py` : `effective_policy(lab_toml) -> {key: (value, origin)}` où
+  `origin ∈ {floor, override, override (free key)}`. Clé de sécurité : override accepté seulement
+  s'il est au moins aussi strict que le plancher, sinon rc 1 avec le message d'EX-1
+  (`<key>=<v> is looser than floor '<profile>' (<floor>)`, BHV-3a). Clé inconnue (y compris
+  sous `[overrides.routes]`) : rc 1 (BHV-3b). `goldfish_min_score` est déclarée, « non déclarée »
+  par défaut, sans effet avant l'itération 3. Commande `lab policy [--project p]` : une ligne par
+  clé, valeur et origine. **Aucune clé ne touche au merge** (INV-5) : il n'y a pas de clé à
+  durcir ou assouplir, la règle reste dans plan-lint (I-21).
+- **Routes (décision Owner) :** `[overrides.routes]` est réservé dès l'itération 2 : `R1`..`R7`
+  connues, valeur `auto | proposal | human` ; `auto` sur R2, R3, R4 ou R5 ⇒ rc 1 (BHV-3c, INV-3) ;
+  une route inconnue ⇒ rc 1. Les modes sont validés et affichés par `lab policy` mais **appliqués
+  à partir de l'itération 3** (BHV-5), ce que l'affichage dit.
+- **Anchored on:** E-15 (intersection : une couche basse ne peut que resserrer), E-16 (niveaux nommés
+  cumulatifs, choix explicite), I-6 / I-25 (TOML + `schema_version`, jamais de clé ignorée).
+
+### ADR-14 — Chaque clé a un seul point d'application, mécanique
+- **Status:** accepted
+- **Decision:** la politique effective est résolue **une fois**, au démarrage (après `--project`),
+  et chaque clé est appliquée là où BHV-3 l'indique, jamais deux fois :
+  - **plan-lint** (erreur) : `auto_checkpoints_allowed = false` ⇒ tout CP `mode: auto` ;
+    `min_reviewers` ⇒ un CP dont `reviewers` est inférieur ; `max_tasks_between_checkpoints` ⇒
+    plus de N tâches entre deux CP sur un chemin du graphe (I-21) ;
+  - **pré-vol** (rc 1, avant le verrou, I-22) : `sandbox_required = true` ⇒ `LAB_RUNNER=sandbox`
+    exigé ; `allow_force = false` ⇒ `--force` refusé (I-23) ;
+  - **moteur** : `max_task_attempts`, `max_parallel`, `max_cp_rejects`, `budget_usd` remplacent les
+    constantes de module (I-20). `LAB_BUDGET_USD` reste un réglage opérateur de cette clé libre
+    (prioritaire s'il est posé) ; la politique fournit la valeur par défaut.
+  plan-lint reçoit la politique effective en paramètre (fonction pure, comme le registre) : sans
+  instance (tests, `lab validate` hors projet), le profil `squad` documenté sert de valeur d'essai,
+  jamais pour un run réel (ADR-16).
+- **Anchored on:** I-20, I-21, I-22, I-23 (formes existantes de règle, de refus et de lecture).
+
+### ADR-15 — Sandbox pour une instance externe : kit monté en lecture seule
+- **Status:** accepted (décision Owner) — remplace ADR-10
+- **Decision:** avec `--project`, le runner sandbox monte **deux** répertoires : l'instance en
+  `/workspace` (lecture-écriture, cwd de l'agent) et la racine du kit en `/kit` **en lecture
+  seule** (E-17). Le moteur passe alors `--plugin-dir /kit/lab/plugin`,
+  `--settings /kit/lab/engine/run_settings.json`, et traduit les `add_dirs` qui pointent dans le
+  kit vers `/kit/…` ; tout autre chemin hôte reste refusé (I-24). Le refus d'ADR-10 disparaît du
+  pré-vol. Mode kit inchangé (chemins relatifs, ADR-10). Les tests d'argv restent sans Docker ;
+  un essai Docker réel est un contrôle de checkpoint, pas un test du gate.
+- **Anchored on:** I-16, I-24, E-17.
+
+### ADR-16 — Le kit est une instance de lui-même
+- **Status:** accepted (décision Owner)
+- **Decision:** le repo du kit reçoit son propre `.lab/lab.toml` (`profile = "squad"`,
+  `kit_version` = version du kit) ; le mode kit lit la politique comme une instance. Un run réel
+  sans `.lab/lab.toml` ⇒ pré-vol rc 1 (« le niveau de contrôle est toujours un choix explicite »,
+  OQ-11) — y compris en mode kit. Les bacs à sable de test écrivent leur `.lab/lab.toml`.
+- **Anchored on:** ADR-7 (le même fichier, écrit par `lab init`), ADR-9 (exemples = instances).
+
 ## 5. Contracts & data
 
 - **`.lab/lab.toml`** (instance) :
   ```toml
   schema_version = 1
   kit_version = "0.1.0"   # pin exact (INV-7), comparé à la version du kit installé
-  profile = "squad"       # solo | squad | regulated — appliqué à partir de l'itération 2
+  profile = "squad"       # solo | squad | regulated — plancher (ADR-13)
+
+  [overrides]             # optionnel : durcir une clé de sécurité, régler une clé libre
+  min_reviewers = 2
+  max_parallel = 4
+
+  [overrides.routes]      # optionnel : R1..R7 = auto | proposal | human (appliqué en itération 3)
+  R6 = "human"
   ```
+- **`lab/engine/policy_profiles.toml`** (kit, ADR-13) : une table par clé — `kind`, `strict`,
+  `solo`, `squad`, `regulated` — reproduisant la table de BHV-3.
 - **`lab/engine/run_settings.json`** : `{"permissions": {"deny": ["Edit(**/.approvals/**)", "Edit(**/.runs/**)"]}}` — aucun hook.
 - **`lab/plugin/.claude-plugin/plugin.json`** : `name = "fde-kit"`, `version` = version du paquet.
 - **`.claude-plugin/marketplace.json`** (racine du repo) : une entrée `fde-kit`, source `./lab/plugin`.
 - **CLI** : `lab init <project> --profile <solo|squad|regulated> [--dry-run]` ; `lab run <feature> [--project p] [options d'orchestrate]` ;
-  `lab validate <feature> [--project p]` ; `lab version`.
+  `lab validate <feature> [--project p]` ; `lab policy [--project p]` ; `lab version`.
 
 ## 6. Design System & Global Ready
 
@@ -315,10 +393,14 @@ Sans objet (outillage en ligne de commande, pas d'interface).
 
 ## 7. Observability & rollout
 
-- Journal de run inchangé en itération 1.
+- Journal de run inchangé en itération 1. Itération 2 : l'événement `run_start` porte le profil et
+  la politique effective (clé, valeur, origine) — un run se relit avec ses réglages.
 - **Rollout** : tag `v0.1.0` du kit ; vérification sur les deux exemples (`lab init` puis
   `lab run --project examples/<x> --dry-run`) avant la campagne live d'ADR-11 ; aucune mission
   réelle avant cette campagne.
+- **Rollout itération 2** : version du kit `0.2.0` (les exemples ré-épinglent explicitement, INV-7) ;
+  `lab policy` vérifié sur les deux exemples et sur le kit ; un run `regulated` sur une instance
+  externe en sandbox Docker réelle avant le tag.
 
 ## 8. Risks
 
@@ -330,6 +412,9 @@ Sans objet (outillage en ligne de commande, pas d'interface).
 | Écriture sous `.approvals/` par sous-processus | L | H | Modèle de confiance existant : approbations signées (HMAC) + sandbox comme frontière dure |
 | Divergence version paquet / plugin / marketplace | L | M | Test de cohérence (I-19) dans le gate |
 | CLI Claude Code trop ancienne chez le FDE | M | M | Pré-vol `claude --version` ≥ 2.1.295 (ADR-6) |
+| `.lab/lab.toml` exigé partout (ADR-16) casse les bacs à sable de test et les runs existants | H | M | Les fixtures écrivent le fichier ; message de pré-vol qui nomme la commande `lab init … --profile` |
+| Docker indisponible là où l'on développe : ADR-15 non vérifié en réel | M | H | Tests d'argv sans Docker dans le gate ; essai Docker réel exigé au checkpoint avant le tag |
+| Un override de route accepté en itération 2 mais sans effet trompe l'Owner | M | L | `lab policy` affiche « appliqué à partir de l'itération 3 » à côté de chaque route |
 
 ## 9. Changelog
 
@@ -339,3 +424,4 @@ Sans objet (outillage en ligne de commande, pas d'interface).
 | 0.2.0 | 2026-11-12 | FDE | Design validé : ADR-1..11 acceptés, emplacement `lab/plugin/` confirmé |
 | 0.3.0 | 2026-11-12 | FDE | Trous relevés par le planner tranchés : status line dans le plugin câblée par le FDE (OQ-9, ADR-3), modèles `work/_templates/*.template.md` (OQ-10, ADR-7), `--profile` obligatoire et exemples en `squad` (OQ-11, ADR-7/9) ; message d'ADR-6 aligné sur EX-5 |
 | 0.4.0 | 2026-11-12 | FDE | ADR-12 (proposed) : spike promptfoo pour le banc d'évaluation, à mener dans l'itération multi-outils ; pointeur spec 0.6.0 |
+| 0.5.0 | 2026-11-12 | Owner | Itération 2 (profils) : ADR-13 politique effective (plancher monotone ⊕ overrides, profils en données), ADR-14 un point d'application par clé, ADR-15 sandbox d'instance externe (kit monté en lecture seule, remplace ADR-10), ADR-16 le kit est une instance de lui-même. 3 décisions Owner par QCM : routes réservées dès l'itération 2, sandbox externe livrée, `.lab/lab.toml` du kit explicite |
