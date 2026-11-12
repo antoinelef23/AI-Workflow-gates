@@ -484,6 +484,13 @@ def _commit_message(node: Node, feature: Path, real_ids: list[str]) -> str:
     dw = node.done_when.strip().replace("\n", " ")
     subject = f"feat({feature.name}): {node.id} {title} {tag}"
     why = title + (f" — done when: {dw}" if dw else "")
+    # A rework carries the decision that triggered it: the checkpoint rejection
+    # reason belongs in git (hard rule "the why lives in git"), not only in the
+    # tasks.md run log (found at fde-kit CP-4: bc58ecd said nothing of it).
+    rm = re.search(r"OWNER REVIEW FEEDBACK \(rejection ([\w-]+)\): (.*)", node.rework)
+    if rm:
+        reason = rm.group(2).strip()
+        why += f"\nRework after the {rm.group(1)} rejection: {reason}"
     lines = [subject, "", f"Why: {why}", ""]
     if real_ids:
         lines.append(f"Spec-IDs: {', '.join(real_ids)}")
