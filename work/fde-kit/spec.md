@@ -1,10 +1,10 @@
 ---
 type: spec
 feature: fde-kit
-version: 0.5.0
+version: 0.6.0
 status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by: Owner — 2026-11-12 (OQ-1..8 tranchées par QCM en session, spec 0.2.0 validée en l'état) ; amendement 0.3.0 (test goldfish) approuvé le 2026-11-12 ; amendement 0.4.0 (deux lecteurs goldfish) approuvé le 2026-11-12 ; amendement 0.5.0 (multi-outils) approuvé le 2026-11-12
+validated_by: Owner — 2026-11-12 (OQ-1..8 tranchées par QCM en session, spec 0.2.0 validée en l'état) ; amendement 0.3.0 (test goldfish) approuvé le 2026-11-12 ; amendement 0.4.0 (deux lecteurs goldfish) approuvé le 2026-11-12 ; amendement 0.5.0 (multi-outils) approuvé le 2026-11-12 ; amendement 0.6.0 (improver) approuvé le 2026-11-12
 ---
 
 # Spec — Kit FDE portable : workflow agentique templatisé, profils d'organisation, retours arrière routés
@@ -70,6 +70,8 @@ référence**, et GitHub Copilot, opencode et Codex CLI le reçoivent d'abord en
 | Outil agent | `agent_tool` | Environnement qui exécute un agent : `claude-code` (outil de référence), `copilot`, `opencode`, `codex` |
 | Adaptateur | `tool_adapter` | Forme propre à un outil (règles, rôles, skills) **générée** depuis la source unique du kit |
 | Matrice de capacités | `capability_matrix` | Déclaration, par outil, des garde-fous qu'il fournit nativement (exécution headless, injection des règles, interdiction d'écrire des chemins, hook de fin de session, rapport de coût, reprise de session, instructions au niveau utilisateur), chacune couverte par un test de conformité |
+| Improver | `improver` | Rôle agent qui lit l'expérience des runs et rédige des propositions d'amélioration du scaffolding ; il ne s'applique jamais rien |
+| Proposition d'amélioration | `improvement_proposal` | Diff ciblé d'un artefact évolutif (agent `.md`, profil de modèle, règle du planner, checklist de l'atelier spec), avec les incidents déclencheurs, le cas d'évaluation ajouté et le score visé |
 | Couple outil × modèle | `tool_model_pair` | Unité évaluée et affectée à un rôle : un même modèle peut se comporter différemment selon l'outil qui l'exécute |
 
 ## 3. Invariants
@@ -116,6 +118,11 @@ référence**, et GitHub Copilot, opencode et Codex CLI le reçoivent d'abord en
 - **INV-15** — Un `tool_model_pair` n'est affecté à un rôle qu'après la campagne d'évaluation de ce
   couple ; un échec de chaîne de commandement est éliminatoire pour le couple, pas seulement pour
   le modèle.
+- **INV-16** — L'`improver` ne modifie jamais lui-même un artefact : il n'écrit que des propositions
+  dans `.runs/`, appliquées après validation humaine signée. Il ne peut proposer de modification ni
+  des cas d'évaluation existants, ni des oracles de référence, ni des règles dures ; un échec de
+  chaîne de commandement n'est jamais traité par une proposition de prompt (retrait du modèle du
+  rôle). Le modèle de l'`improver` est distinct de celui qui évalue sa proposition.
 
 ## 4. Behaviors
 
@@ -230,6 +237,25 @@ référence**, et GitHub Copilot, opencode et Codex CLI le reçoivent d'abord en
   checkpoints prévus** (KPI), coût par feature, et **scores goldfish des deux lecteurs et
   signaux croisés par feature, rapprochés de ses emprunts R3/R4** (critère de conservation de BHV-8) — ventilés par version du kit et par profil.
   Seul le rapport agrégé peut être partagé, manuellement, par le FDE.
+
+### BHV-12 — Propositions d'amélioration gouvernées (`lab improve`)
+- **Given** les retros locales, le journal et les rapports de checkpoint, et un seuil de déclenchement
+  atteint : une même route empruntée ≥ 3 fois sur les 3 dernières features, un même motif de rejet
+  de checkpoint ≥ 2 fois, ou le taux de premier passage d'un rôle en baisse de ≥ 15 points
+- **When** le FDE lance `lab improve` (ou le seuil est constaté en fin de run)
+- **Then** l'`improver` écrit une `improvement_proposal` dans `.runs/` : le diff ciblé, les incidents
+  déclencheurs, **un nouveau cas d'évaluation reproduisant l'incident**, et le score visé. Le moteur
+  rejoue les évaluations concernées : la proposition n'est présentée à l'Owner que si elle fait
+  passer le nouveau cas **sans régression** sur les autres ; sinon elle est rejetée et journalisée.
+  Une proposition acceptée est appliquée avec bump de version de l'artefact et commit `Why:`.
+- **Edge cases :**
+  - **BHV-12a** — Proposition touchant un cas d'évaluation existant, un oracle ou une règle dure :
+    rejetée sans évaluation (INV-16).
+  - **BHV-12b** — Incident de chaîne de commandement : pas de proposition de prompt ; le rapport
+    recommande le retrait du modèle du rôle (boucle `lab/models/EVOLUTION.md`).
+  - **BHV-12c** — Une proposition peut **retirer** une règle devenue inutile ; elle est évaluée de la
+    même façon (aucune régression), et son gain de contexte statique est rapporté.
+  - **BHV-12d** — Toute proposition, évaluée ou rejetée, est tracée (journal des propositions).
 
 ### BHV-8 — Test goldfish de compréhension de la spec (`lab goldfish <feature>`)
 - **Given** une spec dont les exemples EX-n portent un `input` et un `expected_output`
@@ -464,6 +490,26 @@ expected_output: "rc 1 — <tool> reads its rules from the repo — supported on
 covers: [BHV-9, BHV-9a, INV-8, INV-13]
 ```
 
+### EX-11 — Proposition de l'improver
+```yaml
+input:
+  trigger: "route R5 (conflit de périmètre) empruntée 4 fois sur 3 features"
+  proposal:
+    target: lab/plugin/agents/planner.md
+    diff: "+ Deux tâches qui modifient le même justfile ne sont jamais parallèles."
+    new_eval_case: "PLAN-justfile-parallel"
+expected_output:
+  new_case_before_patch: fail
+  new_case_after_patch: pass
+  other_cases: no regression
+  presented_to_owner: true
+  applied_without_signature: false
+---
+input: {proposal: {target: evals/behavioral/cases.py}}
+expected_output: {rejected: true, reason: "proposal touches an evaluation case (INV-16)", evaluated: false}
+covers: [BHV-12, BHV-12a, INV-16]
+```
+
 ## 6. Non-goals
 
 - **NG-1** — Pas d'auto-merge ni d'auto-amendement de spec/design (INV-3, INV-5).
@@ -474,7 +520,8 @@ covers: [BHV-9, BHV-9a, INV-8, INV-13]
   (OQ-7) : les records restent chez le FDE.
 - **NG-4** — *(levé en 0.5.0 — remplacé par BHV-9..11, INV-13..15)*
 - **NG-5** — Pas de modification automatique des agents `.md` ou du registry à partir des
-  retros : la boucle `lab/models/EVOLUTION.md` reste validée par un humain.
+  retros : la boucle `lab/models/EVOLUTION.md` reste validée par un humain. L'`improver` (BHV-12)
+  automatise la *proposition* et son évaluation, jamais l'application.
 - **NG-6** — Pas de « mode instance » en 0.x (hooks, settings, règles et workflow CI copiés dans
   le repo client pour que l'équipe client en hérite) : second mode prévu une fois le modèle
   plugin éprouvé (OQ-1). Limite acceptée d'ici là : une session lancée sans le plugin n'a pas
@@ -503,6 +550,7 @@ covers: [BHV-9, BHV-9a, INV-8, INV-13]
 | EVAL-11 | deterministic | `lab adapters build` déterministe (2 générations identiques) ; adaptateur commité = régénéré ; `install` n'écrit rien dans l'instance ; outil sans instructions utilisateur ⇒ rc 1 (EX-10) ; avertissement des garde-fous absents | BHV-9, BHV-9a, BHV-9b, BHV-9c, INV-8, INV-13 | 100% |
 | EVAL-12 | deterministic | shim par outil : EX-9 exact ; même boucle, même verdict `STATUS:`, mêmes commits qu'avec l'outil de référence ; coût inconnu journalisé « inconnu » ; nouvel essai sans reprise de session ; outil hors matrice ⇒ rc 1 | BHV-10, BHV-10a, BHV-10b, BHV-10c, BHV-10d, INV-14 | 100% |
 | EVAL-13 | deterministic | campagne (shim) `--tool` : résultats et recommandations par `tool_model_pair` ; échec chain d'un couple ⇒ couple disqualifié, le même modèle reste éligible via un autre outil s'il y passe | BHV-11, INV-15 | 100% |
+| EVAL-14 | deterministic | shim improver : EX-11 exact ; seuils de déclenchement ; proposition présentée seulement si nouveau cas vert sans régression ; cible interdite rejetée sans évaluation ; incident chain ⇒ aucune proposition de prompt ; retrait de règle évalué ; journal des propositions | BHV-12, BHV-12a, BHV-12b, BHV-12c, BHV-12d, INV-16 | 100% |
 
 ## 8. Open questions
 
@@ -537,3 +585,4 @@ covers: [BHV-9, BHV-9a, INV-8, INV-13]
 | 0.3.0 | 2026-11-12 | Owner | Test goldfish emprunté au pattern Elephant/Goldfish (idée seule, aucun code ni grille repris) après revue critique : ses contrôles d'origine sont consultatifs, on n'en garde que la partie rendue mesurable. Ajouts BHV-8, INV-12, EX-8, EVAL-10, NG-7, clé `goldfish_min_score`, critère de conservation en §1 |
 | 0.4.0 | 2026-11-12 | Owner | Deux lecteurs goldfish (petit modèle + modèle de l'implementer) au lieu d'un : « goldfish » = sans mémoire, pas moins capable ; un petit modèle seul confondrait erreur de raisonnement et ambiguïté. Le croisement distingue `ambiguity` (signal fort) de `fragile` (spec implicite). Seuil éventuel sur le seul lecteur implementer ; choix final du signal par corrélation R3/R4. Rôle `goldfish` au registre. Ajouts BHV-8e, signal croisé ; BHV-7, BHV-8, INV-12, EX-8, EVAL-10 amendés |
 | 0.5.0 | 2026-11-12 | Owner | Multi-outils (QCM) : Claude Code reste l'outil de référence ; GitHub Copilot, opencode et Codex CLI supportés, interactif d'abord puis runs orchestrés, dans une nouvelle itération (l'itération 1 reprend telle quelle). Garanties déclarées par outil et vérifiées (matrice de capacités, refus ou sandbox), formats générés depuis une source unique, gouvernance par couple outil × modèle ; un outil qui ne lit ses règles que depuis le repo attend le mode instance (INV-8 inchangé). Ajouts INV-13..15, BHV-9..11, EX-9/10, EVAL-11..13, NG-8, OQ-12 ; NG-4 levé |
+| 0.6.0 | 2026-11-12 | Owner | Rôle `improver` (itération 4) : l'expérience des runs devient des propositions d'amélioration du scaffolding, déclenchées par seuils, évaluées (incident → nouveau cas d'abord, aucune régression) puis validées par signature ; ne touche jamais à ce qui le juge. Ajouts BHV-12, INV-16, EX-11, EVAL-14 ; NG-5 précisé |
