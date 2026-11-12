@@ -883,3 +883,4 @@ T21 is an Owner-lane task.*
 | 2026-11-12 16:27 | CP-5 | owner | checkpoint REJECTED — gate-ci red: ruff format --check fails on tests/fde_kit/test_doc_pointers.py (line 39, the regex line you added). Run `uv run ruff format tests/fde_kit/test_doc_pointers.py` (whitespace only, inside your files_touched) and confirm `uv run ruff format --check .` and `uv run ruff check .` are clean. Nothing else to change. | |
 | 2026-11-12 16:28 | T14 | implementer | done, evals green (t1) | |
 | 2026-11-12 16:49 | CP-5 | owner | checkpoint validated | |
+| 2026-11-12 17:54 | T16 | implementer | done, evals green (t1) | |
