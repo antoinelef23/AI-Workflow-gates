@@ -13,8 +13,7 @@ spec: ./spec.md          # version : 0.5.0
 > **Périmètre de cette version : itération 1 « kit portable »** — BHV-1 (+1b..1e), BHV-2 (+2a, 2b),
 > INV-1, INV-7, INV-8, INV-9, EVAL-1, EVAL-2, EVAL-8. Les itérations 2 (profils, BHV-3),
 > 3 (workflow de bout en bout, retours arrière, test goldfish : BHV-4..6, BHV-8) et
-> 4 (retro, BHV-7) et l'itération multi-outils (BHV-9..11, spec 0.5.0) seront conçues à leur tour,
-> par amendement de ce document.
+> 4 (retro, BHV-7) seront conçues à leur tour, par amendement de ce document.
 >
 > Source : rapport `design-scout` du 2026-11-12 (références vérifiées dans la doc officielle,
 > le code source de Copier/Black et des essais locaux) + 4 décisions Owner prises par QCM.
