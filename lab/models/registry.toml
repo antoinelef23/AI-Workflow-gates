@@ -38,6 +38,44 @@ released = "2025-10-01"
 roles = ["eval-runner"]                  # implementer REMOVED: fails COC-merge even in verbose (loop 2026-06-15)
 context_profile = "base"                 # verbose tested, does not lift the eliminatory score → reverted
 
+# --- Claude 5 family — CANDIDATES added 2026-11-12, not yet in [roles]: production
+#     assignment changes only on the campaign's measured proof (CLAUDE.md, EVOLUTION.md).
+[[model]]
+id = "claude-opus-5-5"
+label = "Opus 5.5"
+family = "claude"
+tier = "frontier"
+released = ""                   # to fill in
+roles = ["planner", "implementer", "reviewer"]
+context_profile = "base"
+
+[[model]]
+id = "claude-sonnet-5-5"
+label = "Sonnet 5.5"
+family = "claude"
+tier = "balanced"
+released = ""
+roles = ["planner", "implementer", "reviewer", "eval-runner"]
+context_profile = "base"
+
+[[model]]
+id = "claude-haiku-5-5"
+label = "Haiku 5.5"
+family = "claude"
+tier = "fast"
+released = ""
+roles = ["implementer", "eval-runner"]   # implementer only if it clears the eliminatory chain layer
+context_profile = "base"
+
+[[model]]
+id = "claude-fable-5-2"
+label = "Fable 5.2"
+family = "claude"
+tier = ""                       # positioning not documented in the lab yet — measured, not assumed
+released = ""
+roles = ["planner", "implementer", "reviewer"]
+context_profile = "base"
+
 # ---------------------------------------------------------------- context budget
 # Static-context budget per role (lab/engine/context_budget.py, `just context-budget`;
 # chars/4 heuristic — calibrate against the tool's own output, not a real tokenizer).
