@@ -2,9 +2,9 @@
 type: spec
 feature: fde-kit
 version: 0.2.0
-status: draft            # draft | validated | superseded
+status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by:            # vide tant que draft — OQ-1..8 tranchées le 2026-11-12, validation Owner attendue
+validated_by: Owner — 2026-11-12 (OQ-1..8 tranchées par QCM en session, spec 0.2.0 validée en l'état)
 ---
 
 # Spec — Kit FDE portable : workflow agentique templatisé, profils d'organisation, retours arrière routés
