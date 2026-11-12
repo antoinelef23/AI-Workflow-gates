@@ -149,3 +149,18 @@ def test_owner_task_dry_run_says_owner(sandbox: Path) -> None:
     _owner_plan(sandbox)
     r = run_orch(sandbox, "--dry-run")
     assert "OWNER TASK T1" in r.stdout, r.stdout
+
+
+def test_task_with_a_commit_is_done_for_the_lint_without_any_run_state(
+    sandbox: Path,
+) -> None:
+    # CI has no .runs/state.json (gitignored): "done" must come from git history.
+    subprocess.run(
+        ["git", "commit", "-q", "--allow-empty", "-m", "feat(feat): T1 Task T1 [auto]"],
+        cwd=sandbox,
+        check=True,
+    )
+    errors, _ = _lint(sandbox, _task("T1", "`.claude`"))  # no `done=` passed
+    assert not [e for e in errors if "protected" in e], errors
+    errors, _ = _lint(sandbox, _task("T2", "`.claude`"))  # T2 has no commit
+    assert any("T2" in e and "protected" in e for e in errors), errors

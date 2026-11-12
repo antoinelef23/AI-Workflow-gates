@@ -60,6 +60,17 @@ def protected_paths(project: Path) -> list[str]:
     return roots
 
 
+def committed_task_ids(project: Path, feature: Path) -> set[str]:
+    """Tasks of `feature` that already have a commit in git history (canonical
+    subject `<type>(<feature>): Tn …`). Reproducible from a fresh checkout, unlike
+    the gitignored `.runs/state.json` — CI saw a done task re-linted (PR #1)."""
+    out = subprocess.run(
+        ["git", "log", "--format=%s"], cwd=project, capture_output=True, text=True
+    ).stdout
+    rx = re.compile(rf"^\w+\({re.escape(feature.name)}\):\s+(T\d+)\b")
+    return {m.group(1) for line in out.splitlines() if (m := rx.match(line))}
+
+
 def _capability_lint(
     nodes: list[Node],
     project: Path,
@@ -284,6 +295,7 @@ def validate(
                 )
 
     if project is not None:
-        _capability_lint(nodes, project, done or set(), errors, warnings)
+        done = set(done or ()) | committed_task_ids(project, feature)
+        _capability_lint(nodes, project, done, errors, warnings)
 
     return errors, warnings
