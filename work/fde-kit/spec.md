@@ -1,10 +1,10 @@
 ---
 type: spec
 feature: fde-kit
-version: 0.4.0
+version: 0.5.0
 status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by: Owner — 2026-11-12 (OQ-1..8 tranchées par QCM en session, spec 0.2.0 validée en l'état) ; amendement 0.3.0 (test goldfish) approuvé le 2026-11-12 ; amendement 0.4.0 (deux lecteurs goldfish) approuvé le 2026-11-12
+validated_by: Owner — 2026-11-12 (OQ-1..8 tranchées par QCM en session, spec 0.2.0 validée en l'état) ; amendement 0.3.0 (test goldfish) approuvé le 2026-11-12 ; amendement 0.4.0 (deux lecteurs goldfish) approuvé le 2026-11-12 ; amendement 0.5.0 (multi-outils) approuvé le 2026-11-12
 ---
 
 # Spec — Kit FDE portable : workflow agentique templatisé, profils d'organisation, retours arrière routés
@@ -20,7 +20,10 @@ workflow ni déposer d'outillage dans le repo client. Une fois le plan approuvé
 son objectif, **renvoie l'échec vers l'artefact responsable** (code → plan → design → spec)
 sous forme de proposition, au lieu de simplement réessayer ou de s'arrêter. Chaque mission
 **rend le kit meilleur** : ses retours anonymisés restent chez le FDE et alimentent sa boucle
-d'évolution.
+d'évolution. Le kit n'est pas lié à un seul outil agent : Claude Code en est l'**outil de
+référence**, et GitHub Copilot, opencode et Codex CLI le reçoivent d'abord en usage interactif
+(règles, rôles, skills), puis en runs orchestrés — chacun avec un niveau de garantie
+**déclaré et vérifié**, jamais supposé.
 
 **Target KPI :**
 - Bootstrap d'un projet vierge jusqu'au premier `lab next` vert : non mesuré aujourd'hui
@@ -35,6 +38,9 @@ d'évolution.
   Le rapport rapproche séparément le score de chaque lecteur et les signaux croisés
   (`ambiguity`, `fragile`) des emprunts R3/R4 : l'Owner décide quel lecteur ou quel signal
   garder. Décision Owner par amendement, au vu du rapport retro.
+- Outils supportés : Claude Code seul aujourd'hui → **Claude Code + GitHub Copilot + opencode +
+  Codex CLI**, chacun avec une entrée de matrice de capacités couverte par des tests de
+  conformité verts (INV-14).
 
 ## 2. Glossary
 
@@ -61,6 +67,10 @@ d'évolution.
 | Score goldfish | `goldfish_score` | Pour un lecteur : part des EX-n testables dont la sortie prédite égale la sortie attendue |
 | Signal croisé | `goldfish_signal` | Par EX testable, croisement des deux lecteurs : `ambiguity` (les deux se trompent), `fragile` (seul le petit lecteur se trompe), `anomaly` (seul le lecteur implementer se trompe), `clear` (aucun ne se trompe) |
 | Canari | `canary_marker` | Marqueur placé dans chaque source de contexte interdite au goldfish, pour prouver son isolement |
+| Outil agent | `agent_tool` | Environnement qui exécute un agent : `claude-code` (outil de référence), `copilot`, `opencode`, `codex` |
+| Adaptateur | `tool_adapter` | Forme propre à un outil (règles, rôles, skills) **générée** depuis la source unique du kit |
+| Matrice de capacités | `capability_matrix` | Déclaration, par outil, des garde-fous qu'il fournit nativement (exécution headless, injection des règles, interdiction d'écrire des chemins, hook de fin de session, rapport de coût, reprise de session, instructions au niveau utilisateur), chacune couverte par un test de conformité |
+| Couple outil × modèle | `tool_model_pair` | Unité évaluée et affectée à un rôle : un même modèle peut se comporter différemment selon l'outil qui l'exécute |
 
 ## 3. Invariants
 
@@ -95,6 +105,17 @@ d'évolution.
 - **INV-12** — Un agent goldfish ne reçoit que la spec masquée ; un `goldfish_score` n'est compté
   que si l'isolement est **prouvé** par le canari (BHV-8b) pour **chacun** des deux lecteurs.
   Isolement non prouvé pour l'un d'eux ⇒ test invalide, jamais un score. Le test est en lecture seule : il ne modifie aucun artefact.
+- **INV-13** — Les règles dures, les rôles et les skills sont écrits **une seule fois** dans le kit ;
+  chaque adaptateur en est généré, jamais modifié à la main : régénérer un adaptateur produit
+  exactement le contenu commité.
+- **INV-14** — Aucun outil n'est déclaré supporté sans entrée dans la `capability_matrix` couverte par
+  des tests de conformité verts. Un run orchestré refuse de démarrer (rc 1) avec un outil auquel il
+  manque un garde-fou exigé par la politique effective, sauf si le runner sandbox le fournit à sa
+  place (ex. : `.approvals/` non monté). INV-1 est ainsi tenu quel que soit l'outil : par l'outil,
+  par la sandbox, ou par le refus.
+- **INV-15** — Un `tool_model_pair` n'est affecté à un rôle qu'après la campagne d'évaluation de ce
+  couple ; un échec de chaîne de commandement est éliminatoire pour le couple, pas seulement pour
+  le modèle.
 
 ## 4. Behaviors
 
@@ -239,6 +260,42 @@ d'évolution.
     registre) : un seul appel, rapport « lecteurs confondus — signal `fragile` indisponible »,
     jamais deux appels au même modèle présentés comme deux lecteurs.
 
+### BHV-9 — Adaptateurs interactifs (`lab adapters build` / `lab adapters install <tool>`)
+- **Given** la source unique du kit (INV-13) et un outil parmi `copilot`, `opencode`, `codex`
+- **When** le FDE lance `lab adapters install <tool>`
+- **Then** l'adaptateur généré est installé **au niveau utilisateur de l'outil** : les règles dures,
+  les rôles et les skills sont disponibles dans les sessions interactives de cet outil, sans aucun
+  fichier écrit dans l'instance (INV-8). La commande affiche les garde-fous que l'outil ne fournit
+  pas en session (lus dans la `capability_matrix`).
+- **Edge cases :**
+  - **BHV-9a** — Outil sans mécanisme d'instructions au niveau utilisateur : refus, rc 1,
+    « <tool> lit ses règles depuis le repo — supporté seulement avec le mode instance (NG-6) ».
+  - **BHV-9b** — Adaptateur commité différent de sa régénération : le gate échoue (INV-13).
+  - **BHV-9c** — `lab adapters build` est déterministe : deux générations successives sont
+    identiques octet pour octet.
+
+### BHV-10 — Runs orchestrés multi-outils (`lab run --tool <tool>`)
+- **Given** un plan approuvé et un outil `<tool>` présent dans la `capability_matrix`
+- **When** le FDE lance `lab run <feature> --tool <tool>` (défaut : `claude-code`)
+- **Then** le moteur pilote les agents via le runner de cet outil, avec la même boucle, les mêmes
+  gates, le même verdict `STATUS:` et les mêmes commits que pour l'outil de référence ; le
+  pré-vol compare les capacités de l'outil aux garde-fous exigés par la politique effective (INV-14).
+- **Edge cases :**
+  - **BHV-10a** — Capacité manquante, runner hôte : rc 1 nommant l'outil, la capacité et la
+    solution (« use LAB_RUNNER=sandbox ») ; même cas sous sandbox : autorisé si la sandbox fournit
+    la capacité.
+  - **BHV-10b** — Outil sans rapport de coût : le coût est journalisé « inconnu » (jamais 0) ; si
+    `budget_usd` est déclaré, le run refuse de démarrer (un plafond invérifiable n'est pas un plafond).
+  - **BHV-10c** — Outil sans reprise de session : un nouvel essai repart d'une session neuve avec la
+    sortie de l'échec injectée ; la différence est journalisée.
+  - **BHV-10d** — Outil absent de la matrice : rc 1, liste des outils supportés.
+
+### BHV-11 — Campagne d'évaluation par couple outil × modèle
+- **Given** un outil supporté et des modèles candidats
+- **When** l'Owner lance la campagne avec `--tool <tool>`
+- **Then** les couches behavioral, chain et scorecard s'exécutent via le runner de cet outil ; le
+  scorecard et les recommandations par rôle sont produits par `tool_model_pair` (INV-15).
+
 ## 5. Examples
 
 ### EX-1 — Monotonie du plancher
@@ -372,6 +429,41 @@ expected_output: {calls: 1, note: "lecteurs confondus — signal fragile indispo
 covers: [BHV-8, BHV-8a, BHV-8b, BHV-8c, BHV-8e, INV-12]
 ```
 
+### EX-9 — Pré-vol multi-outils
+```yaml
+input:
+  command: "lab run work/f --tool opencode"
+  capability_matrix: {opencode: {deny_paths: false, cost_report: true}}
+  policy: {profile: squad}
+  runner: host
+expected_output: "rc 1 — opencode: capability deny_paths missing — use LAB_RUNNER=sandbox"
+---
+input: {same, runner: sandbox}
+expected_output: {rc: 0, deny_paths_provided_by: sandbox}
+---
+input:
+  command: "lab run work/f --tool codex"
+  capability_matrix: {codex: {deny_paths: true, cost_report: false}}
+  policy: {budget_usd: 20}
+expected_output: "rc 1 — codex: no cost report, budget_usd cannot be enforced"
+covers: [BHV-10, BHV-10a, BHV-10b, INV-14]
+```
+
+### EX-10 — Adaptateur interactif
+```yaml
+input:
+  command: "lab adapters install copilot"
+  capability_matrix: {copilot: {user_level_instructions: true, deny_paths: false}}
+expected_output:
+  instance_files_written: []
+  user_level_install: true
+  warning: "copilot (interactive): no path guard for .approvals/ and .runs/ — merge gates still apply"
+---
+input: {command: "lab adapters install <tool>", capability_matrix: {<tool>: {user_level_instructions: false}}}
+expected_output: "rc 1 — <tool> reads its rules from the repo — supported only with instance mode (NG-6)"
+covers: [BHV-9, BHV-9a, INV-8, INV-13]
+```
+
 ## 6. Non-goals
 
 - **NG-1** — Pas d'auto-merge ni d'auto-amendement de spec/design (INV-3, INV-5).
@@ -380,7 +472,7 @@ covers: [BHV-8, BHV-8a, BHV-8b, BHV-8c, BHV-8e, INV-12]
   moteur reste stdlib.
 - **NG-3** — Pas de serveur de télémétrie central ni de remontée des retros dans le repo du kit
   (OQ-7) : les records restent chez le FDE.
-- **NG-4** — Pas de runner multi-vendor dans cette feature (backlog existant).
+- **NG-4** — *(levé en 0.5.0 — remplacé par BHV-9..11, INV-13..15)*
 - **NG-5** — Pas de modification automatique des agents `.md` ou du registry à partir des
   retros : la boucle `lab/models/EVOLUTION.md` reste validée par un humain.
 - **NG-6** — Pas de « mode instance » en 0.x (hooks, settings, règles et workflow CI copiés dans
@@ -390,6 +482,9 @@ covers: [BHV-8, BHV-8a, BHV-8b, BHV-8c, BHV-8e, INV-12]
 - **NG-7** — Pas de revue de design par grilles et personas (pattern Elephant/Goldfish d'origine) ni
   de dépendance au plugin qui le porte : seule l'idée d'un agent sans contexte est empruntée, sous
   forme de test mesurable sur les EX de la spec. Pas de test goldfish sur `design.md` en 0.x.
+- **NG-8** — Pas d'autre outil que Claude Code, GitHub Copilot, opencode et Codex CLI en 0.x
+  (Antigravity, Cursor… plus tard, par amendement). Pas d'outil qui ne lit ses règles que depuis le
+  repo avant le mode instance (NG-6).
 
 ## 7. Evals — merge gate
 
@@ -405,6 +500,9 @@ covers: [BHV-8, BHV-8a, BHV-8b, BHV-8c, BHV-8e, INV-12]
 | EVAL-8 | deterministic | le package du kit n'embarque que le moteur ; `devis` et `booking` (code, triplets, tests) sous `examples/` ; `just gate-ci` vert après migration | INV-9 | 100% |
 | EVAL-9 | deterministic | une tâche (shim) qui modifie `spec.md` ou `design.md` échoue ; le commit scopé ne stage jamais spec/design | INV-10 | 100% |
 | EVAL-10 | deterministic | shim goldfish : la spec masquée ne contient aucun `expected_output` ; chaque lecteur a son répertoire ne contenant qu'elle ; EX-8 reproduit exactement (deux scores, signaux croisés, écarts, non testables, rc) ; canari vu par un lecteur ⇒ rc 1 sans score ; seuil appliqué au seul lecteur implementer ; lecteurs confondus ⇒ un seul appel | BHV-8, BHV-8a, BHV-8b, BHV-8c, BHV-8d, BHV-8e, INV-12 | 100% |
+| EVAL-11 | deterministic | `lab adapters build` déterministe (2 générations identiques) ; adaptateur commité = régénéré ; `install` n'écrit rien dans l'instance ; outil sans instructions utilisateur ⇒ rc 1 (EX-10) ; avertissement des garde-fous absents | BHV-9, BHV-9a, BHV-9b, BHV-9c, INV-8, INV-13 | 100% |
+| EVAL-12 | deterministic | shim par outil : EX-9 exact ; même boucle, même verdict `STATUS:`, mêmes commits qu'avec l'outil de référence ; coût inconnu journalisé « inconnu » ; nouvel essai sans reprise de session ; outil hors matrice ⇒ rc 1 | BHV-10, BHV-10a, BHV-10b, BHV-10c, BHV-10d, INV-14 | 100% |
+| EVAL-13 | deterministic | campagne (shim) `--tool` : résultats et recommandations par `tool_model_pair` ; échec chain d'un couple ⇒ couple disqualifié, le même modèle reste éligible via un autre outil s'il y passe | BHV-11, INV-15 | 100% |
 
 ## 8. Open questions
 
@@ -426,6 +524,9 @@ covers: [BHV-8, BHV-8a, BHV-8b, BHV-8c, BHV-8e, INV-12]
   INV-11, BHV-7, NG-3)*
 - **OQ-8** — Cible du KPI interventions humaines → *(résolue le 2026-11-12 : mesurer une baseline
   sur 3 features, puis amender — intégré en §1)*
+- **OQ-12** — Quelle surface de GitHub Copilot vise-t-on (CLI, mode agent de l'IDE, agent de code
+  cloud, application) ? Chacune a ses propres capacités ; à trancher au design de l'itération
+  multi-outils, après vérification par design-scout.
 
 ## 9. Changelog
 
@@ -435,3 +536,4 @@ covers: [BHV-8, BHV-8a, BHV-8b, BHV-8c, BHV-8e, INV-12]
 | 0.2.0 | 2026-11-12 | Owner | OQ-1..8 tranchées par QCM : distribution 100 % plugin, ce repo = kit, profils solo/squad/regulated avec clés de sécurité vs libres, plan_delta toujours humain, OQ agent → `.runs/` via le moteur, reset ciblé, retros locales, KPI mesuré d'abord. Ajouts INV-8..11, BHV-1e, BHV-2a/b, BHV-3c, BHV-6a/b, EX-7, EVAL-8/9, NG-6 ; BHV-1a retiré |
 | 0.3.0 | 2026-11-12 | Owner | Test goldfish emprunté au pattern Elephant/Goldfish (idée seule, aucun code ni grille repris) après revue critique : ses contrôles d'origine sont consultatifs, on n'en garde que la partie rendue mesurable. Ajouts BHV-8, INV-12, EX-8, EVAL-10, NG-7, clé `goldfish_min_score`, critère de conservation en §1 |
 | 0.4.0 | 2026-11-12 | Owner | Deux lecteurs goldfish (petit modèle + modèle de l'implementer) au lieu d'un : « goldfish » = sans mémoire, pas moins capable ; un petit modèle seul confondrait erreur de raisonnement et ambiguïté. Le croisement distingue `ambiguity` (signal fort) de `fragile` (spec implicite). Seuil éventuel sur le seul lecteur implementer ; choix final du signal par corrélation R3/R4. Rôle `goldfish` au registre. Ajouts BHV-8e, signal croisé ; BHV-7, BHV-8, INV-12, EX-8, EVAL-10 amendés |
+| 0.5.0 | 2026-11-12 | Owner | Multi-outils (QCM) : Claude Code reste l'outil de référence ; GitHub Copilot, opencode et Codex CLI supportés, interactif d'abord puis runs orchestrés, dans une nouvelle itération (l'itération 1 reprend telle quelle). Garanties déclarées par outil et vérifiées (matrice de capacités, refus ou sandbox), formats générés depuis une source unique, gouvernance par couple outil × modèle ; un outil qui ne lit ses règles que depuis le repo attend le mode instance (INV-8 inchangé). Ajouts INV-13..15, BHV-9..11, EX-9/10, EVAL-11..13, NG-8, OQ-12 ; NG-4 levé |
