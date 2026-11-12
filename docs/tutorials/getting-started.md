@@ -5,8 +5,8 @@ result: we set the approval secret, look at the three artifacts that drive the w
 plan-lint, watch the plan without running it, run it for real, approve a checkpoint, and end
 with the feature merged and the *why* recorded in git.
 
-We mirror a feature that already exists in the repo — `work/devis-pose/`, a pure
-"installation quote" calculator with no I/O — so every command below is real and reproducible.
+We mirror a feature that already exists in the repo — `examples/devis/work/devis-pose/`
+(the `devis` example instance), a pure "installation quote" calculator with no I/O — so every command below is real and reproducible.
 
 This is a lesson, not a reference. We minimise explanation and link out instead. By the end you
 will recognise the shape of every run you do afterwards.
@@ -53,7 +53,7 @@ Every unit of work is three versioned markdown files in `work/<feature>/`. Let's
 for our tiny feature:
 
 ```bash
-ls work/devis-pose
+ls examples/devis/work/devis-pose
 ```
 
 The output should look something like:
@@ -72,7 +72,7 @@ These three are the whole contract — they replace user stories, functional spe
 - **`tasks.md`** — the DO. The execution plan: tasks `T1…T4`, two checkpoints `CP-1` (auto) and
   `CP-2` (merge, blocking), with `depends_on` for sequencing and `parallel_group` for parallelism.
 
-Open `work/devis-pose/tasks.md` and find the line `status: approved` in its frontmatter. That
+Open `examples/devis/work/devis-pose/tasks.md` and find the line `status: approved` in its frontmatter. That
 is the Owner's signature: the orchestrator refuses to *run* a plan that isn't `approved`. The
 plan is already approved here, so we can drive it.
 
@@ -93,10 +93,11 @@ referenced exists, that `done_when` is present, that parallel tasks touch disjoi
 the final checkpoint is blocking, and that every `verify` command is on the allowlist.
 
 ```bash
-just validate work/devis-pose
+just validate-project examples/devis work/devis-pose
 ```
 
-The output should look something like:
+The feature argument is relative to the instance given by `--project` (here `examples/devis`),
+which is where `work/`, the code and the evals live. The output should look something like:
 
 ```
 Plan-lint — 6 nodes, frontmatter status: approved
@@ -109,6 +110,8 @@ Plan-lint — 6 nodes, frontmatter status: approved
     T4: uv run pytest -q tests/devis_cli
 ```
 
+(These `verify` paths are relative to the `devis` instance root, `examples/devis/`.)
+
 Notice that plan-lint surfaces every `verify` command. By approving the plan, the Owner is
 signing off on exactly these commands — they will run on the host after each agent, parsed to an
 argv list and executed **without a shell**. A plan that lints is a plan the Owner can approve
@@ -119,7 +122,7 @@ once and walk away from. If it doesn't lint, it doesn't run.
 Now we ask the orchestrator to show us the execution plan without touching anything:
 
 ```bash
-python3 lab/engine/orchestrate.py work/devis-pose --dry-run
+uv run lab run work/devis-pose --project examples/devis --dry-run
 ```
 
 The output should look something like:
@@ -134,7 +137,7 @@ Models (registry): implementer=claude-sonnet-4-6, reviewer=claude-opus-4-8
 === Parallel wave: T2, T3 ===
   [dry-run] claude-cli run: T2 (acceptEdits, max_turns=100, 7 allowed tools)
   [dry-run] claude-cli run: T3 (acceptEdits, max_turns=100, 7 allowed tools)
-  [dry-run] CHECKPOINT CP-1 (mode auto) — waits for work/devis-pose/.approvals/CP-1
+  [dry-run] CHECKPOINT CP-1 (mode auto) — waits for examples/devis/work/devis-pose/.approvals/CP-1
 ```
 
 Notice the second wave runs `T2` and `T3` **together**: they have no file dependency on each
@@ -148,7 +151,7 @@ We launch the run in the foreground via `just`. (On macOS, the recipe wraps the 
 `caffeinate -i` so your machine won't sleep mid-run.)
 
 ```bash
-just run work/devis-pose
+just run-project examples/devis work/devis-pose
 ```
 
 The orchestrator walks the waves, runs an agent per task, and passes the eval gate after each
@@ -168,8 +171,8 @@ Plan: 6 nodes — T1, T2, T3, CP-1, T4, CP-2
 When the agents finish `T2` and `T3`, the run reaches the first checkpoint and pauses:
 
 ```
-🔔 CHECKPOINT CP-1 — Owner validation required → lab/engine/approve.sh CP-1 work/devis-pose (reviewer report: work/devis-pose/.runs/CP-1-review.md)
-⏸  CP-1 — waiting for .../work/devis-pose/.approvals/CP-1
+🔔 CHECKPOINT CP-1 — Owner validation required → lab/engine/approve.sh CP-1 examples/devis/work/devis-pose (reviewer report: examples/devis/work/devis-pose/.runs/CP-1-review.md)
+⏸  CP-1 — waiting for .../examples/devis/work/devis-pose/.approvals/CP-1
 ```
 
 Notice the run did **not** abort — it is *waiting* for us. `CP-1` was declared `mode: auto`, but
@@ -183,20 +186,20 @@ In the second terminal (with `LAB_APPROVAL_SECRET` still exported in the same sh
 first read what the reviewer found:
 
 ```bash
-cat work/devis-pose/.runs/CP-1-review.md
+cat examples/devis/work/devis-pose/.runs/CP-1-review.md
 ```
 
 This report is written before every checkpoint so the Owner decides on evidence, not vibes.
 Satisfied, we sign the approval:
 
 ```bash
-lab/engine/approve.sh CP-1 work/devis-pose
+lab/engine/approve.sh CP-1 examples/devis/work/devis-pose
 ```
 
 The output should be:
 
 ```
-✅ CP-1 approved for work/devis-pose
+✅ CP-1 approved for examples/devis/work/devis-pose
 ```
 
 Back in the first terminal, the paused run picks the approval up and continues:
@@ -214,7 +217,7 @@ instead, we would have rejected it with a reason that gets passed straight to th
 
 ```bash
 # (alternative — not now)
-# lab/engine/reject.sh CP-1 work/devis-pose "the quote doesn't show the discount" T2
+# lab/engine/reject.sh CP-1 examples/devis/work/devis-pose "the quote doesn't show the discount" T2
 ```
 
 ## Step 7: Approve the merge and see it land
@@ -223,14 +226,14 @@ instead, we would have rejected it with a reason that gets passed straight to th
 `mode: blocking` — the merge is **never** automatic:
 
 ```
-🔔 CHECKPOINT CP-2 — Owner validation required → lab/engine/approve.sh CP-2 work/devis-pose (reviewer report: work/devis-pose/.runs/CP-2-review.md)
-⏸  CP-2 — waiting for .../work/devis-pose/.approvals/CP-2
+🔔 CHECKPOINT CP-2 — Owner validation required → lab/engine/approve.sh CP-2 examples/devis/work/devis-pose (reviewer report: examples/devis/work/devis-pose/.runs/CP-2-review.md)
+⏸  CP-2 — waiting for .../examples/devis/work/devis-pose/.approvals/CP-2
 ```
 
-We read `work/devis-pose/.runs/CP-2-review.md`, then approve:
+We read `examples/devis/work/devis-pose/.runs/CP-2-review.md`, then approve:
 
 ```bash
-lab/engine/approve.sh CP-2 work/devis-pose
+lab/engine/approve.sh CP-2 examples/devis/work/devis-pose
 ```
 
 The run resumes and ends on a summary — never on a mid-course abort:

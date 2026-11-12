@@ -49,6 +49,6 @@ serving a different reader need. Pick by what you're trying to do:
 
 ---
 
-`export-notes.md` and `export-usage.md` at this root are **outputs of the `export-devis`
-example feature** (written by its `tasks.md`), not lab documentation — kept here for that
-example's integrity.
+`export-notes.md` and `export-usage.md` are **outputs of the `export-devis` example feature**
+(written by its `tasks.md`), not lab documentation — they live in the example instance, under
+`examples/devis/docs/`, for that example's integrity.

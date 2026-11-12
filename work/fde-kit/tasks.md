@@ -617,3 +617,4 @@ test collection (T5) and T10's test is not an eval.
 | 2026-11-12 13:51 | T6 | implementer | done, evals green (t1) | |
 | 2026-11-12 13:52 | T7 | implementer | BLOCKED — the `just … evals` verify command was refused by the sandbox, so `done_when` is unconfirmed (no spec gap; no OQ raised) | |
 | 2026-11-12 13:52 | T8 | implementer | done, evals green (t1) | |
+| 2026-11-12 13:53 | T10 | implementer | done, evals green (t1) | |
