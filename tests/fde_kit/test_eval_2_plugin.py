@@ -122,3 +122,23 @@ def test_eval_2_hooks_json_stop_subagentstop_posttooluse_entries():
     assert commands("SubagentStop") == [f"bash {marker}eval_gate.sh"]
     assert commands("PostToolUse") == [f"bash {marker}post_edit.sh"]
     assert hooks["PostToolUse"][0]["matcher"] == "Edit|Write|MultiEdit"
+
+
+def test_eval_2_guard_denies_notebook_edit_under_approvals(tmp_path):
+    # NotebookEdit carries its target as `notebook_path`, not `file_path` (CP-5 review).
+    def nb(path: str) -> subprocess.CompletedProcess:
+        payload = json.dumps(
+            {"tool_name": "NotebookEdit", "tool_input": {"notebook_path": path}}
+        )
+        return subprocess.run(
+            ["bash", str(HOOKS / "guard_paths.sh")],
+            input=payload,
+            capture_output=True,
+            text=True,
+            cwd=tmp_path,
+            env={**os.environ, "CLAUDE_PLUGIN_ROOT": str(PLUGIN)},
+        )
+
+    assert nb(str(tmp_path / "work/f/.approvals/CP-1.ipynb")).returncode == 2
+    assert nb(str(tmp_path / "work/f/.runs/x.ipynb")).returncode == 2
+    assert nb(str(tmp_path / "notebooks/a.ipynb")).returncode == 0
