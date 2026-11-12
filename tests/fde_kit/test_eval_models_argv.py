@@ -73,7 +73,12 @@ def _assert_run_options(argv: list[str]) -> None:
     assert "--allowedTools" in argv
     assert "--bare" not in argv
     # the role file is cited by absolute path and readable from the temp cwd
-    assert argv[argv.index("--add-dir") + 1] == str(REPO)
+    dirs = [argv[i + 1] for i, a in enumerate(argv) if a == "--add-dir"]
+    assert len(dirs) == 1
+    assert dirs[0].endswith("lab/plugin/agents")
+    for d in dirs:  # no grant covers evals/ (answer keys) or the kit root
+        assert not (REPO / "evals").is_relative_to(Path(d))
+        assert Path(d) != REPO
     prompt = argv[argv.index("-p") + 1]
     assert any(
         str(REPO / "lab" / "plugin" / "agents" / f"{r}.md") in prompt

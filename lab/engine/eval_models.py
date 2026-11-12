@@ -75,9 +75,9 @@ ROLE_PROMPT = {
 
 
 # Role files are cited by ABSOLUTE path (each trial runs in its own temp cwd), resolved
-# like kit_options() from the kit CODE location, never LAB_ROOT.
+# like kit_options() from the kit CODE location, never LAB_ROOT. Passed as a .format()
+# argument ({agents}), never baked into the template (brace-safe).
 _AGENTS = str(kit_root(honor_env=False) / "lab" / "plugin" / "agents")
-ROLE_PROMPT = {k: v.replace("{agents}", _AGENTS) for k, v in ROLE_PROMPT.items()}
 
 
 def kit_options() -> dict:
@@ -87,7 +87,9 @@ def kit_options() -> dict:
     Never `--bare`."""
     code = kit_root(honor_env=False)
     return {
-        "add_dirs": [str(code)],  # as a real run's --add-dir LAB: role file readable
+        # ONLY the agents dir: role files readable, never the kit root (evals/golden and
+        # evals/behavioral hold the answer keys — EVOLUTION.md fairness rule).
+        "add_dirs": [_AGENTS],
         "plugin_dir": str(code / "lab" / "plugin"),
         "settings": str(code / "lab" / "engine" / "run_settings.json"),
         "append_system_prompt": (
@@ -170,7 +172,7 @@ def run_behavioral(models: list[str], layers: set[str], profile_text) -> list[di
             wd = setup_fixture(case.files)
             try:
                 prompt = ROLE_PROMPT[case.role].format(
-                    prompt=case.prompt
+                    prompt=case.prompt, agents=_AGENTS
                 ) + profile_text(model)
                 r = call_model(prompt, model, wd)
                 ok, detail = case.check(r["text"], wd)
@@ -223,7 +225,8 @@ def run_scorecard(models: list[str], runs: int, profile_text) -> list[dict]:
                 wd = setup_fixture(files)
                 try:
                     prompt = ROLE_PROMPT["implementer"].format(
-                        prompt="Carry out the task described in tasks.md against spec.md."
+                        prompt="Carry out the task described in tasks.md against spec.md.",
+                        agents=_AGENTS,
                     ) + profile_text(model)
                     r = call_model(prompt, model, wd)
                     # judgment: OUR hidden evals, copied AFTER the model's work
