@@ -584,6 +584,20 @@ def _eval_gate(node: Node, real_ids: list[str]) -> tuple[bool, str]:
                     f"Convention: node-id `test_{missing[0].lower().replace('-', '_')}_<case>` "
                     "(lowercased ID, dashes→underscores)."
                 )
+    if ok and _just_has_recipe("lint-check"):
+        # The project's own non-mutating lint is part of "done": a task whose verify
+        # only runs its test (fde-kit T14) otherwise lands unformatted code that turns
+        # `gate-ci` red at the merge checkpoint. No recipe ⇒ no lint imposed.
+        lp = subprocess.run(
+            ["just", "lint-check"], cwd=PROJECT, capture_output=True, text=True
+        )
+        if lp.returncode != 0:
+            return False, (
+                "LINT RED: `just lint-check` (the project's own lint, part of the "
+                "merge gate) fails — fix formatting/lint in your files, without "
+                "touching files outside files_touched:\n"
+                + (lp.stdout + lp.stderr)[-2000:]
+            )
     return ok, out
 
 
