@@ -108,3 +108,17 @@ def test_eval_2_version_coherence():
     assert entries[0]["source"] == "./lab/plugin"
     assert plugin["version"] == kit
     assert entries[0].get("version", kit) == kit
+
+
+def test_eval_2_hooks_json_stop_subagentstop_posttooluse_entries():
+    """T11 — ADR-4: the moved scripts are wired through ${CLAUDE_PLUGIN_ROOT}."""
+    hooks = json.loads((HOOKS / "hooks.json").read_text())["hooks"]
+    marker = '"${CLAUDE_PLUGIN_ROOT}"/hooks/'
+
+    def commands(event):
+        return [h["command"] for e in hooks[event] for h in e["hooks"]]
+
+    assert commands("Stop") == [f"bash {marker}eval_gate.sh"]
+    assert commands("SubagentStop") == [f"bash {marker}eval_gate.sh"]
+    assert commands("PostToolUse") == [f"bash {marker}post_edit.sh"]
+    assert hooks["PostToolUse"][0]["matcher"] == "Edit|Write|MultiEdit"

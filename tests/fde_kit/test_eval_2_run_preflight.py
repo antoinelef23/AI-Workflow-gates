@@ -246,7 +246,9 @@ def test_eval_2_kit_mode_uses_relative_paths(tmp_path):
     assert "--plugin-dir lab/plugin " in log
     assert "--settings lab/engine/run_settings.json " in log
     assert RULES_SENTINEL in log
-    assert str(k / "lab") not in log  # no absolute kit path in kit mode
+    # no absolute kit path in the plugin / settings flags in kit mode (the prompt
+    # itself may cite the absolute agent-file path)
+    assert f"--plugin-dir {k}" not in log and f"--settings {k}" not in log
 
 
 def test_eval_2_kit_mode_does_not_need_a_lab_toml(tmp_path):
@@ -274,7 +276,7 @@ def test_eval_2_validate_skips_preflight(tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
 
 
-def test_eval_2_agent_file_resolution_prefers_plugin(tmp_path):
+def test_eval_2_agent_file_resolution_is_plugin_only(tmp_path):
     k = _make_kit(tmp_path / "kit")
     code = (
         "import orchestrate as o; "
@@ -290,15 +292,16 @@ def test_eval_2_agent_file_resolution_prefers_plugin(tmp_path):
         assert r.returncode == 0, r.stderr
         return r.stdout.split()
 
+    # Always the plugin path (ADR-3): no legacy fallback, even when the file is absent.
     assert paths() == [
-        f"{k}/.claude/agents/implementer.md",
-        f"{k}/.claude/agents/reviewer.md",
+        f"{k}/lab/plugin/agents/implementer.md",
+        f"{k}/lab/plugin/agents/reviewer.md",
     ]
     (k / "lab" / "plugin" / "agents").mkdir()
     (k / "lab" / "plugin" / "agents" / "implementer.md").write_text("x")
     assert paths() == [
         f"{k}/lab/plugin/agents/implementer.md",
-        f"{k}/.claude/agents/reviewer.md",
+        f"{k}/lab/plugin/agents/reviewer.md",
     ]
 
 

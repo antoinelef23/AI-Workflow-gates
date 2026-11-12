@@ -29,7 +29,7 @@ def approx_tokens(text: str) -> int:
 def static_files(root: Path, role: str, profile: str) -> list[Path]:
     """The files injected on EVERY call for a role. `base` profile = no injection
     (lab/models/profiles/base.md documents itself as doc-only)."""
-    files = [root / "CLAUDE.md", root / ".claude" / "agents" / f"{role}.md"]
+    files = [root / "CLAUDE.md", root / "lab" / "plugin" / "agents" / f"{role}.md"]
     if profile and profile != "base":
         files.append(root / "lab" / "models" / "profiles" / f"{profile}.md")
     return [f for f in files if f.is_file()]

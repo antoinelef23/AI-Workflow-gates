@@ -5,7 +5,7 @@ classified ``create`` / ``identical`` / ``skip`` (never ``overwrite``), one line
 printed, then the plan is applied unless ``--dry-run``. A second run is ``0 changement``.
 
 Writes ONLY data (INV-8): ``.lab/lab.toml``, ``work/`` (README + triplet templates) and the
-``evals`` / ``evals-collect`` justfile recipes. Nothing under ``.claude/``, no CLAUDE.md /
+``evals`` / ``evals-collect`` justfile recipes. No agent tooling at all (INV-8), no CLAUDE.md /
 AGENTS.md, no CI workflow.
 
 Also exposes :func:`read_lab_toml`, the explicit reader of ``.lab/lab.toml`` reused by the

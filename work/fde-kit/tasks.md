@@ -663,3 +663,4 @@ test collection (T5) and T10's test is not an eval.
 | 2026-11-12 15:35 | T11 | implementer | BLOCKED — shell denied writes under lab/plugin and .claude (sensitive-file permission); also scope conflicts: lab_init.py docstring and test_eval_2_run_preflight.py outside files_touched | |
 | 2026-11-12 15:42 | T15 | owner | owner task validated | |
 | 2026-11-12 15:42 | T15 | owner | done by the Owner, verify + evals green | |
+| 2026-11-12 15:45 | T11 | implementer | done, evals green (t1) | |

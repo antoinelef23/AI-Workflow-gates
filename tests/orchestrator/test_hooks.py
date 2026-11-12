@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .conftest import REPO
 
-HOOK = REPO / ".claude" / "hooks" / "eval_gate.sh"
+HOOK = REPO / "lab" / "plugin" / "hooks" / "eval_gate.sh"
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -58,3 +58,28 @@ def test_eval_gate_skips_when_no_code_changed(tmp_path: Path) -> None:
         ["bash", str(HOOK)], cwd=repo, input="{}", text=True, capture_output=True
     )
     assert r.returncode == 0, f"nothing changed → no gate; {r.stderr}"
+
+
+def test_eval_gate_runs_on_instance_with_lab_toml_and_no_pyproject(
+    tmp_path: Path,
+) -> None:
+    # ADR-4 / I-4: an instance (`.lab/lab.toml`, no pyproject.toml) is gated too;
+    # red evals => exit 2, never a silent exit 0.
+    repo = tmp_path / "inst"
+    (repo / ".lab").mkdir(parents=True)
+    (repo / ".lab" / "lab.toml").write_text(
+        'schema_version = 1\nkit_version = "0"\nprofile = "squad"\n'
+    )
+    (repo / "justfile").write_text("evals:\n    @echo 'EVALS RED'; exit 1\n")
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "t@lab")
+    _git(repo, "config", "user.name", "t")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "init")
+    (repo / "app.py").write_text("x = 1\n")
+
+    r = subprocess.run(
+        ["bash", str(HOOK)], cwd=repo, input="{}", text=True, capture_output=True
+    )
+    assert r.returncode == 2, f"rc={r.returncode}\n{r.stdout}{r.stderr}"
+    assert "EVAL GATE RED" in r.stderr

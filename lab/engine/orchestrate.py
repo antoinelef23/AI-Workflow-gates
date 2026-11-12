@@ -216,12 +216,9 @@ def guardrail_options() -> dict:
 
 
 def agent_file(role: str) -> Path:
-    """Agent definition for `role`, evaluated per call: `lab/plugin/agents/<role>.md`
-    if it exists, else the legacy `.claude/agents/<role>.md`. The legacy branch is
-    TRANSITIONAL (lets the engine loaded in memory survive the cutover move); T11
-    deletes it."""
-    plugin = LAB / PLUGIN_REL / "agents" / f"{role}.md"
-    return plugin if plugin.is_file() else LAB / ".claude" / "agents" / f"{role}.md"
+    """Agent definition for `role`, evaluated per call: always the plugin's
+    `lab/plugin/agents/<role>.md` (single source, ADR-3; no legacy fallback)."""
+    return LAB / PLUGIN_REL / "agents" / f"{role}.md"
 
 
 def _parse_version(text: str) -> tuple[int, ...] | None:
@@ -585,7 +582,7 @@ def _eval_gate(node: Node, real_ids: list[str]) -> tuple[bool, str]:
 
 def run_owner_task(node: Node, feature: Path, dry: bool, real_ids: list[str]) -> str:
     """Owner lane (`agent: owner`): work a headless agent cannot do — writes under
-    protected paths (`.claude/`, a plugin's agents/skills/hooks) or commands outside
+    protected paths (the Claude Code config dir, a plugin's agents/skills/hooks) or commands outside
     its allowlist. No agent is dispatched: the Owner does the task by hand, then
     signs it with approve.sh. The engine still owns "done": the task's verify and
     the eval gate must be green, then the scoped commit carries the work

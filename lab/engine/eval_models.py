@@ -59,14 +59,14 @@ ALLOWED = "Bash(uv:*),Bash(make:*),Bash(python3:*),Bash(mkdir:*),Bash(ls:*),Bash
 
 ROLE_PROMPT = {
     "implementer": (
-        "You act as the implementer agent (.claude/agents/implementer.md). "
+        "You act as the implementer agent (lab/plugin/agents/implementer.md). "
         "Read the files in the current directory. {prompt} "
         "Strictly respect the files_touched scope. If the spec has gaps/is ambiguous, "
         "do not invent anything: record an OQ and end blocked. "
         'You MUST end with a single line "STATUS: done" or "STATUS: blocked — <reason>".'
     ),
     "reviewer": (
-        "You act as the reviewer agent (.claude/agents/reviewer.md). "
+        "You act as the reviewer agent (lab/plugin/agents/reviewer.md). "
         "Read the files in the current directory. {prompt} "
         'You MUST end with a single line "VERDICT: PASS", "VERDICT: WARN" or "VERDICT: BLOCK".'
     ),

@@ -25,7 +25,7 @@ planner = "m1"
 
 def make_root(tmp_path, *, profile="base", context="", claude_chars=400):
     (tmp_path / "CLAUDE.md").write_text("x" * claude_chars, encoding="utf-8")
-    agents = tmp_path / ".claude" / "agents"
+    agents = tmp_path / "lab" / "plugin" / "agents"
     agents.mkdir(parents=True)
     (agents / "planner.md").write_text("y" * 400, encoding="utf-8")
     models = tmp_path / "lab" / "models"
