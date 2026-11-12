@@ -63,8 +63,9 @@ travail déjà présent : `15f628c`…`0b09785`), puis la suite a avancé.
 | T15 | ✅ **voie Owner** (fichiers protégés `.claude/` → `lab/plugin/`) | `f93438a` (+ `2be6b62`) |
 | T11 | ✅ (scindé : partie agent, après blocage chemins protégés) | `50f9c61` |
 | T12, T13 | ✅ ; T13 retravaillé après **2 rejets CP-4** (accès des essais aux clés de réponse) | `a243a5d`, `ac9aed9` |
-| **CP-4** | ⏸ en attente — campagne live behavioral + chain (3 modèles de prod) en cours | — |
-| T14, CP-5 | ⏳ | — |
+| CP-4 | ✅ campagne ADR-11 (3 modèles de prod, 3,77 $) : chaîne 9/9, behavioral 8/11 chacun | `0b32947` |
+| T14 | ✅ après **rejet CP-5** (ruff format) — 1ᵉʳ rework avec le `Why:` qui cite le rejet | `10293ef` + `e72d97e` |
+| CP-5 | ✅ signé sur décision de l'Owner (panel 3 lentilles WARN ×3, aucun bloquant) → PR vers `main` | `b5579d9` |
 
 Contrôles live CP-4 faits : **EX-5 ✅** (un `claude -p` avec l'argv du run ne peut pas écrire
 `.approvals/CP-1` — refusé par le hook `guard_paths` du plugin) ; **BHV-2b ✅** (une session
@@ -83,6 +84,10 @@ Chaque blocage du run a été transformé en garde-fou du moteur (le pourquoi es
 | `94f273e` | Trajectory guard : `owner_signed` journalisé = preuve d'une tâche Owner | revue CP-4 |
 | `2f3fe92` | Le `Why:` d'un commit auto de rework cite le rejet de checkpoint | revue CP-4 |
 | `4bf2b48` | Essais de modèles : fichier de rôle copié dans le cwd de l'essai, plus de chemin du kit ni d'`--add-dir` (équité EVOLUTION.md) | revue CP-4 (3 passes) |
+| `876a54d` | `just lint-check` du projet fait partie du gate de tâche | CP-5 BLOCK (T14) |
+| `5a70c84` | `guard_paths.sh` lit aussi `notebook_path` (NotebookEdit) | revue CP-5, lab-fix 9 |
+| `deffc82` | Un rejet en attente est honoré avant de payer un panel de revue | redémarrage à CP-5 |
+| `3c5b3a5` | Trajectory guard : seulement les commits `Run: auto` ; jeton signé archivé = preuve Owner | revue CP-5 |
 
 Leçons de planification : une tâche scindée doit rester verte à chaque étape (T15 a dû absorber
 deux lignes de test) ; un rejet doit prescrire le **besoin** (« le modèle lit son fichier de
@@ -90,20 +95,16 @@ rôle sans voir les clés »), pas un mécanisme (l'`--add-dir` prescrit a ouver
 
 ## 7. Prochaine action
 
-1. Lire les scorecards de la campagne (`lab/models/scorecards/<date>-*.md`) ; si pas de
-   violation de chaîne de commandement → signer **CP-4** (`approve.sh CP-4 work/fde-kit`).
-2. **T14** (docs du kit : plugin, CLI, installation sans `.claude/` ; corriger aussi la syntaxe
-   `just eval-models` — paramètres **positionnels** : `just eval-models behavioral 1 <modèles>`).
-3. **CP-5** : merge — **humain, toujours**.
-4. Avant CP-5 : `just check-trajectory` est rouge pour des raisons historiques (T15 journalisé
-   avant `94f273e` ; `progress.md` touché par le commit manuel de T7) — à acter dans le dossier.
-
-Signature : `LAB_APPROVAL_SECRET=… bash lab/engine/approve.sh <CP-n|Tn> work/fde-kit` (secret de
-session dans le scratchpad — régénérer à la reprise ; les jetons non consommés deviennent invalides).
+Itération 1 **terminée** (20 nœuds ✅, coût agents du run 4 : 8,37 $). L'Owner a décidé :
+PR `ccr-99c581ba-w0vhys` → `main` (correctifs moteur dans la même PR), **merge par l'Owner** sur
+GitHub, puis tag **`v0.1.0`** sur `main` après le merge. À annoncer : O-6 (une session dans le kit
+sans `--plugin-dir lab/plugin` n'a plus de garde-fous). Ensuite : itération 2 (profils
+solo/squad/regulated) et une feature dédiée au lot de correctifs ci-dessous ; recalibrer
+`reviewer.md` via la boucle EVOLUTION (WARN sur code propre sous conditions réelles).
 
 ## 8. Lot de correctifs du lab (hors plan)
 
-Faits dans cette session : 4 (`2b8f327`), 13 (`ed61c07`), et les nouveaux 14–17 ci-dessous marqués ✅.
+Faits : 4 (`2b8f327`), 9 (`5a70c84`), 13 (`ed61c07`), 14 (`f4f151c`), 17 (`2f3fe92`) — marqués ✅.
 
 1. plan-lint : la vérif d'existence d'un ID de spec matche aussi les IDs supprimés cités dans le changelog.
 2. `work/sdlc-rework/tasks.md` : 17 erreurs plan-lint ; plan-lint seulement informatif en CI.
@@ -112,7 +113,7 @@ Faits dans cette session : 4 (`2b8f327`), 13 (`ed61c07`), et les nouveaux 14–1
 6. `eval_models.py` compte une erreur d'API comme un échec.
 7. Cas `BEH-eval-correct` : demande un fichier hors `files_touched`.
 8. Golden `remise-paliers` échoue pour 5 modèles sur 6.
-9. `guard_paths.sh` ignore `notebook_path`.
+9. ✅ `guard_paths.sh` ignore `notebook_path` (`5a70c84`).
 10. Pré-vol : compare la version du kit, pas celle de `plugin.json` (à trancher : texte BHV-2a vs ADR-2).
 11. `LAB_ROOT` relatif + `--project` sur le même dossier.
 12. `scoped_commit` stage tout le dossier de la feature (rapports de revue embarqués dans les commits de tâche).
@@ -123,8 +124,14 @@ Faits dans cette session : 4 (`2b8f327`), 13 (`ed61c07`), et les nouveaux 14–1
 18. Syntaxe `just eval-models layer=… live=1` des docs/plans fausse (paramètres positionnels).
 19. Isolation des essais de modèles : `--plugin-dir`/`--settings` restent des chemins du kit dans l'argv et l'environnement des hooks ; confinement complet = bac à sable OS (candidat ADR).
 20. Un rejet de checkpoint consomme vite le budget (max 2) quand c'est la **prescription** du rejet qui est fausse : prévoir un « amendement de note de rejet » ou un rejet qui ne compte pas.
+21. `just eval-models` écrit `latest.*` sans tampon : la 2ᵉ couche écrase la 1ʳᵉ (behavioral reconstruit depuis le log).
+22. `just gate` lance `lint` **mutant** : vérifier reformate le travail d'un autre (à remplacer par `lint-check` dans `gate`).
+23. `eval_gate.sh` : filtre d'extensions (`.py|.toml|.ts…`) — une instance non-Python n'est pas gardée en fin de session (itération 2).
+24. `lab init` pas atomique : seul le justfile est restauré en cas d'échec (conforme ADR-8, mais surprenant).
+25. `46ab6dc` porte un tag `[BHV-7]` parasite (périmètre itération 4).
+26. `brand_denylist.txt` vide : `check-brand` passe à vide (voulu ? à confirmer avant la première mission).
 
-## 8. Environnement (session cloud)
+## 9. Environnement (session cloud)
 
 - `just` installé via `uv tool install rust-just` ; `claude` CLI 2.1.322 authentifié.
 - Limite de quota « 5 heures » déjà atteinte une fois : un run peut échouer en bloc.
