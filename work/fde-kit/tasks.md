@@ -632,3 +632,4 @@ test collection (T5) and T10's test is not an eval.
 | 2026-11-12 14:43 | CP-2 | owner | checkpoint validated | |
 | 2026-11-12 14:44 | T6 | implementer | done, evals green (t1) | |
 | 2026-11-12 14:44 | T10 | implementer | done, evals green (t1) | |
+| 2026-11-12 14:44 | T7 | implementer | done, evals green (t1) | |
