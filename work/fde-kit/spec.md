@@ -1,10 +1,10 @@
 ---
 type: spec
 feature: fde-kit
-version: 0.6.0
+version: 0.7.0
 status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by: Owner — 2026-11-12 (OQ-1..8 tranchées par QCM en session, spec 0.2.0 validée en l'état) ; amendement 0.3.0 (test goldfish) approuvé le 2026-11-12 ; amendement 0.4.0 (deux lecteurs goldfish) approuvé le 2026-11-12 ; amendement 0.5.0 (multi-outils) approuvé le 2026-11-12 ; amendement 0.6.0 (improver) approuvé le 2026-11-12
+validated_by: Owner — 2026-11-12 (OQ-1..8 tranchées par QCM en session, spec 0.2.0 validée en l'état) ; amendement 0.3.0 (test goldfish) approuvé le 2026-11-12 ; amendement 0.4.0 (deux lecteurs goldfish) approuvé le 2026-11-12 ; amendement 0.5.0 (multi-outils) approuvé le 2026-11-12 ; amendement 0.6.0 (improver) approuvé le 2026-11-12 ; amendement 0.7.0 (bornes des clés libres, BHV-3d) approuvé le 2026-11-12
 ---
 
 # Spec — Kit FDE portable : workflow agentique templatisé, profils d'organisation, retours arrière routés
@@ -176,6 +176,9 @@ référence**, et GitHub Copilot, opencode et Codex CLI le reçoivent d'abord en
     message nommant la clé, la valeur demandée et le plancher.
   - **BHV-3b** — Clé inconnue : erreur (pas de faute de frappe silencieuse).
   - **BHV-3c** — Override tentant de passer une route R2/R3/R4/R5 en `auto` : refus, rc 1 (INV-3).
+  - **BHV-3d** — Override d'une clé libre hors de ses bornes : refus, rc 1, message nommant la clé,
+    la valeur et la borne. Bornes : `max_task_attempts`, `max_parallel`, `max_cp_rejects` ≥ 1
+    (entiers) ; `budget_usd` ≥ 0 (0 = sans plafond).
 
 ### BHV-4 — Workflow de bout en bout (`lab next <feature>`)
 - **Given** un triplet dans n'importe quel état
@@ -539,7 +542,7 @@ covers: [BHV-12, BHV-12a, INV-16]
 |---|---|---|---|---|
 | EVAL-1 | deterministic | `lab init` sur repo vide crée exactement les fichiers d'EX-4, aucun fichier d'outillage ; 2ᵉ run = 0 diff ; recette `evals` existante préservée ; recette non-Python échoue fermée ; `--dry-run` n'écrit rien | BHV-1, BHV-1b, BHV-1c, BHV-1d, BHV-1e, INV-7, INV-8 | 100% |
 | EVAL-2 | deterministic | en `--project`, l'argv agent (shim) porte les settings du kit ; écriture `.approvals/` refusée ; plugin absent ou version ≠ pin ⇒ rc 1 ; règles dures présentes en session interactive | BHV-2, BHV-2a, BHV-2b, INV-1 | 100% |
-| EVAL-3 | deterministic | EX-1 ; table des profils exacte ; chaque clé de sécurité appliquée mécaniquement (plan-lint, refus `--force`, sandbox exigé) ; clé inconnue rejetée ; R2–R5 non passables en `auto` ; constantes du moteur lues depuis la politique effective | BHV-3, BHV-3a, BHV-3b, BHV-3c, INV-2, INV-3, INV-5 | 100% |
+| EVAL-3 | deterministic | EX-1 ; table des profils exacte ; chaque clé de sécurité appliquée mécaniquement (plan-lint, refus `--force`, sandbox exigé) ; clé inconnue rejetée ; R2–R5 non passables en `auto` ; clé libre hors bornes rejetée ; valeur égale au plancher acceptée pour chaque clé de sécurité ; constantes du moteur lues depuis la politique effective | BHV-3, BHV-3a, BHV-3b, BHV-3c, BHV-3d, INV-2, INV-3, INV-5 | 100% |
 | EVAL-4 | deterministic | `lab next` sur 6 triplets fixtures (un par phase) annonce la bonne phase et la bonne action ; idempotent | BHV-4 | 100% |
 | EVAL-5 | deterministic | shim rejouant R1–R7 : bonne cible, bon mode, budgets respectés, propositions écrites par le moteur, aucun artefact humain modifié | BHV-5, BHV-5a, BHV-5b, BHV-5c, INV-3, INV-4 | 100% |
 | EVAL-6 | deterministic | EX-7 exact ; eval globale du CP suivant exécutée | BHV-6, BHV-6a, BHV-6b | 100% |
@@ -585,4 +588,5 @@ covers: [BHV-12, BHV-12a, INV-16]
 | 0.3.0 | 2026-11-12 | Owner | Test goldfish emprunté au pattern Elephant/Goldfish (idée seule, aucun code ni grille repris) après revue critique : ses contrôles d'origine sont consultatifs, on n'en garde que la partie rendue mesurable. Ajouts BHV-8, INV-12, EX-8, EVAL-10, NG-7, clé `goldfish_min_score`, critère de conservation en §1 |
 | 0.4.0 | 2026-11-12 | Owner | Deux lecteurs goldfish (petit modèle + modèle de l'implementer) au lieu d'un : « goldfish » = sans mémoire, pas moins capable ; un petit modèle seul confondrait erreur de raisonnement et ambiguïté. Le croisement distingue `ambiguity` (signal fort) de `fragile` (spec implicite). Seuil éventuel sur le seul lecteur implementer ; choix final du signal par corrélation R3/R4. Rôle `goldfish` au registre. Ajouts BHV-8e, signal croisé ; BHV-7, BHV-8, INV-12, EX-8, EVAL-10 amendés |
 | 0.5.0 | 2026-11-12 | Owner | Multi-outils (QCM) : Claude Code reste l'outil de référence ; GitHub Copilot, opencode et Codex CLI supportés, interactif d'abord puis runs orchestrés, dans une nouvelle itération (l'itération 1 reprend telle quelle). Garanties déclarées par outil et vérifiées (matrice de capacités, refus ou sandbox), formats générés depuis une source unique, gouvernance par couple outil × modèle ; un outil qui ne lit ses règles que depuis le repo attend le mode instance (INV-8 inchangé). Ajouts INV-13..15, BHV-9..11, EX-9/10, EVAL-11..13, NG-8, OQ-12 ; NG-4 levé |
+| 0.7.0 | 2026-11-12 | Owner | Trou relevé au CP-6 (revue) : aucune borne pour les clés libres — `max_parallel = 0` faisait planter le moteur, `max_task_attempts = 0` ne tentait aucune tâche, un budget négatif passait. Ajout BHV-3d (bornes, refus rc 1) ; EVAL-3 précise aussi « égal au plancher accepté » pour chaque clé de sécurité (bug du même CP) |
 | 0.6.0 | 2026-11-12 | Owner | Rôle `improver` (itération 4) : l'expérience des runs devient des propositions d'amélioration du scaffolding, déclenchées par seuils, évaluées (incident → nouveau cas d'abord, aucune régression) puis validées par signature ; ne touche jamais à ce qui le juge. Ajouts BHV-12, INV-16, EX-11, EVAL-14 ; NG-5 précisé |
