@@ -75,6 +75,7 @@ def build_docker_argv(
     network: str,
     workspace: Path,
     claude_cmd: list[str],
+    kit: Path | None = None,
     env: dict,
     uid_gid: str | None,
     memory: str = DEFAULT_MEMORY,
@@ -86,7 +87,8 @@ def build_docker_argv(
     SECURITY INVARIANTS asserted by tests:
       - LAB_APPROVAL_SECRET never appears in the argv;
       - rootfs read-only, caps dropped, no-new-privileges, non-root, limited;
-      - only the repo is bind-mounted (no host $HOME);
+      - only the repo is bind-mounted (no host $HOME) — plus, for an external instance
+        (`kit` given, ADR-15), the kit root at /kit, READ-ONLY (`:ro`, E-17);
       - the agent-facing `claude` command is identical to the host runner.
     """
     argv = [
@@ -116,6 +118,9 @@ def build_docker_argv(
         "-e",
         f"HOME={home}",
     ]
+    if kit is not None:  # external instance: the kit's plugin/settings, read-only
+        i = argv.index("-w")
+        argv[i:i] = ["-v", f"{kit}:/kit:ro"]
     if uid_gid:  # run as the host user → non-root AND can write the bind mount
         argv += ["--user", uid_gid]
     for k in sorted(env):
@@ -157,13 +162,12 @@ class SandboxedClaudeRunner(AgentRunner):
         plugin_dir: str | None = None,
         settings: str | None = None,
         append_system_prompt: str | None = None,
+        kit_mount: Path | None = None,
     ) -> RunResult:
-        # NOTE: add_dirs (host paths outside the workspace, e.g. the LAB when building an
-        # external project) is intentionally NOT forwarded — the sandbox bind-mounts ONLY
-        # the workspace, so a host path would not exist inside the container. Driving an
-        # external project from the sandbox would require also mounting the LAB read-only
-        # (operator work, see docs/how-to/use-the-sandbox.md). Accepted here to keep the
-        # AgentRunner interface uniform.
+        # External instance (ADR-15): `kit_mount` (the host kit root) is bind-mounted at
+        # /kit read-only, and the engine has already translated plugin_dir / settings /
+        # add_dirs to /kit/… — no host path reaches the container's claude argv. Without
+        # `kit_mount` (kit mode) paths are cwd-relative (ADR-10) and add_dirs is unused.
         claude_cmd = claude_argv(
             prompt,
             model=model,
@@ -171,7 +175,8 @@ class SandboxedClaudeRunner(AgentRunner):
             allowed_tools=allowed_tools,
             max_turns=max_turns,
             permission_mode=permission_mode,
-            # Kit mode only (ADR-10): cwd-relative paths, valid inside /workspace.
+            # Kit mode: cwd-relative paths (ADR-10); external: /kit/… (ADR-15).
+            add_dirs=add_dirs if kit_mount is not None else None,
             plugin_dir=plugin_dir,
             settings=settings,
             append_system_prompt=append_system_prompt,
@@ -181,6 +186,7 @@ class SandboxedClaudeRunner(AgentRunner):
             network=self.network,
             workspace=Path(cwd),
             claude_cmd=claude_cmd,
+            kit=Path(kit_mount) if kit_mount is not None else None,
             env=curate_env(env),
             uid_gid=self._uid_gid(),
             memory=self.memory,

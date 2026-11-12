@@ -231,6 +231,52 @@ RULES_REL = PLUGIN_REL / "rules" / "hard-rules.md"
 MIN_CLAUDE_VERSION = (2, 1, 295)  # `onFailure` hooks (design ADR-6)
 
 
+SANDBOX_KIT = "/kit"  # where the sandbox mounts the kit root, read-only (ADR-15)
+
+
+class SandboxPathError(ValueError):
+    """A host path that would not exist inside the sandbox container."""
+
+
+def sandboxed_external() -> bool:
+    """External instance driven through the sandbox runner: the kit lives at /kit."""
+    return (
+        PROJECT != LAB
+        and (os.environ.get("LAB_RUNNER") or "").strip().lower() == "sandbox"
+    )
+
+
+def kit_ref(path: Path | None = None) -> str:
+    """A kit path as the agent sees it: `/kit/…` in the external sandbox, host path else."""
+    p = Path(path) if path is not None else LAB
+    if not sandboxed_external():
+        return str(p)
+    rel = p.resolve().relative_to(LAB.resolve())
+    return str(Path(SANDBOX_KIT) / rel)
+
+
+def project_ref(path: Path) -> str:
+    """A path under the instance as the agent sees it: `/workspace/…` in the external
+    sandbox (the instance is mounted there), host path else."""
+    if not sandboxed_external():
+        return str(path)
+    return str(Path("/workspace") / Path(path).resolve().relative_to(PROJECT.resolve()))
+
+
+def translate_add_dirs(dirs: list[str]) -> list[str]:
+    """Sandbox + external: `--add-dir` paths inside the kit become `/kit/…`; any other host
+    path is refused (it would not exist in the container, ADR-15, I-24)."""
+    out = []
+    for d in dirs:
+        try:
+            out.append(kit_ref(Path(d)))
+        except ValueError:
+            raise SandboxPathError(
+                f"add_dir {d} is outside the kit ({LAB}): not reachable from the sandbox"
+            ) from None
+    return out
+
+
 def guardrail_options() -> dict:
     """Plugin dir, run settings and hard rules for EVERY agent call (implementer and
     reviewer alike). Resolved from the KIT root (LAB), never from PROJECT (I-2). Kit mode
@@ -238,10 +284,15 @@ def guardrail_options() -> dict:
     /workspace (ADR-10). External instance: absolute paths under the kit. The engine never
     passes `--bare`."""
     external = PROJECT != LAB
-    base = LAB if external else Path()
+    if sandboxed_external():  # kit mounted read-only at /kit (ADR-15)
+        plugin_dir = kit_ref(LAB / PLUGIN_REL)
+        settings = kit_ref(LAB / RUN_SETTINGS_REL)
+    else:
+        base = LAB if external else Path()
+        plugin_dir, settings = str(base / PLUGIN_REL), str(base / RUN_SETTINGS_REL)
     return {
-        "plugin_dir": str(base / PLUGIN_REL),
-        "settings": str(base / RUN_SETTINGS_REL),
+        "plugin_dir": plugin_dir,
+        "settings": settings,
         "append_system_prompt": (LAB / RULES_REL).read_text(encoding="utf-8"),
     }
 
@@ -337,8 +388,6 @@ def preflight() -> list[str]:
         return [
             f"claude CLI {'.'.join(map(str, found))} is too old (need >= {minimum})"
         ]
-    if external and (os.environ.get("LAB_RUNNER") or "").strip().lower() == "sandbox":
-        return ["sandbox + external instance not supported before iteration 2"]
     return []
 
 
@@ -361,6 +410,12 @@ def run_claude(
     # live under the LAB — grant that dir explicitly. When PROJECT==LAB (every test and
     # the in-repo path) no --add-dir is added, so the argv is unchanged.
     add_dirs = [str(LAB)] if PROJECT != LAB else None
+    extra: dict = {}
+    if (
+        sandboxed_external()
+    ):  # ADR-15: kit at /kit (ro); host paths translated or refused
+        add_dirs = translate_add_dirs(add_dirs or [])
+        extra["kit_mount"] = LAB
     r = RUNNER.run(
         prompt,
         cwd=PROJECT,
@@ -371,6 +426,7 @@ def run_claude(
         timeout=TASK_TIMEOUT_S,
         env=child_env,
         add_dirs=add_dirs,
+        **extra,
         **guardrail_options(),
     )
     with COST_LOCK:
@@ -573,10 +629,11 @@ def _commit_message(node: Node, feature: Path, real_ids: list[str]) -> str:
 
 def _build_base_prompt(node: Node, feature: Path) -> str:
     return (
-        f"You act as the implementer agent ({agent_file('implementer')}). "
+        f"You act as the implementer agent ({kit_ref(agent_file('implementer'))}). "
         f"Framework references (engineering rules, deployment standard, other agent files) "
-        f"live under {LAB} — resolve any such path there, not under the project. "
-        f"Read {feature}/spec.md then {feature}/design.md then {feature}/tasks.md. "
+        f"live under {kit_ref()} — resolve any such path there, not under the project. "
+        f"Read {project_ref(feature)}/spec.md then {project_ref(feature)}/design.md "
+        f"then {project_ref(feature)}/tasks.md. "
         f"Execute ONLY task {node.id} — {node.title}. "
         f"Respect its files_touched scope and its done_when. "
         f"If the spec is ambiguous or has gaps: do not invent, record the question (OQ-n format) in spec.md §8 "
@@ -897,7 +954,7 @@ def run_review(cp: Node, feature: Path, dry: bool) -> tuple[str, Path, bool]:
     for i, mid in enumerate(models):
         lens = REVIEW_LENSES[i % len(REVIEW_LENSES)] if n > 1 else "full review"
         prompt = (
-            f"You act as the reviewer agent ({agent_file('reviewer')}). Feature: {feature}. "
+            f"You act as the reviewer agent ({kit_ref(agent_file('reviewer'))}). Feature: {project_ref(feature)}. "
             f"Checkpoint {cp.id} — {cp.title}. Tasks covered: {', '.join(cp.depends_on) or 'all'}. "
             f"REVIEW LENS imposed: {lens}. "
             f"Produce the report (✅/⚠️/❌ with file:line) and you MUST end with a "
