@@ -806,9 +806,10 @@ T21 is an Owner-lane task.*
 - **parallel_group:** N
 - **implements:** [INV-7]
 - **anchored_on:** ADR-1, ADR-9, I-19
-- **files_touched:** `pyproject.toml`, `uv.lock`, `lab/plugin/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.lab/lab.toml`, `examples/devis/.lab/lab.toml`, `examples/booking/.lab/lab.toml`
+- **files_touched:** `pyproject.toml`, `uv.lock`, `lab/plugin/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.lab/lab.toml`, `examples/devis/.lab/lab.toml`, `examples/booking/.lab/lab.toml`, `tests/fde_kit/test_kit_root.py`
 - **prompt:**
-  > *Owner lane: the plugin manifest is a protected path.* Bump the kit to `0.2.0` everywhere the
+  > *Owner lane: the plugin manifest is a protected path.* *Plan delta (found doing T21):* `test_kit_root.py`
+  > asserted the literal version `0.1.0`; it now checks consistency with the plugin manifest instead. Bump the kit to `0.2.0` everywhere the
   > version lives (pyproject, plugin.json, marketplace entry; `uv lock` for the root package) and
   > re-pin `kit_version = "0.2.0"` in the kit's and both examples' `.lab/lab.toml` — an explicit
   > commit per INV-7. Commit by hand (`Run: owner`), then `lab/engine/approve.sh T21 work/fde-kit`.
