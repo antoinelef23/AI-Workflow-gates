@@ -1,11 +1,11 @@
 ---
 type: design
 feature: fde-kit
-version: 0.3.0
+version: 0.4.0
 status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by: FDE — 2026-11-12 (validé en session par QCM ; plugin sous lab/plugin/ confirmé) ; amendement 0.3.0 (OQ-9..11 du planner) approuvé le 2026-11-12
-spec: ./spec.md          # version : 0.5.0
+validated_by: FDE — 2026-11-12 (validé en session par QCM ; plugin sous lab/plugin/ confirmé) ; amendement 0.3.0 (OQ-9..11 du planner) approuvé le 2026-11-12 ; amendement 0.4.0 (spike promptfoo) approuvé le 2026-11-12
+spec: ./spec.md          # version : 0.6.0
 ---
 
 # Design — Kit FDE portable
@@ -275,6 +275,26 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
   live des couches behavioral + chain est exécutée et relue (checkpoint humain, facturé).
 - **Anchored on:** `lab/models/EVOLUTION.md` (boucle evals → scaffolding), I-1.
 
+### ADR-12 — Banc d'évaluation des modèles : spike promptfoo (itération multi-outils)
+- **Status:** proposed — spike à mener dans l'itération multi-outils (BHV-11), décision sur preuve
+- **Context:** la campagne du 2026-11-12 a montré trois défauts du banc maison (`eval_models.py`) :
+  un appel en erreur (quota, API) compté comme un échec du modèle — y compris 3 fausses violations
+  de chaîne de commandement —, un seul essai par tâche, et pas de distinction erreur/échec. BHV-11
+  exigera en plus un runner par outil (Copilot, opencode, Codex CLI).
+- **Decision:** spike : ré-exprimer les 14 cas existants dans promptfoo — nos fixtures et nos
+  fonctions `check()` restent la source unique, branchées en provider et assertions personnalisés —
+  puis rejouer la même campagne. Adoption si promptfoo est au moins aussi strict (même verdicts,
+  chaîne éliminatoire conservée) et moins coûteux à maintenir ; sinon, correction du banc maison.
+  La logique propre au lab (éliminatoire, recommandation par rôle, séparation des tâches,
+  promotion `[roles]`) reste un post-traitement du lab dans les deux cas.
+- **Anchored on:** promptfoo (outil open source d'évaluation et de red-teaming de LLM : matrice
+  fournisseurs × cas, répétitions, cache, distinction erreur/échec, providers personnalisés) —
+  référence précise (version, licence, fichiers) à collecter par design-scout avant le spike.
+- **Alternatives considered:** garder et corriger le banc maison (option de repli du spike).
+- **Consequences:** chaîne d'outils Node.js en plus du stack Python (verrouillage des versions à
+  prévoir, comme `uv.lock`) ; télémétrie et partage de résultats à désactiver explicitement pour les
+  missions client.
+
 ## 5. Contracts & data
 
 - **`.lab/lab.toml`** (instance) :
@@ -318,3 +338,4 @@ Sans objet (outillage en ligne de commande, pas d'interface).
 | 0.1.0 | 2026-11-12 | Owner + design-scout | Design de l'itération 1 (kit portable) : ADR-1..11, dont 4 décisions Owner par QCM (plugin explicite en run, `lab/plugin` source unique, exemples en instances autonomes, sandbox + instance refusée) |
 | 0.2.0 | 2026-11-12 | FDE | Design validé : ADR-1..11 acceptés, emplacement `lab/plugin/` confirmé |
 | 0.3.0 | 2026-11-12 | FDE | Trous relevés par le planner tranchés : status line dans le plugin câblée par le FDE (OQ-9, ADR-3), modèles `work/_templates/*.template.md` (OQ-10, ADR-7), `--profile` obligatoire et exemples en `squad` (OQ-11, ADR-7/9) ; message d'ADR-6 aligné sur EX-5 |
+| 0.4.0 | 2026-11-12 | FDE | ADR-12 (proposed) : spike promptfoo pour le banc d'évaluation, à mener dans l'itération multi-outils ; pointeur spec 0.6.0 |
