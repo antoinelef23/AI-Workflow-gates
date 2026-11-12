@@ -4,8 +4,8 @@ feature: fde-kit
 version: 0.2.0
 status: approved         # proposed | approved | in_progress | done
 generated_by: planner (session 2026-11-12)
-approved_by: Owner — 2026-11-12 (QCM en session ; CP-1..CP-5 bloquants ; exécution dans la session cloud, checkpoints signés sur instruction de l'Owner ; delta 2026-11-12 approuvé (« Amender le plan ») : prompts T7 et T9 — `verify` exécuté par l'orchestrateur, l'agent vérifie avec `uv run pytest -m eval`, sans lancer `just` ; delta CP-3 (rejet → T9) : `tests/fde_kit/test_kit_root.py` ajouté aux files_touched de T9 — il asserte le `pythonpath` transitoire que T9 retire ; delta T11 bloqué : T11 scindé — T15 (agent: owner, chemins protégés) puis T11 (moteur + tests, + lab_init.py et test_eval_2_run_preflight.py)) ; itération 2 (T16–T22, CP-6, CP-7) approuvée par l'Owner le 2026-11-12 — tous les checkpoints signés par l'Owner lui-même
-spec: ./spec.md          # version : 0.6.0
+approved_by: Owner — 2026-11-12 (QCM en session ; CP-1..CP-5 bloquants ; exécution dans la session cloud, checkpoints signés sur instruction de l'Owner ; delta 2026-11-12 approuvé (« Amender le plan ») : prompts T7 et T9 — `verify` exécuté par l'orchestrateur, l'agent vérifie avec `uv run pytest -m eval`, sans lancer `just` ; delta CP-3 (rejet → T9) : `tests/fde_kit/test_kit_root.py` ajouté aux files_touched de T9 — il asserte le `pythonpath` transitoire que T9 retire ; delta T11 bloqué : T11 scindé — T15 (agent: owner, chemins protégés) puis T11 (moteur + tests, + lab_init.py et test_eval_2_run_preflight.py)) ; itération 2 (T16–T22, CP-6, CP-7) approuvée par l'Owner le 2026-11-12 — tous les checkpoints signés par l'Owner lui-même ; delta CP-6 (rejet → T16, approuvé par l'Owner) : spec 0.7.0 BHV-3d + égal-au-plancher accepté
+spec: ./spec.md          # version : 0.7.0
 design: ./design.md      # version : 0.5.0
 ---
 
@@ -118,6 +118,7 @@ ADR-7 T2 · ADR-8 T2 · ADR-9 T5–T10 · ADR-10 T4 · ADR-11 T13 + CP-4.
 | BHV-3 | T16 (policy + `lab policy`), T19 (plan-lint), T18 (pre-flight + engine) | EVAL-3 |
 | BHV-3a, BHV-3b | T16 | EVAL-3 (EX-1) |
 | BHV-3c | T16 (`[overrides.routes]`, R2–R5 `auto` refused) | EVAL-3 |
+| BHV-3d | T16 (free-key bounds, spec 0.7.0 after CP-6) | EVAL-3 |
 | INV-2 | T16 | EVAL-3 (EX-1) |
 | INV-3 (profile part) | T16 | EVAL-3 |
 | INV-5 | T19 (no key can make the merge auto; existing plan-lint rule kept) | EVAL-3 |
@@ -648,7 +649,7 @@ T21 is an Owner-lane task.*
 - **agent:** implementer
 - **depends_on:** [CP-5]
 - **parallel_group:** J *(∥ T17 — disjoint paths)*
-- **implements:** [BHV-3, BHV-3a, BHV-3b, BHV-3c, INV-2, INV-3, EVAL-3]
+- **implements:** [BHV-3, BHV-3a, BHV-3b, BHV-3c, BHV-3d, INV-2, INV-3, EVAL-3]
 - **anchored_on:** ADR-13, E-15, E-16, I-6, I-25
 - **files_touched:** `lab/engine/policy_profiles.toml`, `lab/engine/policy.py`, `lab/engine/cli.py`, `tests/fde_kit/test_eval_3_policy.py`
 - **prompt:**
@@ -667,8 +668,13 @@ T21 is an Owner-lane task.*
   > the error on `PolicyError`. Tests BEFORE code, `@pytest.mark.eval`, `test_eval_3_<case>`: EX-1
   > both inputs exactly; the profile table equals BHV-3 (all keys, all 3 profiles); unknown key;
   > route R3 `auto` refused, R6 `human` accepted. Do not touch orchestrate.py or planlint.py (T18/T19).
+  > *Plan delta (CP-6 rejection, spec 0.7.0):* a safety key EQUAL to its floor is accepted for every
+  > direction — `strict = "true"` is looser only when the floor is true and the value false (mirror for
+  > `"false"`); BHV-3d: `max_task_attempts`, `max_parallel`, `max_cp_rejects` must be integers ≥ 1 and
+  > `budget_usd` ≥ 0, else `PolicyError` naming key, value and bound. Tests: equal-to-floor for each
+  > yes/no safety key on `solo` and `squad`; each BHV-3d bound (0 / negative refused, bound accepted).
   > Check with `uv run pytest`; the orchestrator runs `verify`.
-- **done_when:** EVAL-3 policy cases green (EX-1 exact, table exact, BHV-3a/3b/3c refusals); `lab policy` prints key/value/origin
+- **done_when:** EVAL-3 policy cases green (EX-1 exact, table exact, BHV-3a/3b/3c/3d refusals, equal-to-floor accepted for every safety key); `lab policy` prints key/value/origin
 - **verify:** `uv run pytest -q -m eval tests/fde_kit/test_eval_3_policy.py`
 - **status:** ☐ pending → ☐ running → ☐ done
 
