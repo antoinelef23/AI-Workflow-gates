@@ -115,7 +115,33 @@ COST_TOTAL = {"usd": 0.0}
 # files_touched of the tasks currently running (parallel waves): a sibling's
 # in-flight edits are not a scope leak of the task being checked.
 RUNNING_LOCK = threading.Lock()
+# files_touched of every task of the CURRENT wave, kept until the wave ends: a sibling
+# that stopped without committing (blocked/failed) leaves files that are its own, not a
+# scope leak of another task (fde-kit iteration 2: T22's docs charged to T20).
 RUNNING_FILES: dict[str, list[str]] = {}
+# Tasks of the wave whose agent is mid-turn. A task is judged (verify, gate, scope leak)
+# only once no sibling is mid-turn, so it never sees a sibling's half-done edits in the
+# shared tree (T22's lint gate went red on T20's unformatted work in progress).
+ACTIVE: set[str] = set()
+ACTIVE_COND = threading.Condition()
+
+
+def _set_active(node_id: str, active: bool) -> None:
+    with ACTIVE_COND:
+        (ACTIVE.add if active else ACTIVE.discard)(node_id)
+        ACTIVE_COND.notify_all()
+
+
+def _settle(node_id: str) -> None:
+    """Leave the active set and wait until no sibling agent is mid-turn. Waiting tasks
+    are not active, so siblings that all reach this point proceed together; a wave of
+    one never waits."""
+    with ACTIVE_COND:
+        ACTIVE.discard(node_id)
+        ACTIVE_COND.notify_all()
+        ACTIVE_COND.wait_for(lambda: not (ACTIVE - {node_id}))
+
+
 # fd of the inter-process flock kept open for the whole run (released on process
 # exit by the OS). Prevents two orchestrators from racing on the same feature.
 _ORCH_LOCK_FD: int | None = None
@@ -693,12 +719,22 @@ def run_owner_task(node: Node, feature: Path, dry: bool, real_ids: list[str]) ->
 
 
 def run_task(node: Node, feature: Path, dry: bool) -> str:
+    try:
+        return _run_task(node, feature, dry)
+    finally:
+        _set_active(node.id, False)  # finished, blocked or failed: never hold siblings
+
+
+def _run_task(node: Node, feature: Path, dry: bool) -> str:
     """Returns done | failed | blocked. Per attempt: run the agent → parse the
     STATUS verdict → run verify → run the eval gate → scoped commit on green."""
     if node.agent == "owner":
         ids = list(
             dict.fromkeys(s for t in node.implements for s in SPEC_ID.findall(t))
         )
+        _set_active(
+            node.id, False
+        )  # no agent turn: waiting on a human never holds siblings
         return run_owner_task(node, feature, dry, ids)
     if dry:
         print(
@@ -713,13 +749,9 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
     mid = resolve_model("implementer", node.model, REGISTRY)
     base_prompt = _build_base_prompt(node, feature) + REGISTRY.profile_text(mid)
     baseline = _dirty_paths()
-    with RUNNING_LOCK:
+    with RUNNING_LOCK:  # cleared at the start of the next wave, not here
         RUNNING_FILES[node.id] = list(node.files)
-    try:
-        return _run_task_attempts(node, feature, real_ids, base_prompt, mid, baseline)
-    finally:
-        with RUNNING_LOCK:
-            RUNNING_FILES.pop(node.id, None)
+    return _run_task_attempts(node, feature, real_ids, base_prompt, mid, baseline)
 
 
 def _run_task_attempts(
@@ -743,7 +775,9 @@ def _run_task_attempts(
             )
         else:
             prompt = base_prompt + extra
+        _set_active(node.id, True)
         r = run_claude(prompt, resume=session, model=mid)
+        _settle(node.id)  # judge the turn only on a tree no sibling is still editing
         journal(
             feature,
             event="task_attempt",
@@ -1204,6 +1238,11 @@ def main() -> int:
         if tasks:
             wave = ", ".join(n.id for n in tasks)
             print(f"\n=== Parallel wave: {wave} ===")
+            with RUNNING_LOCK:
+                RUNNING_FILES.clear()
+            with ACTIVE_COND:  # registered before any starts: no task judges too early
+                ACTIVE.clear()
+                ACTIVE.update(n.id for n in tasks[:MAX_PARALLEL])
             with ThreadPoolExecutor(max_workers=MAX_PARALLEL) as ex:
                 futs = {ex.submit(run_task, n, feature, args.dry_run): n for n in tasks}
                 for fut in as_completed(futs):
