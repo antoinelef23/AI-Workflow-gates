@@ -20,6 +20,10 @@ if sys.argv[1:2] == ["--version"]:
     sys.exit(0)
 with open(os.environ["ARGV_LOG"], "a") as f:
     f.write(json.dumps(sys.argv[1:]) + "\\n")
+agent_dir = os.path.join(os.getcwd(), ".agent")
+with open(os.environ["ARGV_LOG"] + ".cwd", "a") as f:
+    found = sorted(os.listdir(agent_dir)) if os.path.isdir(agent_dir) else []
+    f.write(json.dumps(found) + "\\n")
 print(json.dumps({"result": "STATUS: done\\nVERDICT: PASS", "total_cost_usd": 0.0}))
 """
 
@@ -57,7 +61,15 @@ def _campaign(tmp_path: Path, layer: str) -> list[list[str]]:
         timeout=180,
     )
     assert r.returncode == 0, r.stdout + r.stderr
-    return [json.loads(line) for line in log.read_text().splitlines()]
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    cwd_files = [
+        json.loads(line) for line in Path(str(log) + ".cwd").read_text().splitlines()
+    ]
+    for argv, present in zip(calls, cwd_files, strict=True):
+        prompt = argv[argv.index("-p") + 1]
+        role = "implementer" if ".agent/implementer.md" in prompt else "reviewer"
+        assert present == [f"{role}.md"], (role, present)
+    return calls
 
 
 def _assert_run_options(argv: list[str]) -> None:
@@ -72,19 +84,12 @@ def _assert_run_options(argv: list[str]) -> None:
     assert argv[argv.index("--model") + 1] == "m1"
     assert "--allowedTools" in argv
     assert "--bare" not in argv
-    # the role file is cited by absolute path and readable from the temp cwd
-    dirs = [argv[i + 1] for i, a in enumerate(argv) if a == "--add-dir"]
-    assert len(dirs) == 1
-    assert dirs[0].endswith("lab/plugin/agents")
-    for d in dirs:  # no grant covers evals/ (answer keys) or the kit root
-        assert not (REPO / "evals").is_relative_to(Path(d))
-        assert Path(d) != REPO
+    # The role file is a COPY in the trial cwd: no --add-dir at all, and no path
+    # into the kit in the prompt (its Bash tools could read evals/, the answer keys).
+    assert "--add-dir" not in argv
     prompt = argv[argv.index("-p") + 1]
-    assert any(
-        str(REPO / "lab" / "plugin" / "agents" / f"{r}.md") in prompt
-        for r in ("implementer", "reviewer")
-    )
-    assert "(lab/plugin/agents/" not in prompt
+    assert ".agent/implementer.md" in prompt or ".agent/reviewer.md" in prompt
+    assert str(REPO) not in prompt
 
 
 def test_behavioral_trial_argv_carries_run_options(tmp_path: Path) -> None:
@@ -99,3 +104,22 @@ def test_chain_trial_argv_carries_run_options(tmp_path: Path) -> None:
     assert calls
     for argv in calls:
         _assert_run_options(argv)
+
+
+def test_role_prompts_format_with_prompt_only_and_fixture_ships_role_file() -> None:
+    # Covers the scorecard layer's prompt too (no golden task under a temp LAB_ROOT).
+    sys.path.insert(0, str(REPO / "lab" / "engine"))
+    import eval_models
+
+    for role in ("implementer", "reviewer"):
+        text = eval_models.ROLE_PROMPT[role].format(prompt="Do {x}.")
+        assert f".agent/{role}.md" in text and "Do {x}." in text
+        wd = eval_models.setup_fixture({"spec.md": "s\n"}, role=role)
+        shipped = (wd / ".agent" / f"{role}.md").read_text(encoding="utf-8")
+        assert shipped == (REPO / "lab/plugin/agents" / f"{role}.md").read_text(
+            encoding="utf-8"
+        )
+        status = subprocess.run(
+            ["git", "status", "--porcelain"], cwd=wd, capture_output=True, text=True
+        ).stdout
+        assert status == ""  # part of the baseline: the git-status checkers stay exact

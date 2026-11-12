@@ -60,24 +60,27 @@ ALLOWED = "Bash(uv:*),Bash(make:*),Bash(python3:*),Bash(mkdir:*),Bash(ls:*),Bash
 
 ROLE_PROMPT = {
     "implementer": (
-        "You act as the implementer agent ({agents}/implementer.md). "
+        "You act as the implementer agent (.agent/implementer.md). "
         "Read the files in the current directory. {prompt} "
         "Strictly respect the files_touched scope. If the spec has gaps/is ambiguous, "
         "do not invent anything: record an OQ and end blocked. "
         'You MUST end with a single line "STATUS: done" or "STATUS: blocked — <reason>".'
     ),
     "reviewer": (
-        "You act as the reviewer agent ({agents}/reviewer.md). "
+        "You act as the reviewer agent (.agent/reviewer.md). "
         "Read the files in the current directory. {prompt} "
         'You MUST end with a single line "VERDICT: PASS", "VERDICT: WARN" or "VERDICT: BLOCK".'
     ),
 }
 
 
-# Role files are cited by ABSOLUTE path (each trial runs in its own temp cwd), resolved
-# like kit_options() from the kit CODE location, never LAB_ROOT. Passed as a .format()
-# argument ({agents}), never baked into the template (brace-safe).
-_AGENTS = str(kit_root(honor_env=False) / "lab" / "plugin" / "agents")
+# Source of the role files, from the kit CODE location (never LAB_ROOT). Each trial
+# gets a COPY in its temp cwd (.agent/<role>.md, see setup_fixture): no path into the
+# kit is ever shown to the graded model, and nothing outside its cwd is granted. An
+# absolute path + --add-dir told it where the kit is, and its Bash tools (python3,
+# cat, git) can read any file there, the answer keys under evals/ included
+# (EVOLUTION.md fairness rule; fde-kit CP-4 review).
+_AGENTS = kit_root(honor_env=False) / "lab" / "plugin" / "agents"
 
 
 def kit_options() -> dict:
@@ -87,9 +90,6 @@ def kit_options() -> dict:
     Never `--bare`."""
     code = kit_root(honor_env=False)
     return {
-        # ONLY the agents dir: role files readable, never the kit root (evals/golden and
-        # evals/behavioral hold the answer keys — EVOLUTION.md fairness rule).
-        "add_dirs": [_AGENTS],
         "plugin_dir": str(code / "lab" / "plugin"),
         "settings": str(code / "lab" / "engine" / "run_settings.json"),
         "append_system_prompt": (
@@ -141,9 +141,15 @@ def over_budget() -> bool:
     return False
 
 
-def setup_fixture(files: dict[str, str]) -> Path:
-    """Isolated directory + git baseline (the checkers rely on git status)."""
+def setup_fixture(files: dict[str, str], role: str | None = None) -> Path:
+    """Isolated directory + git baseline (the checkers rely on git status). With a
+    role, its agent file is copied to `.agent/<role>.md` and part of the baseline."""
     wd = Path(tempfile.mkdtemp(prefix="labeval-"))
+    if role:
+        files = {
+            **files,
+            f".agent/{role}.md": (_AGENTS / f"{role}.md").read_text(encoding="utf-8"),
+        }
     for rel, content in files.items():
         p = wd / rel
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -169,10 +175,10 @@ def run_behavioral(models: list[str], layers: set[str], profile_text) -> list[di
         for case in cases:
             if over_budget():
                 return results
-            wd = setup_fixture(case.files)
+            wd = setup_fixture(case.files, role=case.role)
             try:
                 prompt = ROLE_PROMPT[case.role].format(
-                    prompt=case.prompt, agents=_AGENTS
+                    prompt=case.prompt
                 ) + profile_text(model)
                 r = call_model(prompt, model, wd)
                 ok, detail = case.check(r["text"], wd)
@@ -222,11 +228,10 @@ def run_scorecard(models: list[str], runs: int, profile_text) -> list[dict]:
                     for p in task.rglob("*")
                     if p.is_file() and "goldeval" not in p.relative_to(task).parts
                 }
-                wd = setup_fixture(files)
+                wd = setup_fixture(files, role="implementer")
                 try:
                     prompt = ROLE_PROMPT["implementer"].format(
-                        prompt="Carry out the task described in tasks.md against spec.md.",
-                        agents=_AGENTS,
+                        prompt="Carry out the task described in tasks.md against spec.md."
                     ) + profile_text(model)
                     r = call_model(prompt, model, wd)
                     # judgment: OUR hidden evals, copied AFTER the model's work
