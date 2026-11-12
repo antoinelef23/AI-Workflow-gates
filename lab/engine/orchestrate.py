@@ -88,10 +88,15 @@ PROJECT = (
 REGISTRY = load_registry(
     LAB
 )  # model×role assignment (empty if no lab/models/registry.toml)
-MAX_EVAL_RETRIES = 3
-MAX_PARALLEL = 3
-MAX_CP_REJECTS = 2  # beyond this: the checkpoint goes failed, manual resume
+# Engine constants: reads of the effective policy (ADR-14, I-20), resolved ONCE in main()
+# after --project (resolve_policy / apply_policy). These are only the pre-resolution
+# defaults (= the `squad` floor); env LAB_BUDGET_USD, when set, wins over budget_usd.
+MAX_EVAL_RETRIES = 3  # policy: max_task_attempts
+MAX_PARALLEL = 3  # policy: max_parallel
+MAX_CP_REJECTS = 2  # policy: max_cp_rejects — beyond this: CP failed, manual resume
 BUDGET_USD = float(os.environ.get("LAB_BUDGET_USD", "0") or 0)  # 0 = no cap
+POLICY: dict | None = None  # {key: (value, origin)} — policy.effective_policy
+PROFILE: str | None = None
 TASK_TIMEOUT_S = int(
     os.environ.get("LAB_TASK_TIMEOUT", "2400")
 )  # wall per agent: 40 min
@@ -224,6 +229,46 @@ def agent_file(role: str) -> Path:
 def _parse_version(text: str) -> tuple[int, ...] | None:
     m = re.search(r"(\d+)\.(\d+)\.(\d+)", text)
     return tuple(int(x) for x in m.groups()) if m else None
+
+
+def resolve_policy(
+    force: bool,
+) -> tuple[dict | None, str | None, list[str]]:
+    """Effective policy of PROJECT (ADR-14, ADR-16). Returns (policy, profile, refusals).
+    Refusals (rc 1): no .lab/lab.toml (names `lab init`), PolicyError, sandbox_required
+    without LAB_RUNNER=sandbox, allow_force=false with --force."""
+    from lab_init import LabTomlError, read_lab_toml
+    from policy import PolicyError, effective_policy
+
+    try:
+        lab_toml = read_lab_toml(PROJECT)
+        policy = effective_policy(lab_toml)
+    except (LabTomlError, PolicyError) as e:
+        return None, None, [str(e)]
+    refusals = []
+    runner = (os.environ.get("LAB_RUNNER") or "").strip().lower()
+    if policy["sandbox_required"][0] is True and runner != "sandbox":
+        refusals.append(
+            f"sandbox_required is true (profile '{lab_toml['profile']}'): "
+            "set LAB_RUNNER=sandbox to run"
+        )
+    if force and policy["allow_force"][0] is False:
+        refusals.append(
+            f"allow_force is false (profile '{lab_toml['profile']}'): --force is refused"
+        )
+    return policy, lab_toml["profile"], refusals
+
+
+def apply_policy(policy: dict) -> None:
+    """The engine constants become reads of the effective policy (I-20)."""
+    global MAX_EVAL_RETRIES, MAX_PARALLEL, MAX_CP_REJECTS, BUDGET_USD
+    MAX_EVAL_RETRIES = int(policy["max_task_attempts"][0])
+    MAX_PARALLEL = int(policy["max_parallel"][0])
+    MAX_CP_REJECTS = int(policy["max_cp_rejects"][0])
+    if (os.environ.get("LAB_BUDGET_USD") or "").strip():
+        BUDGET_USD = float(os.environ["LAB_BUDGET_USD"])  # operator setting wins
+    else:
+        BUDGET_USD = float(policy["budget_usd"][0] or 0)
 
 
 def preflight() -> list[str]:
@@ -999,6 +1044,17 @@ def main() -> int:
         global PROJECT
         PROJECT = Path(args.project).resolve()
 
+    # Effective policy, resolved ONCE after --project (ADR-14). Pre-flight refusals apply
+    # to real runs and --dry-run, never to --validate (which only lints, policy if any).
+    global POLICY, PROFILE
+    POLICY, PROFILE, policy_refusals = resolve_policy(args.force)
+    if policy_refusals and not args.validate:
+        for m in policy_refusals:
+            print(f"⛔ pre-flight: {m}", file=sys.stderr)
+        return 1
+    if POLICY is not None:
+        apply_policy(POLICY)
+
     feature = (PROJECT / args.feature).resolve()
     fm, nodes = parse_tasks_md(feature / "tasks.md")
 
@@ -1010,7 +1066,7 @@ def main() -> int:
     except (OSError, json.JSONDecodeError, AttributeError):
         done_ids = set()
     errors, warnings = validate(
-        feature, fm, nodes, REGISTRY, project=PROJECT, done=done_ids
+        feature, fm, nodes, REGISTRY, project=PROJECT, done=done_ids, policy=POLICY
     )
     if args.validate or errors or warnings:
         print(
@@ -1089,6 +1145,15 @@ def main() -> int:
         except OSError as e:
             print(f"⛔ {e}", file=sys.stderr)
             return 1
+    if not args.dry_run:
+        journal(
+            feature,
+            event="run_start",
+            profile=PROFILE,
+            policy={
+                k: {"value": v, "origin": o} for k, (v, o) in (POLICY or {}).items()
+            },
+        )
     if state_f.exists() and not args.dry_run:
         # Tolerant resume (finding L9): a truncated state.json (kill mid-write)
         # must not crash the resume — we start clean rather than crash.
