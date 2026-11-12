@@ -871,6 +871,13 @@ def wait_checkpoint(
         )
         return "approved", {}
 
+    # A rejection already waiting (e.g. dropped while the engine was restarted) is
+    # honored BEFORE paying for a new review panel: rejecting is the conservative
+    # outcome, the review would change nothing. An approval is never short-cut —
+    # the review is regenerated first (self-hosting protocol).
+    if (feature / ".approvals" / f"{node.id}.rejected").exists():
+        return _await_token(node, feature, "checkpoint")
+
     verdict, report, self_only = run_review(node, feature, dry)
     evals_ok, _ = run_evals()
 
