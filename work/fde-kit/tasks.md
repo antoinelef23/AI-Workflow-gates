@@ -2,9 +2,9 @@
 type: tasks
 feature: fde-kit
 version: 0.1.0
-status: proposed         # proposed | approved | in_progress | done
+status: approved         # proposed | approved | in_progress | done
 generated_by: planner (session 2026-11-12)
-approved_by: — (pending Owner approval; OQ-9..11 resolved 2026-11-12 → design 0.3.0; CP modes arbitrated: all blocking)
+approved_by: Owner — 2026-11-12 (QCM en session ; CP-1..CP-5 bloquants ; exécution dans la session cloud, checkpoints signés sur instruction de l'Owner)
 spec: ./spec.md          # version : 0.3.0
 design: ./design.md      # version : 0.3.0
 ---
