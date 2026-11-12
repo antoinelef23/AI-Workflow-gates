@@ -3,70 +3,58 @@
 ## Panelist 1 — claude-opus-5-5 — lens: full review
 VERDICT: WARN
 
-# CP-4 review: fde-kit, tasks T11, T12, T13 (full review)
+# CP-4 review, second pass: fde-kit, T11 to T13 (full review)
 
-The three tasks meet their plan criteria and the tree is green. One gap in T13 should be settled before you pay for the live campaign: the trials don't receive the role file, so the campaign wouldn't measure what a real run sees.
+The fix for my first-pass finding is in place, but it opens too much. T13 now lets trials read their role file, which closes the ADR-11 gap. To do that it gives every trial read access to the whole kit, and that includes the hidden scoring checks. This should be settled before you pay for the campaign.
 
 **Checks I ran:**
-- **Tests:** `uv run pytest -q tests/orchestrator tests/sdlc_rework tests/fde_kit` gives 198 passed.
+- **Tests:** `uv run pytest -q tests/orchestrator tests/sdlc_rework tests/fde_kit` gives **200 passed** (198 at the first pass; the 2 new ones come from `94f273e`).
 - **Lint:** `ruff check` and `ruff format --check` are clean.
-- **Other guards:**
-  - The brand guard is green, with an empty denylist.
-  - `uv lock --check` is green.
-  - The content guard reports spec.md and design.md substance identical, so no version bump was needed.
-- **Not run:**
-  - `just gate-ci` was refused by this session's permissions, so I ran its parts one by one instead, except `examples-gate`.
-  - The CP-4 live campaign and spot checks are billed and human-only; I did not run them.
+- **Lockfile:** `uv lock --check` is green.
+- **Brand guard:** green, but the denylist is empty, so it checks nothing.
+- **Content guard:** spec.md and design.md substance is identical to before T15 (`2be6b62`), so no version bump was needed.
+- **Not run:** `just gate-ci` with `examples-gate`, and the billed live campaign (human-only).
 
 ## ✅ Conformant
 
-**T11 (`50f9c61`)**
-- `lab/engine/orchestrate.py:218-221`: the old `.claude/agents` fallback is gone. The agent file is always `lab/plugin/agents/<role>.md` (ADR-3).
-- `context_budget.py`, the `ROLE_PROMPT` paths in `eval_models.py`, and the `lab_init.py` docstring all point to `lab/plugin/` now (I-15).
-- `tests/fde_kit/test_eval_2_plugin.py:113-124` checks the Stop, SubagentStop and PostToolUse hooks, wired through `${CLAUDE_PLUGIN_ROOT}` (ADR-4).
-- `tests/orchestrator/test_hooks.py:63-85` covers an instance that has `.lab/lab.toml` but no `pyproject.toml`: red evals give exit 2 (I-4).
-- `tests/fde_kit/test_plugin_cutover.py` checks that `git ls-files .claude` is empty and that no engine file references `.claude/`.
-  - It exempts `planlint.py:45` and `plan.py:33`. I checked both: they only *name* the folder (in a docstring and a comment), to detect Owner-lane tasks.
-- `tests/fde_kit/test_eval_2_run_preflight.py:249-251` relaxes one assertion. This is justified: the agent path in the prompt is now absolute under `k/lab`, while the `--plugin-dir` and `--settings` values still have to be relative.
+**T11 (`50f9c61`) and T12 (`a243a5d`):** no change since the first pass, and those findings still hold. The `.claude/` fallback is gone, the plugin hooks are tested, the hard rules live in one file, and CLAUDE.md now holds only the kit-specific parts.
 
-**T12 (`a243a5d`)**
-- `lab/plugin/rules/hard-rules.md` matches the three sections removed from CLAUDE.md, except for one blank line. Its only commit is T3 (`81cbfee`), so no rule was added or reworded.
-- CLAUDE.md shares no line longer than 40 characters with the rules file.
-- CLAUDE.md now points to the rules file, states the brand-guard scope (`examples/**` scanned, `**/assets/**` excluded, ADR-9), and says agents load with `--plugin-dir lab/plugin`.
-- AGENTS.md is still a pointer to the rules file; `test_agents_md.py` now compares its size against the rules file.
-- `context_budget.py:32-38` counts the rules file and counts CLAUDE.md only when it exists; a new test covers both cases.
+**T13 rework (`bc58ecd`), checked against the reject note (`tasks.md:669`):**
+- `lab/engine/eval_models.py:76-80`: `ROLE_PROMPT` now gives the role file's absolute path, built from `kit_root(honor_env=False)`. The old relative path is gone.
+- `lab/engine/eval_models.py:90`: `kit_options()` adds `add_dirs=[kit root]`. This matches a real run's `--add-dir LAB` (`orchestrate.py:292`), and it reaches the behavioral layer (`:175`), the chain layer and the scorecard layer (`:228`), all through `call_model` (`:108`).
+- `tests/fde_kit/test_eval_models_argv.py:75-82`: one shared assertion, used by both the behavioral and chain tests. It checks `--add-dir` equals the repo root, that the prompt holds the absolute agent path, and that the relative form is gone. This is what the reject note asked for.
+- **Scope:** only `eval_models.py`, the test file and the `tasks.md` journal changed, all inside `files_touched`. `orchestrate.py` was not touched, as instructed.
+- **Traceability:** the subject is tagged `[BHV-2]` and the `Spec-IDs: BHV-2` trailer is present.
+- **Quality:** no TODO or FIXME, and no secrets.
 
-**T13 (`046b936`)**
-- `eval_models.py:94-102` now builds its command with `runner.claude_argv` (I-1).
-- `kit_options()` at `eval_models.py:77-89` adds the plugin dir, settings and rules with absolute kit paths, and never `--bare`. It keeps the allowed tools, `--model` and the per-trial temp folder.
-- `tests/fde_kit/test_eval_models_argv.py` tests this with the shim only (no billed call), for both the behavioral and chain layers.
-- The task cites two blocks of hand-built command code (`:83-99`, `:132-148`), but only one existed. The second range is `run_behavioral`, which already called `call_model`, so one change fixes both layers.
-
-**Traceability:** each commit has its spec IDs in the subject and the `Spec-IDs:` trailer. Every file touched is inside its task's `files_touched`, plus the task's status line in `tasks.md`.
+**`94f273e`** (an Owner engine fix, outside T11 to T13): the trajectory guard now accepts an `owner_signed` event as proof of an Owner-lane attempt. The commit body explains why, and it comes with tests.
 
 ## ⚠️ To arbitrate
 
-1. **T13 does not fully meet ADR-11 ("same options as a run").** This affects what the billed campaign measures.
-   - `eval_models.py:62,69`: `ROLE_PROMPT` cites the role file by a relative path, `lab/plugin/agents/<role>.md`. Each trial runs in a temp `labeval-*` folder where that path doesn't exist.
-   - `call_model` (`eval_models.py:94-102`) passes no `add_dirs`.
-   - A real run in an outside project uses the absolute `agent_file()` path (`orchestrate.py:498,796`) and passes `--add-dir LAB` (`orchestrate.py:292`).
-   - So in live trials the model gets the rules but cannot read its role file (implementer.md or reviewer.md). ADR-11's context (`design.md:270-272`) names exactly this gap: "sans règles **ni agents**".
-   - **Recommendation:** before running the billed campaign, reject back to T13 (`reject.sh CP-4 work/fde-kit "…" T13`). Use `agent_file()`-style absolute paths in `ROLE_PROMPT`, pass `add_dirs=[kit root]`, and add one shim assertion for both.
-2. **Duplicated paths.** `kit_options()` (`eval_models.py:77-89`) repeats the paths from `guardrail_options()` (`orchestrate.py:198-215`) instead of sharing them. There is still only one function that builds the command, but if the rules file moves, the two copies can drift apart.
-3. **The trajectory guard is red.** It is not part of `gate`, and neither cause is in T11–T13.
-   - `trajectory_guard.py` treats T15 as forged (`journal.jsonl:33`, a `task_done` marked `lane: owner` with no attempt before it). The guard doesn't know about the Owner lane added in `ed61c07`, so the guard needs fixing, not the task.
-   - It also flags old scope drift: `progress.md` was touched by T7 (`192203b9`).
-   - `journal.jsonl:1` still holds a fake `run_end` from a dry run, already raised at CP-1 and CP-3.
-4. **Placeholder commit bodies.** The `Why:` line in each auto commit (`50f9c61`, `a243a5d`, `046b936`) only repeats the task title and `done_when`; it records no reasoning. One example: why `planlint.py` and `plan.py` are exempt is written only in a test comment. This is how the orchestrator writes all its auto commits, not something these tasks did.
-5. **CP-4's own checks are still pending and are yours to run:**
-   - `just eval-models layer=behavioral live=1` then `layer=chain live=1`, and read the dated scorecards.
-   - Ask a real `claude -p` (built with the run's command) to write `.approvals/CP-1`; it should be denied (EX-5).
-   - Open `claude --plugin-dir lab/plugin` in a temp instance; it should show the hard rules (BHV-2b).
+1. **`--add-dir <kit root>` lets trials read the hidden evals. Settle this before the billed campaign.**
+   - **Where:** `lab/engine/eval_models.py:90` applies to every layer.
+   - **Scorecard layer:** the harness deliberately leaves `goldeval/` out of the trial's folder (`eval_models.py:221`) and copies it in only after the model has finished (`:231`). With the whole kit readable, the model can still open `evals/golden/*/goldeval/check.sh` directly.
+   - **Behavioral and chain layers:** the model can also read `evals/behavioral/cases.py`, which holds the `check()` logic that grades it.
+   - **Nothing denies these reads:** `lab/engine/run_settings.json` only denies edits to `.approvals` and `.runs`.
+   - **Why it matters:** this breaks the fairness rule in `lab/models/EVOLUTION.md:10-12` ("judged against references that the model does not write itself"). The prompt now hands the model an absolute path inside the kit, which makes it more likely to wander there.
+   - **How this happened:** the kit-root grant was what the Owner's reject note prescribed (`tasks.md:669`), and it came from my first-pass recommendation. The implementer followed it faithfully, so this is a decision to revisit, not an implementer error.
+   - **Recommendation:** narrow the grant to `lab/plugin` (or `lab/plugin/agents`), which is all the trials need to read. A real run's `--add-dir LAB` is fine because an orchestrated run doesn't sit next to the answer key. Add a shim assertion that `--add-dir` does not cover `evals/`. If you choose to keep the kit-root grant, run only `layer=behavioral` and `layer=chain`, never `live=1` on every layer, and record that the reviewed scorecards could have seen the hidden checks.
+2. **The role-path text can break on unusual folder names** (`eval_models.py:80` with `:172` and `:225`). The absolute path is put into the template before `.format()` runs, so a kit folder whose path contains `{` or `}` would crash every trial with a KeyError. It is unlikely. A fix is to escape the path, or pass `agents=` to `.format()`.
+3. **Duplicated paths** (`eval_models.py:84-96` and `orchestrate.py:198-215`) are unchanged. The reject note ruled this out of scope, so I list it only as a note.
+4. **The trajectory guard is still red, with 2 violations, neither caused by T11 to T13:**
+   - T15 has no prior attempt in the journal. Its entry was written before `94f273e`, which records this.
+   - `192203b` (T7) touched `progress.md`; this was already raised.
+   - `just check-trajectory` is a criterion of the final checkpoint, so it has to be dealt with before then, not at CP-4.
+5. **The `Why:` line is a placeholder** in `bc58ecd`. It repeats the task title and does not mention the CP-4 rejection that triggered the rework, so the reason is only in the `tasks.md` journal. This is how the orchestrator writes all its automatic commits.
+6. **CP-4's own checks are still yours to run:**
+   - The live campaign: behavioral first, then chain.
+   - A real `claude -p` asked to write `.approvals/CP-1` should be denied (EX-5).
+   - An interactive `claude --plugin-dir lab/plugin` session should show the hard rules (BHV-2b).
    - Check whether `--settings` still applies under `--bare`.
    - Item 1 bears directly on the first of these.
 
 ## ❌ Blockers
 
-None found in the code. T11–T13 meet their `done_when`, and the suites and guards I ran are green; `examples-gate` was not run.
+None in the code. T11 to T13 meet their `done_when` and the suites I ran are green. I did not run `examples-gate`.
 
 VERDICT: WARN
