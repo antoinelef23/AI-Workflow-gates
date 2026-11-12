@@ -57,7 +57,7 @@ Scorecards : `lab/models/scorecards/2026-11-12-*.md|jsonl`.
 | T5 | ✅ done | `89d2532` |
 | CP-2 | ✅ approuvé (aucune PR ouverte vérifiée) | `b62cdde` |
 | T6 | ✅ done — **déplacement fait à la main** (exception autorisée « une seule fois », agent sans droit `git mv`) | `90fb9f9` (+ `c2aebe2` auto) |
-| **T7** | 🛑 **blocked** — travail fait, vérif verte (1063 evals lancées par Claude), mais l'agent refusait de conclure sans lancer `just` lui-même | non commité |
+| **T7** | 🛑 **blocked** dans `state.json` — travail fait, vérif verte (1063 evals lancées par Claude), mais l'agent refusait de conclure sans lancer `just` lui-même | commité à la main sur instruction de l'Owner (changement de compte) — voir `git log -1 -- examples/devis/pyproject.toml` |
 | T8, T10 | ✅ done | `6f3948d` `a44e003` |
 | T9, CP-3, T11–T14, CP-4, CP-5 | ⏭ skipped (dépendent de T7) | — |
 
@@ -73,9 +73,10 @@ lancer `just` ». Puis :
 
 1. Modifier les prompts de T7 et T9 dans `work/fde-kit/tasks.md` + noter le delta dans
    `approved_by` ; `bash .githooks/pre-commit && git commit` (format canonique, Why: plan gap).
-2. Les fichiers non commités de T7 (`examples/devis/{pyproject.toml,uv.lock,justfile,.lab/,work/README.md,work/_templates/}`)
-   peuvent rester (l'agent les réutilisera) ; **dans une nouvelle machine ils sont perdus** : T7
-   les régénère (`lab init` + `uv lock`), coût ≈ 0,3 $.
+2. Les fichiers de T7 (`examples/devis/{pyproject.toml,uv.lock,justfile,.lab/,work/README.md,work/_templates/}`)
+   sont **commités** (exception manuelle demandée par l'Owner avant changement de compte). À la
+   reprise, T7 est rejoué : l'agent trouve le travail fait, l'orchestrateur lance la vérif et
+   confirme ; le commit auto de T7 sera vide ou ne contiendra que le journal du run.
 3. Relancer le run (reprend à T7) :
    ```bash
    export LAB_APPROVAL_SECRET="$(openssl rand -hex 32)"   # nouveau secret : l'ancien vivait dans le scratchpad
