@@ -1,10 +1,10 @@
 ---
 type: spec
 feature: lab-fixes
-version: 0.2.0
+version: 0.3.0
 status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by: Owner — 2026-11-13 (validée en session, telle que proposée) ; amendement 0.2.0 (OQ-1, OQ-2 tranchées par l'Owner) le 2026-11-13
+validated_by: Owner — 2026-11-13 (validée en session, telle que proposée) ; amendement 0.2.0 (OQ-1, OQ-2 tranchées par l'Owner) le 2026-11-13 ; amendement 0.3.0 (BHV-1c, OQ-3 tranchée par l'Owner) le 2026-11-13
 ---
 
 # Spec — Lab fixes before iteration 3: run control, honest journal and commits, non-mutating gate
@@ -57,7 +57,10 @@ locked by an eval.
   - **BHV-1a** — A second signal during the shutdown: exits at once (rc 130), the same state and
     journal guarantees hold for what was already written (no partial `state.json`: atomic write).
   - **BHV-1b** — Interrupt while waiting at a checkpoint or an Owner-lane task: same as BHV-1, with
-    no in-flight task; the checkpoint stays `pending`.
+    no in-flight task — the waiting node is NOT listed in `run_interrupted.inflight`; it stays `pending`.
+  - **BHV-1c** — Interrupt after an Owner-lane task was signed but before its verify / eval gate
+    finished: the task returns to `pending` and, on restart, the Owner signs it **again** — a
+    signature given before an interruption is never reused (the tree may have changed since).
 
 ### BHV-2 — A dry run leaves no trace
 - **Given** a feature with or without a run record
@@ -157,7 +160,7 @@ covers: [BHV-6, INV-5]
 
 | ID | Type | Description | Covers | Success threshold |
 |---|---|---|---|---|
-| EVAL-1 | deterministic | shim agent sleeping in a 2-task wave; SIGINT ⇒ EX-1 exactly (rc 130, 0 new commit, no agent process left, state, `run_interrupted`); second signal exits at once; interrupt at a checkpoint keeps it pending | BHV-1, BHV-1a, BHV-1b, INV-1 | 100% |
+| EVAL-1 | deterministic | shim agent sleeping in a 2-task wave; SIGINT ⇒ EX-1 exactly (rc 130, 0 new commit, no agent process left, state, `run_interrupted`); second signal exits at once; interrupt at a checkpoint AND at an Owner-lane wait: node pending, not in `inflight`; interrupt between an Owner-lane signature and its checks ⇒ a new signature is required on restart | BHV-1, BHV-1a, BHV-1b, BHV-1c, INV-1 | 100% |
 | EVAL-2 | deterministic | `--dry-run` on a feature with and without a run record: `.runs/` byte-identical / still absent | BHV-2, INV-2 | 100% |
 | EVAL-3 | deterministic | engine commits (task, Owner-lane, run-log-only) carry `Artifacts:` = their staged paths; EX-2 exact | BHV-3, INV-3 | 100% |
 | EVAL-4 | deterministic | `gate` depends on the non-mutating lint check; on a seeded drift `just gate` fails and `git status` is unchanged | BHV-4, INV-4 | 100% |
@@ -173,6 +176,9 @@ covers: [BHV-6, INV-5]
   INV-9 of fde-kit, whose intent is that **no demo feature** stays in the kit's `work/`. The test
   asserts instead that none of `devis-pose`, `export-devis`, `salle-booking` is tracked under the
   kit's `work/`; it joins T4's scope by plan delta.)*
+- **OQ-3** — *(proposed by the CP-1 review)* An interrupt between an Owner-lane signature and its
+  checks leaves the task `pending` with the approval token already consumed: re-sign, or honour the
+  journaled `owner_signed`? → *(resolved 2026-11-13 by the Owner: re-sign — BHV-1c.)*
 - **OQ-2** — *(raised by T1)* Once `SandboxedClaudeRunner.run` launches through `run_tracked`
   (ADR-1), two tests that stub `sandbox_runner.subprocess.run` no longer intercept the call
   (`tests/test_runner.py::test_sandbox_runner_passes_guardrail_options_through`,
@@ -184,5 +190,6 @@ covers: [BHV-6, INV-5]
 
 | Version | Date | Author | Change |
 |---|---|---|---|
+| 0.3.0 | 2026-11-13 | Owner | CP-1 review: BHV-1b made explicit (a waiting node is not in `inflight`); OQ-3 resolved as BHV-1c (re-sign after an interruption); EVAL-1 extended |
 | 0.2.0 | 2026-11-13 | Owner | OQ-1 and OQ-2, raised by T4 and T1 during the first run (plan gaps: an fde-kit eval with a closed `work/` set, two tests stubbing the old launch call), resolved by the Owner |
 | 0.1.0 | 2026-11-13 | Owner + Claude | From the lab-fix batch (items 5, 16, 21, 22, 28, 29, 31); validated by the Owner |
