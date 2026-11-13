@@ -237,17 +237,23 @@ def atomic_write_json(path: Path, obj: dict) -> None:
         raise
 
 
-def eval_covers(spec_id: str, collected: str) -> bool:
+def eval_covers(spec_id: str, collected: str, scope: list[str] | None = None) -> bool:
     """True if a collected eval carries spec_id, by matching the pytest NODE ID
     (finding M7). We look at the test name AFTER "::" (not the file path),
     and forbid a numeric prefix collision: eval_1 != eval_10,
-    and tests/eval_2_helpers.py does not "cover" EVAL-2."""
+    and tests/eval_2_helpers.py does not "cover" EVAL-2.
+
+    `scope` (the task's files_touched): only evals whose file lies in it count.
+    Every feature numbers its evals from EVAL-1, so a suite-wide match let another
+    feature's `test_eval_1_…` cover this task's EVAL-1 (lab-fix 3)."""
     slug = spec_id.lower().replace("-", "_")  # EVAL-1 -> eval_1
     pat = re.compile(rf"(?<![a-z0-9]){re.escape(slug)}(?![0-9])")
     for line in collected.splitlines():
         if "::" not in line:
             continue
-        node_id = line.rsplit("::", 1)[1]  # test name, not the path
+        path, node_id = line.split("::", 1)[0], line.rsplit("::", 1)[1]
+        if scope is not None and not any(paths_overlap(path, f) for f in scope):
+            continue
         if pat.search(node_id.lower()):
             return True
     return False
@@ -780,13 +786,14 @@ def _eval_gate(node: Node, real_ids: list[str]) -> tuple[bool, str]:
             missing = [
                 i
                 for i in real_ids
-                if i.startswith("EVAL-") and not eval_covers(i, collected)
+                if i.startswith("EVAL-") and not eval_covers(i, collected, node.files)
             ]
             if missing:
                 return False, (
-                    f"Incomplete eval coverage: no collected test carries {missing}. "
+                    f"Incomplete eval coverage: no collected test in this task's "
+                    f"files_touched carries {missing}. "
                     f"Convention: node-id `test_{missing[0].lower().replace('-', '_')}_<case>` "
-                    "(lowercased ID, dashes→underscores)."
+                    "(lowercased ID, dashes→underscores), in a file listed in files_touched."
                 )
     if ok and _just_has_recipe("lint-check"):
         # The project's own non-mutating lint is part of "done": a task whose verify
