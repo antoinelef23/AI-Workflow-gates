@@ -138,17 +138,11 @@ def test_sandbox_runner_passes_guardrail_options_through(monkeypatch, tmp_path):
     """Kit mode (ADR-10): cwd-relative plugin/settings/rules reach the container's claude argv."""
     seen = {}
 
-    def fake_run(argv, **kw):
+    def fake_run(argv, cwd, env, timeout):
         seen["argv"] = argv
+        return 0, '{"result": "ok"}', ""
 
-        class P:
-            returncode = 0
-            stdout = '{"result": "ok"}'
-            stderr = ""
-
-        return P()
-
-    monkeypatch.setattr(sb.subprocess, "run", fake_run)
+    monkeypatch.setattr(sb, "run_tracked", fake_run)
     sb.SandboxedClaudeRunner().run(
         "p",
         cwd=tmp_path,

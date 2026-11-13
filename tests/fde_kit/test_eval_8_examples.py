@@ -109,13 +109,14 @@ def test_eval_8_demo_code_is_tracked_under_examples_only():
     assert not missing, missing
 
 
-def test_eval_8_kit_work_holds_only_sdlc_rework_and_fde_kit():
+def test_eval_8_kit_work_holds_no_demo_feature():
     features = {
         f.split("/")[1]
         for f in _tracked()
         if f.startswith("work/") and f.count("/") >= 2
     }
-    assert features == {"sdlc-rework", "fde-kit"}, features
+    demos = {"devis-pose", "export-devis", "salle-booking"}
+    assert not (features & demos), features & demos
 
 
 @pytest.mark.parametrize("name", EXAMPLES)

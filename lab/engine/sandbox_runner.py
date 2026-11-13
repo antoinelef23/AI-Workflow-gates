@@ -30,7 +30,7 @@ import subprocess
 from pathlib import Path
 
 from approvals import ENV_SECRET
-from runner import AgentRunner, RunResult, claude_argv, parse_claude_json
+from runner import AgentRunner, RunResult, claude_argv, parse_claude_json, run_tracked
 
 # Only these env vars are forwarded INTO the container. LAB_APPROVAL_SECRET is not
 # here (and is asserted-excluded below) — the whole point is that the agent can't
@@ -192,7 +192,7 @@ class SandboxedClaudeRunner(AgentRunner):
             memory=self.memory,
         )
         try:
-            p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+            rc, out, err = run_tracked(argv, None, None, timeout)
         except FileNotFoundError:
             return RunResult(
                 False,
@@ -209,4 +209,4 @@ class SandboxedClaudeRunner(AgentRunner):
                 0.0,
                 f"timeout: sandboxed agent killed after {timeout}s",
             )
-        return parse_claude_json(p.returncode, p.stdout, p.stderr)
+        return parse_claude_json(rc, out, err)

@@ -36,8 +36,9 @@ check-content feature:
 check-content-ci base="origin/main":
     BASE="{{base}}" bash lab/engine/ci_checks.sh
 
-# Model eval:  just eval-models [layer=all] [live=1] [models=a,b]
-# Without live: refuses (billed campaign). live=1 calls the real models.
+# Model eval (positional parameters, never key=value):  just eval-models <layer> <live> <models>
+#   e.g. just eval-models all 1   |   just eval-models chain 1 model-a,model-b
+# Without <live>: refuses (billed campaign). A non-empty <live> (e.g. 1) calls the real models.
 eval-models layer="all" live="" models="":
     #!/usr/bin/env bash
     extra=""; [ -n "{{live}}" ] && extra="$extra --live"; [ -n "{{models}}" ] && extra="$extra --models {{models}}"
@@ -48,7 +49,7 @@ install:
     #!/usr/bin/env bash
     if [ -f pyproject.toml ]; then uv sync --locked; else echo "[install] no pyproject.toml — skip"; fi
 
-# Dev lint (mutating): auto-fix + format. Local/agent path only.
+# Dev lint (mutating): auto-fix + format. The explicit FIXER — run it by hand; `gate` never does.
 lint:
     #!/usr/bin/env bash
     if [ -f pyproject.toml ]; then uv run ruff check --fix . && uv run ruff format .; else echo "[lint] no pyproject.toml — skip"; fi
@@ -102,8 +103,8 @@ check-trajectory feature:
 context-budget:
     python3 lab/engine/context_budget.py
 
-# Local merge gate (mutating lint).
-gate: lint test evals check-brand check-lock
+# Local merge gate (non-mutating lint-check: drift fails, nothing is rewritten; fix with `just lint`).
+gate: lint-check test evals check-brand check-lock
     @echo "✅ gate OK"
 
 # Examples are standalone instances (ADR-9): each is synced from its own lockfile and
