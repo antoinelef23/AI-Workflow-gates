@@ -1,10 +1,10 @@
 ---
 type: spec
 feature: lab-fixes
-version: 0.1.0
+version: 0.2.0
 status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by: Owner — 2026-11-13 (validée en session, telle que proposée)
+validated_by: Owner — 2026-11-13 (validée en session, telle que proposée) ; amendement 0.2.0 (OQ-1, OQ-2 tranchées par l'Owner) le 2026-11-13
 ---
 
 # Spec — Lab fixes before iteration 3: run control, honest journal and commits, non-mutating gate
@@ -167,10 +167,22 @@ covers: [BHV-6, INV-5]
 
 ## 8. Open questions
 
-*None — the behaviors come from incidents already observed and recorded in `progress.md` §8.*
+- **OQ-1** — *(raised by T4, also blocked T5)* `tests/fde_kit/test_eval_8_examples.py` asserted that
+  the kit's tracked `work/` holds **exactly** `{sdlc-rework, fde-kit}`, so creating `work/lab-fixes/`
+  turned every task's evals red. → *(resolved 2026-11-13 by the Owner: the closed set over-specified
+  INV-9 of fde-kit, whose intent is that **no demo feature** stays in the kit's `work/`. The test
+  asserts instead that none of `devis-pose`, `export-devis`, `salle-booking` is tracked under the
+  kit's `work/`; it joins T4's scope by plan delta.)*
+- **OQ-2** — *(raised by T1)* Once `SandboxedClaudeRunner.run` launches through `run_tracked`
+  (ADR-1), two tests that stub `sandbox_runner.subprocess.run` no longer intercept the call
+  (`tests/test_runner.py::test_sandbox_runner_passes_guardrail_options_through`,
+  `tests/fde_kit/test_sandbox_external.py::test_runner_passes_kit_mount_and_add_dirs_to_docker`).
+  → *(resolved 2026-11-13 by the Owner: T1's proposal approved — both files join T1's scope by plan
+  delta, their stub moves to `run_tracked` with the same argv assertions.)*
 
 ## 9. Changelog
 
 | Version | Date | Author | Change |
 |---|---|---|---|
+| 0.2.0 | 2026-11-13 | Owner | OQ-1 and OQ-2, raised by T4 and T1 during the first run (plan gaps: an fde-kit eval with a closed `work/` set, two tests stubbing the old launch call), resolved by the Owner |
 | 0.1.0 | 2026-11-13 | Owner + Claude | From the lab-fix batch (items 5, 16, 21, 22, 28, 29, 31); validated by the Owner |
