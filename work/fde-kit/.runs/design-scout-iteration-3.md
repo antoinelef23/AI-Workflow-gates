@@ -3,7 +3,8 @@
 > **Statut : rapport, aucune décision.** Rôle `design-scout` (`lab/plugin/agents/design-scout.md`) :
 > « You decide nothing, you document proven patterns. […] You never write into design.md directly:
 > you hand your report to the Owner. » Rédigé en session 5 (2026-11-14, nuit, sans l'Owner) dans la
-> session Claude Code, **sans** appel d'agent facturé ni recherche web.
+> session Claude Code, **sans** appel d'agent facturé. Piste 2 : recherche web en lecture seule,
+> chaque fait vérifié sur la page primaire le 2026-11-14 (citation courte relevée).
 >
 > Base : `main` = `5b8d424` (PR #3). Spec fde-kit 0.8.0 (validée), design 0.6.0 (validé, couvre
 > les itérations 1-2 seulement : « Les itérations 3 […] seront conçues à leur tour, par amendement
@@ -50,15 +51,22 @@ Problèmes d'architecture posés par l'itération 3, tirés de la spec :
 | I-44 | P9 lecteurs | `lab/models/registry.toml` `[roles]` ; `registry.py` `role_default` | Lecteur implementer = rôle `implementer` | **Aucun rôle `goldfish`** dans le registre (BHV-8e prévoit son absence) |
 | I-45 | P9 comparaison | `evals/behavioral/cases.py:60` `verdict`, `:89-162` checkers ; `eval_models.py:276/294` contrat API / logique | Forme « checker → (ok, détail) » | Aucun comparateur YAML champ par champ (BHV-8a) |
 
-## Piste 2 — Références externes : non faite
+## Piste 2 — Références externes (lecture seule, vérifiées sur la page primaire)
 
-Pas de recherche web ni d'appel d'agent facturé dans cette session (règle de l'Owner : confirmer
-toute dépense ou action extérieure). Problèmes pour lesquels une référence externe reste à
-chercher, ou à déclarer « sans référence — ADR délibéré » :
+| # | Problème | Référence | Pattern | Source précise (citation relevée le 2026-11-14) |
+|---|---|---|---|---|
+| E-18 | P3/P5 budget par route, échecs non rejouables | Temporal — Retry Policies | Une politique de retry porte un nombre maximal de tentatives et une liste de types d'erreur **non rejouables** ; une erreur dont le type est dans la liste n'est jamais rejouée. Pour nous : R1 = retry borné ; un `STATUS: blocked — <catégorie>` (R3/R4/R5) = type non rejouable qui sort de la boucle R1. **Différence** : chez Temporal le défaut est « illimité » (« The default is unlimited », 0 = illimité) — INV-4 exige au contraire un budget fini partout | docs.temporal.io/encyclopedia/retry-policies — « Non-Retryable Errors specify errors that shouldn't be retried » ; « If one of those errors occurs, a retry does not occur » ; « Errors are matched against the `type` field » |
+| E-19 | P7 reset des dépendants | Apache Airflow — Dag Runs, « Re-run Tasks » | Effacer une instance de tâche remet son état à `None` et l'exécuteur la relance ; l'option **Downstream** étend l'effacement aux tâches aval du même DAG. Pour nous : BHV-6 est plus fin (seuls les dépendants qui recoupent fichiers ou IDs) — Airflow ne filtre pas | airflow.apache.org/docs/apache-airflow/stable/core-concepts/dag-run.html (3.4.0) — « Downstream - The downstream tasks in the current Dag » ; « the state set to `None`, which causes the task to re-run » |
+| E-20 | P9 preuve d'isolement par canari | BIG-bench (Google) — tâche `training_on_test_set` | Une chaîne GUID unique placée dans des fichiers permet de **détecter** qu'un modèle les a vus. Pour nous : un marqueur distinct par source interdite (BHV-8b) ; s'il apparaît dans la réponse d'un lecteur, l'isolement est réfuté | github.com/google/BIG-bench/tree/main/bigbench/benchmark_tasks/training_on_test_set — « This canary string also makes it possible to probe whether a language model was trained on BIG-bench tasks » |
 
-- P3 : classement d'échecs en routes avec budgets (orchestrateurs de workflows).
-- P6 : reprise d'un DAG amendé sans rejouer les nœuds terminés.
-- P9 : isolement prouvé d'un appel de modèle (canari), comparaison normalisée de sorties YAML.
+Non établi (cherché, pas confirmé sur une page primaire) :
+
+- **P6, reprise sans rejouer les nœuds terminés** — Dagster « re-execute from failure » est décrit
+  ainsi par des pages secondaires, mais les deux URL de la doc officielle essayées redirigent vers
+  des pages sans ce contenu (« Ops », « Executing jobs »). Non cité. Pattern interne équivalent :
+  `state.json` (I-27) + `committed_task_ids` (I-28).
+- **P9, comparaison normalisée de sorties YAML (BHV-8a)** — aucune référence cherchée de façon
+  concluante ; candidat « sans référence — ADR délibéré ».
 
 ## Questions pour l'Owner (aucune n'est tranchée ici)
 
