@@ -1,9 +1,9 @@
-# Progress — passation de session (mise à jour 2026-11-13, fin de session 4)
+# Progress — passation de session (mise à jour 2026-11-14, fin de session 5)
 
 > **Point d'entrée unique pour reprendre le travail dans une nouvelle session ou un autre compte.**
-> Branche de travail : **`ccr-99c581ba-w0vhys`** (tout est poussé ; `main` est à jour jusqu'à la
-> PR #2). Une nouvelle session doit d'abord faire `git fetch origin ccr-99c581ba-w0vhys` et repartir
-> de cette branche.
+> `main` contient lab-fixes (PR #3 → `5b8d424`). Trois PR attendent la décision de l'Owner
+> (#4, #5, #6, §10.7) ; chacune part de `main` et a sa CI verte. Une nouvelle session repart de
+> `main` (`git fetch origin && git switch main`), sous **WSL Ubuntu** (§0).
 >
 > Ordre de lecture : ce fichier en entier → `lab/plugin/rules/hard-rules.md` (la méthode) →
 > `work/lab-fixes/{spec,design,tasks}.md` (feature en cours) → `work/fde-kit/{spec,design,tasks}.md`
@@ -17,12 +17,15 @@
 | fde-kit itération 1 (kit portable) | ✅ mergée | PR #1 → `b64b227` |
 | fde-kit itération 2 (profils solo/squad/regulated, kit 0.2.0) | ✅ mergée | PR #2 → `54fecfc` |
 | `reviewer.md` 1.2.0 (verdict sur écarts établis seulement) | ✅ mergé avec la PR #2 | `8479c4c` |
-| **`work/lab-fixes`** (lot de correctifs 5, 16, 18, 21, 22, 28, 29, 31) | ✅ **CP-2 signé par l'Owner** (après 2 rejets : T3, T2) ; PR ouverte, **en attente du merge** | branche, `7fdc8da`…`c9a44e4`, §10.6 |
-| Nettoyage modèles (4.x → 5.5 seulement) | décidé, à faire après le merge de lab-fixes, PR à part | §11 |
-| fde-kit itération 3 | à faire après le merge de lab-fixes | §11 |
+| **`work/lab-fixes`** (lot de correctifs 5, 16, 18, 21, 22, 28, 29, 31) | ✅ mergée (CP-2 signé par l'Owner après 2 rejets : T3, T2) | PR #3 → `5b8d424`, §10.6 |
+| Modèles 5.5 seulement (4.x retirés, panel Opus 5.5 ×2) | ⏸ PR #4 ouverte, CI verte, **en attente du merge** | `models-latest-only`, §10.7 |
+| Item 40 (course résiduelle à l'interruption) | ⏸ PR #5 ouverte, CI verte, **en attente du merge** | `fix-interrupt-race`, §10.7 |
+| Items 1 + 46 (plan-lint : changelog ignoré, IDs entiers) | ⏸ PR #6 ouverte, CI verte, **en attente du merge** | `fix-planlint-changelog`, §10.7 |
+| Dépôt `portable` (Claudo-portable) : retrait Windows + modèles 5.5 | ⏸ commits locaux **non poussés** (push refusé par le classifieur) | §10.7 |
+| fde-kit itération 3 | à faire ; le spec workshop demande l'Owner | §11 |
 
-**Prochaine action (Owner) :** relire la PR `ccr-99c581ba-w0vhys` → `main` et dire « merge » ;
-merge **uniquement sur demande explicite de l'Owner**. Ensuite : la PR « modèles 5.5 seulement » (§11).
+**Prochaine action (Owner) :** relire les PR #4, #5, #6 et dire « merge » pour chacune (merge
+**uniquement sur demande explicite**) ; décider du push des deux branches `portable` (§10.7).
 
 **Environnement depuis la session 4 : WSL Ubuntu uniquement** (décision Owner). Le moteur exige
 POSIX (`import fcntl`, groupes de process) : `just gate-ci` échoue en Windows natif. Clone de travail :
@@ -174,13 +177,13 @@ Faits : 4 (`2b8f327`), 9 (`5a70c84`), 13 (`ed61c07`), 14 (`f4f151c`), 17 (`2f3fe
 30 (`2cf51a8`), 32 (`a2a282c`, `369bdec`) ; **5, 16, 18, 21, 22, 28, 29, 31 par la feature
 `lab-fixes`** (en attente du merge CP-2).
 
-1. plan-lint : la vérif d'existence d'un ID de spec matche aussi les IDs supprimés cités dans le changelog.
+1. ⏸ PR #6 (`1144cb6`) — plan-lint : la vérif d'existence d'un ID de spec matche aussi les IDs supprimés cités dans le changelog.
 2. `work/sdlc-rework/tasks.md` : 17 erreurs plan-lint ; plan-lint seulement informatif en CI.
 3. Couverture d'evals (`eval_covers`) cherchée dans toute la suite, pas par feature.
 4. ✅ (`2b8f327`)
 5. ✅ lab-fixes T3 — `--dry-run` n'écrit plus rien sous `.runs/` (BHV-2, EVAL-2).
 6. `eval_models.py` compte une erreur d'API comme un échec.
-7. Cas `BEH-eval-correct` : demande un fichier hors `files_touched`.
+7. Cas `BEH-eval-correct` : demande un fichier hors `files_touched`. Non traité en session 5 : corriger le cas change l'instrument de mesure (scorecards antérieures non comparables) et sa vérification exige un run behavioral **live, facturé** → décision et feu vert de l'Owner (EVOLUTION.md).
 8. Golden `remise-paliers` échoue pour 5 modèles sur 6.
 9. ✅ `guard_paths.sh` lit `notebook_path` (`5a70c84`).
 10. Pré-vol : compare la version du kit, pas celle de `plugin.json` (à trancher : texte BHV-2a vs ADR-2).
@@ -219,12 +222,17 @@ Faits : 4 (`2b8f327`), 9 (`5a70c84`), 13 (`ed61c07`), 14 (`f4f151c`), 17 (`2f3fe
 
 **Nouveaux, relevés pendant la clôture lab-fixes (session 4) :**
 
-40. **Course résiduelle à l'interruption** (revue CP-2 finale, panéliste 1, non reproduite) : un signal entre le dernier `if STOP.is_set()` et `_TRACKED.add(p)` dans `runner.run_tracked` laisse un agent échapper au `terminate_all`. Dans une vague, la boucle à 0,2 s le rattrape ; dans le panel de revue (thread principal), rien ne re-signale et le tour va au bout. Aucun commit possible. Piste : drapeau « terminé » dans `runner`, posé par `terminate_all`/`kill_all_now`, vérifié par `run_tracked` juste après l'enregistrement.
+40. ⏸ PR #5 (`c47edb6`) — **Course résiduelle à l'interruption** (revue CP-2 finale, panéliste 1, non reproduite) : un signal entre le dernier `if STOP.is_set()` et `_TRACKED.add(p)` dans `runner.run_tracked` laisse un agent échapper au `terminate_all`. Dans une vague, la boucle à 0,2 s le rattrape ; dans le panel de revue (thread principal), rien ne re-signale et le tour va au bout. Aucun commit possible. Piste : drapeau « terminé » dans `runner`, posé par `terminate_all`/`kill_all_now`, vérifié par `run_tracked` juste après l'enregistrement.
 41. `work/lab-fixes/tasks.md:21` : la ligne de couverture ne cite pas `BHV-1c` (oubli de la passe de cohérence spec 0.3.0). Cosmétique.
 42. **OQ-4** (différée par l'Owner) : une tâche voie Owner signée mais pas encore vérifiée est listée dans `run_interrupted.inflight` ; le glossaire dit « en vol dès que le jugement commence ». BHV-1c tient dans les deux cas.
 43. Item 12 revu : le commit T2 (`c9a44e4`) embarque `work/lab-fixes/.runs/CP-2-review.md` (rapport de la revue précédente).
-44. La revue CP-2 utilise encore `claude-opus-4-8` comme second panéliste : le nettoyage « modèles 5.5 seulement » (§11) le remplace par `claude-sonnet-5-5`.
+44. ⏸ PR #4 — La revue CP-2 utilisait encore `claude-opus-4-8` comme second panéliste. Décision finale de l'Owner : Haiku 5.5 s'il convient, sinon Opus ; Haiku 5.5 n'est pas éligible relecteur (WARN sur du code propre), Sonnet 5.5 est l'implementer → `[review] panel = Opus 5.5 ×2` dans le registre.
 45. Le secret d'approbation a été exposé dans le transcript de session (`pgrep -af` affiche la ligne de commande expansée) : ne jamais exporter un secret dans une commande `bash -lc "… export X=$(…)"` qu'on liste ensuite ; il a été régénéré après la clôture.
+
+**Nouveaux (session 5) :**
+
+46. ⏸ PR #6 (`7bc0312`) — plan-lint : la vérif d'existence était un test de sous-chaîne (`BHV-1` trouvé dans `BHV-10`). Corrigé : comparaison aux IDs entiers.
+47. Depuis Windows, `wsl.exe -- bash -lc '…'` perd parfois `$var` et la substitution `$(…)` (vu en session 5 : trailer `Artifacts:` vide, corrigé par `--amend` avant push). Pour tout ce qui n'est pas trivial : écrire un script dans un fichier et lancer `MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu -- bash /mnt/…/script.sh` ; message de commit via `git commit -F <fichier>`.
 
 ## 9. Environnement (session cloud)
 
@@ -236,7 +244,7 @@ Faits : 4 (`2b8f327`), 9 (`5a70c84`), 13 (`ed61c07`), 14 (`f4f151c`), 17 (`2f3fe
 - Règle : un commit ne part que si le pre-commit passe (`bash .githooks/pre-commit && git commit …`).
 - Pour travailler sur le kit avec ses propres garde-fous : `claude --plugin-dir lab/plugin`.
 
-## 10. Feature `work/lab-fixes` (session 3) — en attente de CP-2
+## 10. Feature `work/lab-fixes` (sessions 3–4) — mergée (PR #3 → `5b8d424`)
 
 ### 10.1 Contenu
 
@@ -344,19 +352,40 @@ Coût agents session 4 : **6,14 $** (somme `cost_usd` du journal). Vérifié dan
 `just gate-ci` rc 0 (185 tests, 162 evals, exemples 8 + 1063), `just check-content work/lab-fixes` OK,
 `just check-trajectory work/lab-fixes` OK (0 warning).
 
+### 10.7 Session 5 (nuit du 2026-11-13 au 14, WSL, sans l'Owner) — ce qui attend une décision
+
+Consigne de l'Owner : avancer autant que possible sans poser de question et sans rien inventer ;
+tout ce qui demande une signature ou un merge est laissé prêt et documenté.
+
+| PR / branche | Contenu | Vérifié (WSL) | CI |
+|---|---|---|---|
+| #4 `models-latest-only` (`0a5dea4`) | Registre : entrées Claude 4 retirées ; `[review] panel = Opus 5.5 ×2` lu par `pick_reviewer_models` ; docs/tests/exemple `eval_models` en 5.5 ; test de garde `tests/test_latest_models_only.py` (aucun fichier vivant ne nomme un ID absent du registre ; historique exempté : scorecards, `work/`, `progress.md`) | `just gate-ci` rc 0, 192 tests, 162 evals | ✅ |
+| #5 `fix-interrupt-race` (`c47edb6`) | Item 40 : drapeau `runner._STOPPING` posé sous verrou par `terminate_all`/`kill_all_now` ; `run_tracked` se tue s'il s'enregistre après | rc 0, 188 tests ; le test échoue sans le correctif (timeout 30 s) | ✅ |
+| #6 `fix-planlint-changelog` (`1144cb6`, `7bc0312`) | Items 1 et 46 | rc 0, 189 tests ; sortie plan-lint identique sur les 6 features existantes | ✅ |
+
+**Dépôt `portable`** (Claudo-portable, `main` local de `D:\Projets\ai-workflow-gates\_build`) :
+deux branches committées dans le clone WSL `~/work/portable` (cloné depuis `_build`, `main` = `5ccdfd1`),
+**non poussées** — le push vers le remote `portable` a été refusé par le classifieur de permissions :
+
+- `drop-windows` (`09a4477`) : retire le support Windows natif (branche `msvcrt` d'`oslock`, `oscompat.find_bash`,
+  `verify.resolve_python`, recherche `claude.cmd`→`claude.exe`, `lab-ws` + `contained(git_modes=…)`, bascule
+  `os() == "windows"` du justfile, `tests/conftest.py`, how-to Windows) ; garde le durcissement neutre (UTF-8,
+  clés `/`, LF, `LAB_CLAUDE_CMD`, `LAB_PYTHON`, `PYTHONUTF8`). `just gate-ci` rc 0 : 205 tests (220 − 15 tests
+  Windows-only), 1084 evals.
+- `models-latest-only` (`cde05e7`) : `[roles]` passe en Claude 5 (entrées 5.5 reprises mot pour mot du travail
+  non committé de l'Owner), Claude 4 retiré, même panel et même garde que #4. rc 0 : 227 tests, 1084 evals.
+  Ce dépôt n'a pas de scorecard Claude 5 à lui : la preuve citée est la campagne 2026-11-12 de ce dépôt-ci.
+  Chevauchement attendu avec le travail non committé de `_build` : `lab/models/registry.toml`.
+
+Pour pousser (Owner) : `cd D:\Projets\ai-workflow-gates\_build && git fetch //wsl.localhost/Ubuntu/home/antoine/work/portable drop-windows:p-drop-windows models-latest-only:p-models-latest-only && git push portable p-drop-windows:drop-windows p-models-latest-only:models-latest-only`.
+
 ## 11. Ensuite
 
-1. Merge de lab-fixes (PR ouverte ; merge sur demande explicite de l'Owner).
-1b. **Modèles 5.5 seulement** (décision Owner 2026-11-13), PR à part depuis `main` : retirer
-   `claude-opus-4-8`, `claude-sonnet-4-6`, `claude-haiku-4-5-20251001` de `lab/models/registry.toml`,
-   des défauts de `lab/engine/eval_models.py:28`, de `tests/test_runner.py` et des docs
-   (`docs/how-to/evaluate-models.md`, `docs/tutorials/getting-started.md`) ; second relecteur du panel =
-   `claude-sonnet-5-5` ; **historique conservé** (scorecards datées, `.runs/CP-*-review.md`, journaux) ;
-   test de garde : aucun fichier vivant ne nomme un modèle non courant.
+1. Décisions Owner : merge des PR #4, #5, #6 ; push des deux branches `portable` (§10.7).
 2. **fde-kit itération 3** : workflow de bout en bout, retours arrière R1–R7 (avec reset ciblé des
    dépendants), OQ d'agent écrites par le moteur dans `.runs/` (item 34), test goldfish à deux
    lecteurs (Haiku + modèle de l'implementer), interruption live sous Docker. Candidats à absorber :
    items 12, 15, 20, 37, 38.
 3. Itération 4 : retro + rôle `improver` (propose, n'applique jamais).
 4. Itération multi-outils : Copilot, opencode, Codex CLI ; spike promptfoo (ADR-12).
-5. Reste du lot : 1–3, 6–8, 10–12, 15, 19, 20, 23–26, 33, 37–42.
+5. Reste du lot : 2, 3, 6–8, 10–12, 15, 19, 20, 23–26, 33, 37–39, 41, 42 (1, 40, 46 : PR ouvertes).
