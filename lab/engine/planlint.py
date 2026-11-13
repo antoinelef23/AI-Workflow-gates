@@ -15,6 +15,17 @@ from pathlib import Path
 from plan import SPEC_ID, Node, ancestors, paths_overlap
 from verify import parse_verify
 
+# The spec's "## 9. Changelog" section (lab/templates/spec.md) up to the next "## " heading.
+_CHANGELOG = re.compile(
+    r"^##[ \t]+(?:\d+\.[ \t]*)?Changelog\b.*?(?=^##[ \t]|\Z)", re.M | re.S | re.I
+)
+
+
+def spec_body(spec_text: str) -> str:
+    """The spec without its Changelog section. A changelog names IDs that were removed
+    ("BHV-4 dropped"); they must not count as existing for the plan's ID checks (lab-fix 1)."""
+    return _CHANGELOG.sub("", spec_text)
+
 
 # Tools an agent may need that the default allowlist (runner.DEFAULT_ALLOWED_TOOLS)
 # does not grant — prompts that ask for them plan a task the agent cannot do.
@@ -242,16 +253,17 @@ def validate(
     spec_path = feature / "spec.md"
     if spec_path.exists():
         spec_text = spec_path.read_text(encoding="utf-8")
+        body = spec_body(spec_text)
         for n in nodes:
             for tok in n.implements:
                 for sid in SPEC_ID.findall(tok):
-                    if sid not in spec_text:
+                    if sid not in body:
                         errors.append(
                             f"{n.id}: implements [{sid}] not found in spec.md"
                         )
         # Each EVAL-n declared in the spec must be carried by a task
         claimed = {s for n in nodes for t in n.implements for s in SPEC_ID.findall(t)}
-        for ev in sorted(set(re.findall(r"\bEVAL-\w+\b", spec_text))):
+        for ev in sorted(set(re.findall(r"\bEVAL-\w+\b", body))):
             if ev not in claimed:
                 warnings.append(
                     f"{ev} declared in spec.md §7 but carried by no task (implements)"
