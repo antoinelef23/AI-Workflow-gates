@@ -1,5 +1,6 @@
-"""A task commit takes spec/design/tasks from the feature directory, not the whole folder
-(lab-fix 12): a pending `.runs/CP-n-review.md` stays out of it, for its own review commit."""
+"""A task commit takes only tasks.md (the run log) from the feature directory, not the whole
+folder (lab-fix 12): a pending `.runs/CP-n-review.md` stays out of it, for its own review commit,
+and so does an agent edit of spec.md / design.md (fde-kit spec INV-10)."""
 
 from __future__ import annotations
 
@@ -54,3 +55,29 @@ def test_task_commit_leaves_a_pending_review_report_out(sandbox: Path) -> None:
         text=True,
     ).stdout
     assert "work/feat/.runs/CP-1-review.md" in status  # left for its own commit
+
+
+def test_task_commit_never_stages_spec_or_design(sandbox: Path) -> None:
+    (sandbox / ".gitignore").write_text(GITIGNORE)
+    feat = sandbox / "work" / "feat"
+    (feat / "tasks.md").write_text(FM + TASK)
+    (feat / "spec.md").write_text("# Spec\n")
+    (feat / "design.md").write_text("# Design\n")
+    subprocess.run(["git", "add", "-A"], cwd=sandbox, check=True)
+    subprocess.run(["git", "commit", "-qm", "artifacts"], cwd=sandbox, check=True)
+    # the agent writes its open question into the validated spec (lab-fix 34)
+    (sandbox / ".shim" / "T1.sh").write_text(
+        'echo x > a.txt\necho "OQ-9 from the agent" >> work/feat/spec.md\n'
+        'echo "STATUS: done"\n'
+    )
+    run_orch(sandbox)
+    assert "work/feat/spec.md" not in _paths(sandbox)
+    assert (
+        "work/feat/spec.md"
+        in subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=sandbox,
+            capture_output=True,
+            text=True,
+        ).stdout
+    )

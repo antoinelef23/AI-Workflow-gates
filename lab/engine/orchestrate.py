@@ -547,8 +547,11 @@ def evals_collected() -> str:
     return p.stdout
 
 
-# What a task commit takes from the feature directory besides its files_touched.
-FEATURE_ARTIFACTS = ("spec.md", "design.md", "tasks.md")
+# What a task commit takes from the feature directory besides its files_touched: the run
+# log in tasks.md, the only file the engine writes there. Never spec.md / design.md: no
+# agent may change them during a run and the scoped commit never stages them (fde-kit
+# spec INV-10) — a change to them is left uncommitted and reported below.
+FEATURE_ARTIFACTS = ("tasks.md",)
 
 
 def scoped_commit(node: Node, feature: Path, message: str) -> None:
@@ -562,9 +565,9 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
     the feature directory (spec/design/tasks), then un-stage any undeclared golden.
     """
     with COMMIT_LOCK:
-        # The feature's three artifacts (tasks.md carries the run log), NOT the whole feature
-        # directory: that also swept in `.runs/CP-n-review.md`, which belongs to its own
-        # `docs(...)` review commit (lab-fix 12).
+        # FEATURE_ARTIFACTS, NOT the whole feature directory: that also swept in
+        # `.runs/CP-n-review.md`, which belongs to its own `docs(...)` review commit
+        # (lab-fix 12), and any agent edit of spec.md / design.md (INV-10).
         rel = feature.relative_to(PROJECT)
         artifacts = [
             str(rel / name) for name in FEATURE_ARTIFACTS if (feature / name).exists()
