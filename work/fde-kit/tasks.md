@@ -1,12 +1,12 @@
 ---
 type: tasks
 feature: fde-kit
-version: 0.1.0
+version: 0.2.0
 status: approved         # proposed | approved | in_progress | done
 generated_by: planner (session 2026-11-12)
-approved_by: Owner — 2026-11-12 (QCM en session ; CP-1..CP-5 bloquants ; exécution dans la session cloud, checkpoints signés sur instruction de l'Owner ; delta 2026-11-12 approuvé (« Amender le plan ») : prompts T7 et T9 — `verify` exécuté par l'orchestrateur, l'agent vérifie avec `uv run pytest -m eval`, sans lancer `just` ; delta CP-3 (rejet → T9) : `tests/fde_kit/test_kit_root.py` ajouté aux files_touched de T9 — il asserte le `pythonpath` transitoire que T9 retire ; delta T11 bloqué : T11 scindé — T15 (agent: owner, chemins protégés) puis T11 (moteur + tests, + lab_init.py et test_eval_2_run_preflight.py))
-spec: ./spec.md          # version : 0.6.0
-design: ./design.md      # version : 0.4.0
+approved_by: Owner — 2026-11-12 (QCM en session ; CP-1..CP-5 bloquants ; exécution dans la session cloud, checkpoints signés sur instruction de l'Owner ; delta 2026-11-12 approuvé (« Amender le plan ») : prompts T7 et T9 — `verify` exécuté par l'orchestrateur, l'agent vérifie avec `uv run pytest -m eval`, sans lancer `just` ; delta CP-3 (rejet → T9) : `tests/fde_kit/test_kit_root.py` ajouté aux files_touched de T9 — il asserte le `pythonpath` transitoire que T9 retire ; delta T11 bloqué : T11 scindé — T15 (agent: owner, chemins protégés) puis T11 (moteur + tests, + lab_init.py et test_eval_2_run_preflight.py)) ; itération 2 (T16–T22, CP-6, CP-7) approuvée par l'Owner le 2026-11-12 — tous les checkpoints signés par l'Owner lui-même ; delta CP-6 (rejet → T16, approuvé par l'Owner) : spec 0.7.0 BHV-3d + égal-au-plancher accepté ; delta CP-7 (rejet → T18 + T16, décidé par l'Owner) : garde INV-5 à l'exécution, budget fini (spec 0.8.0)
+spec: ./spec.md          # version : 0.8.0
+design: ./design.md      # version : 0.6.0
 ---
 
 # Tasks — Portable FDE kit, iteration 1 ("kit portable")
@@ -111,6 +111,22 @@ its denies or the hard rules.
 ADRs: ADR-1 T1/T3 · ADR-2 T3/T4 · ADR-3 T3/T11/T12 · ADR-4 T3/T11 · ADR-5 T1 · ADR-6 T4 ·
 ADR-7 T2 · ADR-8 T2 · ADR-9 T5–T10 · ADR-10 T4 · ADR-11 T13 + CP-4.
 
+## Coverage (iteration-2 scope — design 0.5.0)
+
+| Spec ID | Tasks | Eval |
+|---|---|---|
+| BHV-3 | T16 (policy + `lab policy`), T19 (plan-lint), T18 (pre-flight + engine) | EVAL-3 |
+| BHV-3a, BHV-3b | T16 | EVAL-3 (EX-1) |
+| BHV-3c | T16 (`[overrides.routes]`, R2–R5 `auto` refused) | EVAL-3 |
+| BHV-3d | T16 (free-key bounds, spec 0.7.0 after CP-6) | EVAL-3 |
+| INV-2 | T16 | EVAL-3 (EX-1) |
+| INV-3 (profile part) | T16 | EVAL-3 |
+| INV-5 | T19 (no key can make the merge auto; existing plan-lint rule kept), T18 (run-time refusal of an auto merge, even under `--force` — CP-7) | EVAL-3 |
+| INV-1 (external sandbox) | T20 | EVAL-2 (argv), CP-7 live Docker run |
+| INV-7 (kit 0.2.0, examples re-pinned) | T21 | EVAL-8 |
+
+ADRs: ADR-13 T16 · ADR-14 T18/T19 · ADR-15 T20 · ADR-16 T17/T18.
+
 ## Execution graph
 
 ```mermaid
@@ -136,6 +152,18 @@ flowchart TD
     T13 --> CP4{{CP-4 ADR-11 live campaign · blocking}}
     CP4 --> T14[T14 Kit docs: plugin, CLI, install]
     T14 --> CP5{{CP-5 merge · blocking}}
+    CP5 --> T16[T16 policy data + module + lab policy]
+    CP5 --> T17[T17 kit .lab/lab.toml + test fixtures]
+    T16 --> T19[T19 plan-lint applies safety keys]
+    T16 --> T18[T18 engine + pre-flight read the policy]
+    T17 --> T18
+    T19 --> T18
+    T18 --> CP6{{CP-6 policy slice + mandatory restart · blocking}}
+    CP6 --> T20[T20 external-instance sandbox]
+    CP6 --> T22[T22 docs: profiles, lab policy]
+    T20 --> T21[T21 OWNER kit 0.2.0 + re-pin]
+    T22 --> T21
+    T21 --> CP7{{CP-7 merge + live Docker regulated run · blocking}}
 ```
 
 Parallelism is deliberately narrow: every task's eval gate runs the kit-wide `just evals` on the
@@ -610,6 +638,202 @@ test collection (T5) and T10's test is not an eval.
 - **reviews:** full diff vs main; `just gate-ci` green (with `examples-gate`); EVAL-1 / EVAL-2 / EVAL-8 green; `just check-content work/fde-kit`; `just check-trajectory work/fde-kit`; CP-4 scorecards attached to the PR; decision on the `v0.1.0` tag (design §7); O-6 announced to the team.
 - **on_reject:** `lab/engine/reject.sh CP-5 work/fde-kit "reason" [Tn …]`; a spec gap ⇒ amend spec.md first (separate commit + version bump), then re-plan.
 
+## Iteration 2 — organization profiles (design 0.5.0, ADR-13..16)
+
+*Planned 2026-11-12. Self-hosting: T18 makes a real run require `.lab/lab.toml` and read the
+policy, so T17 lands the kit's `.lab/lab.toml` and the test fixtures first, and CP-6 restarts
+the engine before T20. The kit version bump touches the plugin manifest (protected path):
+T21 is an Owner-lane task.*
+
+### T16 — Policy as data: `policy_profiles.toml`, `policy.py`, `lab policy`
+- **agent:** implementer
+- **depends_on:** [CP-5]
+- **parallel_group:** J *(∥ T17 — disjoint paths)*
+- **implements:** [BHV-3, BHV-3a, BHV-3b, BHV-3c, BHV-3d, INV-2, INV-3, EVAL-3]
+- **anchored_on:** ADR-13, E-15, E-16, I-6, I-25
+- **files_touched:** `lab/engine/policy_profiles.toml`, `lab/engine/policy.py`, `lab/engine/cli.py`, `tests/fde_kit/test_eval_3_policy.py`
+- **prompt:**
+  > Per spec BHV-3 (+3a..3c), INV-2, INV-3 and design ADR-13. (1) `lab/engine/policy_profiles.toml`
+  > (`schema_version = 1`): one table per key of the BHV-3 profile table, EXACTLY as the spec gives
+  > it — `kind` (safety|free), `strict` (true|false|up|down; omit for free keys), and the `solo`,
+  > `squad`, `regulated` values; `goldfish_min_score` declared with no value (undeclared).
+  > (2) `lab/engine/policy.py`: `effective_policy(lab_toml: dict) -> dict[key, (value, origin)]`,
+  > origin ∈ {"floor", "override", "override (free key)"}; reuse `lab_init.read_lab_toml` to read
+  > `.lab/lab.toml`. A safety-key override looser than the floor ⇒ `PolicyError` with EX-1's message
+  > `<key>=<v> is looser than floor '<profile>' (<floor value>)`; stricter or equal is accepted.
+  > Unknown key (also under `[overrides.routes]`) ⇒ `PolicyError` naming it. `[overrides.routes]`:
+  > R1..R7, value auto|proposal|human; `auto` on R2, R3, R4 or R5 ⇒ `PolicyError` (INV-3); routes are
+  > returned but flagged "applied from iteration 3". No key may concern the merge (INV-5).
+  > (3) `lab policy [--project p]` in `lab/engine/cli.py`: one line per key — value, origin; rc 1 with
+  > the error on `PolicyError`. Tests BEFORE code, `@pytest.mark.eval`, `test_eval_3_<case>`: EX-1
+  > both inputs exactly; the profile table equals BHV-3 (all keys, all 3 profiles); unknown key;
+  > route R3 `auto` refused, R6 `human` accepted. Do not touch orchestrate.py or planlint.py (T18/T19).
+  > *Plan delta (CP-6 rejection, spec 0.7.0):* a safety key EQUAL to its floor is accepted for every
+  > direction — `strict = "true"` is looser only when the floor is true and the value false (mirror for
+  > `"false"`); BHV-3d: `max_task_attempts`, `max_parallel`, `max_cp_rejects` must be integers ≥ 1 and
+  > `budget_usd` ≥ 0, else `PolicyError` naming key, value and bound. Tests: equal-to-floor for each
+  > yes/no safety key on `solo` and `squad`; each BHV-3d bound (0 / negative refused, bound accepted).
+  > *Plan delta (CP-7 rejection, spec 0.8.0):* `budget_usd` must be a FINITE number ≥ 0 — `nan` and
+  > `inf` refused with the BHV-3d message (`nan < 0` is false, so test finiteness explicitly).
+  > Check with `uv run pytest`; the orchestrator runs `verify`.
+- **done_when:** EVAL-3 policy cases green (EX-1 exact, table exact, BHV-3a/3b/3c/3d refusals, equal-to-floor accepted for every safety key); `lab policy` prints key/value/origin
+- **verify:** `uv run pytest -q -m eval tests/fde_kit/test_eval_3_policy.py`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### T17 — The kit is an instance of itself: its `.lab/lab.toml`, fixtures that write one
+- **agent:** implementer
+- **depends_on:** [CP-5]
+- **parallel_group:** J *(∥ T16)*
+- **implements:** [BHV-3, INV-7]
+- **anchored_on:** ADR-16, ADR-7, I-13
+- **files_touched:** `.lab/lab.toml`, `tests/orchestrator/conftest.py`, `tests/fde_kit/test_eval_2_run_preflight.py`, `tests/orchestrator/test_external_project.py`, `tests/fde_kit/test_kit_lab_toml.py`
+- **prompt:**
+  > Per design ADR-16. (1) Create the kit's own `.lab/lab.toml` exactly as `lab init` writes it
+  > (`schema_version = 1`, `kit_version` = the current kit version, `profile = "squad"`) — generate
+  > it with `python3 lab/engine/cli.py init . --profile squad --dry-run` to see the content, but do
+  > not let `lab init` touch the kit's justfile or `work/`: write only `.lab/lab.toml`.
+  > (2) Every test sandbox that runs the orchestrator writes a `.lab/lab.toml` (`profile = "squad"`,
+  > `kit_version` matching the kit) so that T18's "no `.lab/lab.toml` ⇒ rc 1" will not break them:
+  > `tests/orchestrator/conftest.py` sandbox fixture, `_make_kit` in
+  > `tests/fde_kit/test_eval_2_run_preflight.py`, and the instance helpers of
+  > `tests/orchestrator/test_external_project.py`. (3) `tests/fde_kit/test_kit_lab_toml.py` (not an
+  > eval): the kit's `.lab/lab.toml` is tracked, its `kit_version` equals the kit version and its
+  > profile is one of the three. No behavior change today: all suites stay green.
+  > Check with `uv run pytest`; the orchestrator runs `verify`.
+- **done_when:** kit `.lab/lab.toml` tracked and consistent; every orchestrator test sandbox writes one; all suites green
+- **verify:** `uv run pytest -q tests/orchestrator tests/fde_kit tests/sdlc_rework`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### T19 — plan-lint applies the plan-time safety keys
+- **agent:** implementer
+- **depends_on:** [T16]
+- **parallel_group:** K
+- **implements:** [BHV-3, INV-5, EVAL-3]
+- **anchored_on:** ADR-14, I-21
+- **files_touched:** `lab/engine/planlint.py`, `tests/fde_kit/test_eval_3_planlint.py`
+- **prompt:**
+  > Per spec BHV-3 / INV-5 and design ADR-14. `validate(...)` gains an optional `policy` parameter
+  > (the dict returned by `policy.effective_policy`, values only needed). When given: a CP with
+  > `mode: auto` while `auto_checkpoints_allowed` is false ⇒ error; a CP whose `reviewers` is below
+  > `min_reviewers` ⇒ error; more than `max_tasks_between_checkpoints` tasks on a path of the graph
+  > between two checkpoints (or before the first) ⇒ error naming the path. Already-done tasks (the
+  > existing `done` set) are not re-linted. When `policy` is None: behavior unchanged (the caller
+  > wires it in T18 — do not touch orchestrate.py). Keep the existing rule that a final/merge CP
+  > can never be `auto`, in every profile (INV-5) — no key can relax it. Tests BEFORE code,
+  > `@pytest.mark.eval`, `test_eval_3_<case>`: one case per key with `regulated` (error) and
+  > `solo` (accepted), and INV-5 holding under `solo`.
+  > Check with `uv run pytest`; the orchestrator runs `verify`.
+- **done_when:** each plan-time safety key enforced from the policy; INV-5 holds in every profile; no policy ⇒ unchanged
+- **verify:** `uv run pytest -q -m eval tests/fde_kit/test_eval_3_planlint.py`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### T18 — Engine and pre-flight read the effective policy
+- **agent:** implementer
+- **depends_on:** [T16, T17, T19]
+- **parallel_group:** L
+- **implements:** [BHV-3, INV-5, EVAL-3]
+- **anchored_on:** ADR-14, ADR-16, I-20, I-22, I-23
+- **files_touched:** `lab/engine/orchestrate.py`, `tests/fde_kit/test_eval_3_engine.py`
+- **prompt:**
+  > Per spec BHV-3 and design ADR-14 / ADR-16. Resolve the effective policy ONCE at start, after
+  > `--project` (read `.lab/lab.toml` of PROJECT): (1) pre-flight (before the lock, real runs and
+  > `--dry-run`, never `--validate`): no `.lab/lab.toml` ⇒ rc 1 naming `lab init <p> --profile ...`;
+  > `PolicyError` ⇒ rc 1 with its message; `sandbox_required` true and `LAB_RUNNER` not `sandbox` ⇒
+  > rc 1; `allow_force` false and `--force` ⇒ rc 1. (2) `MAX_EVAL_RETRIES`, `MAX_PARALLEL`,
+  > `MAX_CP_REJECTS` become reads of `max_task_attempts`, `max_parallel`, `max_cp_rejects`;
+  > `budget_usd` gives the default budget, `LAB_BUDGET_USD` still wins when set (ADR-14).
+  > (3) pass the policy to `validate(..., policy=...)` (T19). (4) the `run_start` journal event
+  > carries the profile and the effective policy (key, value, origin). Tests BEFORE code with the
+  > shim sandbox (fixtures already write `.lab/lab.toml`, T17), `@pytest.mark.eval`,
+  > `test_eval_3_<case>`: missing lab.toml; regulated without sandbox; regulated + `--force`;
+  > `max_parallel`/`max_task_attempts` overrides change the engine's behavior; run_start content.
+  > *Plan delta (CP-7 rejection, INV-5):* at RUN time, a final/merge checkpoint (sink of the graph,
+  > or "merge" in its title — the same test as plan-lint) is NEVER auto-approved, whatever its
+  > `mode`, `--force` or the profile: it always waits for a signed human approval. Today `--force`
+  > skips the plan-lint error and `wait_checkpoint` auto-approves it on green evals + PASS, and
+  > `allow_force` is true in solo/squad. Test (`test_eval_3_<case>`), in solo and squad: a plan whose
+  > merge CP is `mode: auto`, run with `--force`, green evals and reviewer PASS ⇒ the run waits for a
+  > human approval (no auto-approval token written).
+  > Check with `uv run pytest`; the orchestrator runs `verify`.
+- **done_when:** constants read from the policy; pre-flight refusals for missing lab.toml, sandbox_required, allow_force; plan-lint wired; run_start carries the policy
+- **verify:** `uv run pytest -q tests/orchestrator tests/fde_kit tests/sdlc_rework`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### CP-6 — CHECKPOINT: policy vertical slice + mandatory engine restart
+- **trigger:** automatic when [T16, T17, T18, T19] are done
+- **validator:** Owner
+- **mode:** blocking — *first slice of iteration 2 shown to a human, and the restart is a human action: the live engine predates T18.*
+- **reviews:** `uv run lab policy` on the kit and on both examples (squad, key/value/origin); EX-1 by hand on a temp instance (`regulated` + `min_reviewers = 1` refused, `min_reviewers = 3` + `max_parallel = 4` accepted); a `regulated` temp instance: `lab run --dry-run` refused without `LAB_RUNNER=sandbox`, `--force` refused; `just gate-ci` green; EVAL-3 modules.
+- **self_hosting:** MANDATORY — stop the orchestrator, restart it before approving: T20 must run on the engine that reads the policy.
+- **on_reject:** `lab/engine/reject.sh CP-6 work/fde-kit "reason" [Tn …]`.
+
+### T20 — External-instance sandbox: kit mounted read-only
+- **agent:** implementer
+- **depends_on:** [CP-6]
+- **parallel_group:** M *(∥ T22 — disjoint paths)*
+- **implements:** [BHV-3, INV-1]
+- **anchored_on:** ADR-15, I-16, I-24, E-17
+- **files_touched:** `lab/engine/sandbox_runner.py`, `lab/engine/orchestrate.py`, `tests/fde_kit/test_eval_2_run_preflight.py`, `tests/fde_kit/test_sandbox_external.py`
+- **prompt:**
+  > Per design ADR-15 (supersedes ADR-10), supporting INV-1 and BHV-3 (`sandbox_required`). In
+  > `sandbox_runner.py`: with an external instance, mount the instance at `/workspace` (rw, cwd)
+  > AND the kit root at `/kit` read-only (`-v <kit>:/kit:ro`). In `orchestrate.py`: for sandbox +
+  > external, guardrail options become `/kit/lab/plugin`, `/kit/lab/engine/run_settings.json`;
+  > `add_dirs` pointing inside the kit are translated to `/kit/…`, any other host path is refused;
+  > remove the pre-flight refusal "sandbox + external instance not supported before iteration 2"
+  > and update the test that asserted it. Kit mode unchanged (relative paths). Tests BEFORE code,
+  > argv only, no Docker (`tests/fde_kit/test_sandbox_external.py`): both `-v` entries with `:ro`
+  > on the kit, `/kit/...` plugin and settings, no host path in the argv, kit mode argv unchanged.
+  > Check with `uv run pytest`; the orchestrator runs `verify`.
+- **done_when:** sandbox argv for an external instance mounts the kit read-only and passes /kit paths; refusal removed; kit mode unchanged
+- **verify:** `uv run pytest -q tests/fde_kit/test_sandbox_external.py tests/fde_kit/test_eval_2_run_preflight.py tests/orchestrator`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### T22 — Docs: organization profiles and `lab policy`
+- **agent:** implementer
+- **depends_on:** [CP-6]
+- **parallel_group:** M *(∥ T20)*
+- **implements:** [BHV-3]
+- **anchored_on:** ADR-13, ADR-14
+- **files_touched:** `docs/reference/cli.md`, `docs/reference/policy-profiles.md`, `docs/how-to/choose-an-organization-profile.md`, `docs/README.md`, `docs/how-to/use-the-sandbox.md`
+- **prompt:**
+  > Per spec BHV-3 and design ADR-13..15, using the `diataxis` structure: a reference page
+  > `docs/reference/policy-profiles.md` (the BHV-3 table, each key's enforcement point, the
+  > `[overrides]` / `[overrides.routes]` syntax, EX-1 as the example); a how-to
+  > `docs/how-to/choose-an-organization-profile.md` (solo vs squad vs regulated, how to harden, why
+  > you cannot loosen); `lab policy` in `docs/reference/cli.md`; the external-instance sandbox in
+  > `docs/how-to/use-the-sandbox.md`; link both pages from `docs/README.md`. Fix the
+  > `just eval-models` syntax where you see it: parameters are positional
+  > (`just eval-models behavioral 1 <models>`). No brand names. No code changes.
+- **done_when:** reference + how-to pages exist and are linked; doc-pointer test and brand guard green
+- **verify:** `uv run pytest -q tests/fde_kit/test_doc_pointers.py`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### T21 — Owner lane: kit version 0.2.0, plugin manifest and examples re-pinned
+- **agent:** owner
+- **depends_on:** [T20, T22]
+- **parallel_group:** N
+- **implements:** [INV-7]
+- **anchored_on:** ADR-1, ADR-9, I-19
+- **files_touched:** `pyproject.toml`, `uv.lock`, `lab/plugin/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.lab/lab.toml`, `examples/devis/.lab/lab.toml`, `examples/booking/.lab/lab.toml`, `tests/fde_kit/test_kit_root.py`
+- **prompt:**
+  > *Owner lane: the plugin manifest is a protected path.* *Plan delta (found doing T21):* `test_kit_root.py`
+  > asserted the literal version `0.1.0`; it now checks consistency with the plugin manifest instead. Bump the kit to `0.2.0` everywhere the
+  > version lives (pyproject, plugin.json, marketplace entry; `uv lock` for the root package) and
+  > re-pin `kit_version = "0.2.0"` in the kit's and both examples' `.lab/lab.toml` — an explicit
+  > commit per INV-7. Commit by hand (`Run: owner`), then `lab/engine/approve.sh T21 work/fde-kit`.
+- **done_when:** one version everywhere (I-19 test green); every `.lab/lab.toml` pins 0.2.0; EVAL-8 green
+- **verify:** `uv run pytest -q tests/sdlc_rework/test_lockfile.py tests/fde_kit/test_eval_8_examples.py tests/fde_kit/test_kit_lab_toml.py`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### CP-7 — CHECKPOINT: iteration-2 merge (human, final) + live regulated run
+- **trigger:** automatic when [T16, T17, T18, T19, T20, T21, T22] are done
+- **validator:** Owner (PR review)
+- **mode:** blocking — *the merge is always human (INV-5), and ADR-15 is only proven by a real Docker run.*
+- **reviewers:** 3
+- **reviews:** full diff vs main; `just gate-ci` green; EVAL-3 green; `just check-content work/fde-kit`; `just check-trajectory work/fde-kit`; **a `regulated` external instance run for real in the Docker sandbox** (`LAB_RUNNER=sandbox lab run <f> --project <instance>`, one trivial task) — kit mounted read-only, guardrails active; tag `v0.2.0` decision.
+- **on_reject:** `lab/engine/reject.sh CP-7 work/fde-kit "reason" [Tn …]`.
+
 ## Trigger table — who triggers what
 
 | Event | Trigger | Action |
@@ -675,3 +899,23 @@ test collection (T5) and T10's test is not an eval.
 | 2026-11-12 16:27 | CP-5 | owner | checkpoint REJECTED — gate-ci red: ruff format --check fails on tests/fde_kit/test_doc_pointers.py (line 39, the regex line you added). Run `uv run ruff format tests/fde_kit/test_doc_pointers.py` (whitespace only, inside your files_touched) and confirm `uv run ruff format --check .` and `uv run ruff check .` are clean. Nothing else to change. | |
 | 2026-11-12 16:28 | T14 | implementer | done, evals green (t1) | |
 | 2026-11-12 16:49 | CP-5 | owner | checkpoint validated | |
+| 2026-11-12 17:54 | T16 | implementer | done, evals green (t1) | |
+| 2026-11-12 17:54 | T17 | implementer | done, evals green (t1) | |
+| 2026-11-12 17:56 | T19 | implementer | done, evals green (t1) | |
+| 2026-11-12 17:59 | T18 | implementer | done, evals green (t1) | |
+| 2026-11-12 18:05 | CP-6 | owner | checkpoint REJECTED — policy.py _looser refuses a yes/no safety key EQUAL to its floor (solo + sandbox_required=false, solo + allow_force=true, squad + auto_checkpoints_allowed=true all rc 1 with a self-contradictory message): test 'looser than the floor', not 'is the strict value'. Spec 0.7.0 adds BHV-3d (free-key bounds: max_task_attempts/max_parallel/max_cp_rejects integers >= 1, budget_usd >= 0, else PolicyError naming key, value, bound) — in your scope, see the plan delta in your prompt. Add equal-to-floor tests per yes/no key on solo and squad, and one test per BHV-3d bound. | |
+| 2026-11-12 18:07 | T16 | implementer | done, evals green (t1) | |
+| 2026-11-12 18:12 | CP-6 | owner | checkpoint validated | |
+| 2026-11-12 18:14 | T22 | eval-runner | FAIL (t1) | |
+| 2026-11-12 18:15 | T22 | implementer | BLOCKED — `just lint-check` fails on `lab/engine/orchestrate.py`, T20's in-progress file and outside T22's scope; it needs `ruff format` from T20 | |
+| 2026-11-12 18:17 | T20 | implementer | SCOPE LEAK (t1) | |
+| 2026-11-12 18:19 | T20 | implementer | SCOPE LEAK (t2) | |
+| 2026-11-12 18:26 | T22 | implementer | SCOPE LEAK (t1) | |
+| 2026-11-12 18:26 | T20 | implementer | done, evals green (t1) | |
+| 2026-11-12 18:26 | T22 | implementer | done, evals green (t2) | |
+| 2026-11-13 07:46 | T21 | owner | owner task validated | |
+| 2026-11-13 07:47 | T21 | owner | done by the Owner, verify + evals green | |
+| 2026-11-13 08:35 | CP-7 | owner | checkpoint REJECTED — INV-5 hole (CP-7 review): --force skips plan-lint and wait_checkpoint auto-approves a merge CP in mode auto on green evals + PASS; allow_force is true in solo/squad. T18: a final/merge CP is never auto-approved at run time, whatever mode, --force or profile (eval in solo and squad). T16: budget_usd must be finite (spec 0.8.0) — nan and inf refused. See the plan deltas in your prompts. | |
+| 2026-11-13 08:36 | T16 | implementer | done, evals green (t1) | |
+| 2026-11-13 08:40 | T18 | implementer | done, evals green (t1) | |
+| 2026-11-13 09:37 | CP-7 | owner | checkpoint validated | |

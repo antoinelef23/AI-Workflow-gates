@@ -88,10 +88,15 @@ PROJECT = (
 REGISTRY = load_registry(
     LAB
 )  # model×role assignment (empty if no lab/models/registry.toml)
-MAX_EVAL_RETRIES = 3
-MAX_PARALLEL = 3
-MAX_CP_REJECTS = 2  # beyond this: the checkpoint goes failed, manual resume
+# Engine constants: reads of the effective policy (ADR-14, I-20), resolved ONCE in main()
+# after --project (resolve_policy / apply_policy). These are only the pre-resolution
+# defaults (= the `squad` floor); env LAB_BUDGET_USD, when set, wins over budget_usd.
+MAX_EVAL_RETRIES = 3  # policy: max_task_attempts
+MAX_PARALLEL = 3  # policy: max_parallel
+MAX_CP_REJECTS = 2  # policy: max_cp_rejects — beyond this: CP failed, manual resume
 BUDGET_USD = float(os.environ.get("LAB_BUDGET_USD", "0") or 0)  # 0 = no cap
+POLICY: dict | None = None  # {key: (value, origin)} — policy.effective_policy
+PROFILE: str | None = None
 TASK_TIMEOUT_S = int(
     os.environ.get("LAB_TASK_TIMEOUT", "2400")
 )  # wall per agent: 40 min
@@ -110,7 +115,47 @@ COST_TOTAL = {"usd": 0.0}
 # files_touched of the tasks currently running (parallel waves): a sibling's
 # in-flight edits are not a scope leak of the task being checked.
 RUNNING_LOCK = threading.Lock()
+# files_touched of every task of the CURRENT wave, kept until the wave ends: a sibling
+# that stopped without committing (blocked/failed) leaves files that are its own, not a
+# scope leak of another task (fde-kit iteration 2: T22's docs charged to T20).
 RUNNING_FILES: dict[str, list[str]] = {}
+# Tasks of the wave whose agent is mid-turn. A task is judged (verify, gate, scope leak)
+# only once no sibling is mid-turn, so it never sees a sibling's half-done edits in the
+# shared tree (T22's lint gate went red on T20's unformatted work in progress).
+ACTIVE: set[str] = set()
+JUDGING: set[str] = set()  # settled tasks running verify / gate / scope check
+ACTIVE_COND = threading.Condition()
+
+
+def _set_active(node_id: str, active: bool) -> None:
+    """active=True: the task is about to edit (start or resume an agent turn). It first
+    leaves the judging set and waits until no sibling is judging, so a queued or retrying
+    task never edits the tree while a sibling's verify/gate reads it. active=False: the
+    task is done with the wave (finished, blocked, failed, or an Owner-lane wait)."""
+    with ACTIVE_COND:
+        JUDGING.discard(node_id)
+        if active:
+            ACTIVE_COND.notify_all()
+            ACTIVE_COND.wait_for(lambda: not (JUDGING - {node_id}))
+            ACTIVE.add(node_id)
+        else:
+            ACTIVE.discard(node_id)
+        ACTIVE_COND.notify_all()
+
+
+def _settle(node_id: str) -> None:
+    """Leave the active set and wait until no sibling agent is mid-turn, then judge.
+    Waiting tasks are not active, so siblings that all reach this point proceed
+    together; a wave of one never waits. Queued tasks are not active until they start
+    (registering them up front would hold worker threads and deadlock the pool) —
+    _set_active keeps them from editing while this task is judging."""
+    with ACTIVE_COND:
+        ACTIVE.discard(node_id)
+        ACTIVE_COND.notify_all()
+        ACTIVE_COND.wait_for(lambda: not (ACTIVE - {node_id}))
+        JUDGING.add(node_id)
+
+
 # fd of the inter-process flock kept open for the whole run (released on process
 # exit by the OS). Prevents two orchestrators from racing on the same feature.
 _ORCH_LOCK_FD: int | None = None
@@ -200,6 +245,52 @@ RULES_REL = PLUGIN_REL / "rules" / "hard-rules.md"
 MIN_CLAUDE_VERSION = (2, 1, 295)  # `onFailure` hooks (design ADR-6)
 
 
+SANDBOX_KIT = "/kit"  # where the sandbox mounts the kit root, read-only (ADR-15)
+
+
+class SandboxPathError(ValueError):
+    """A host path that would not exist inside the sandbox container."""
+
+
+def sandboxed_external() -> bool:
+    """External instance driven through the sandbox runner: the kit lives at /kit."""
+    return (
+        PROJECT != LAB
+        and (os.environ.get("LAB_RUNNER") or "").strip().lower() == "sandbox"
+    )
+
+
+def kit_ref(path: Path | None = None) -> str:
+    """A kit path as the agent sees it: `/kit/…` in the external sandbox, host path else."""
+    p = Path(path) if path is not None else LAB
+    if not sandboxed_external():
+        return str(p)
+    rel = p.resolve().relative_to(LAB.resolve())
+    return str(Path(SANDBOX_KIT) / rel)
+
+
+def project_ref(path: Path) -> str:
+    """A path under the instance as the agent sees it: `/workspace/…` in the external
+    sandbox (the instance is mounted there), host path else."""
+    if not sandboxed_external():
+        return str(path)
+    return str(Path("/workspace") / Path(path).resolve().relative_to(PROJECT.resolve()))
+
+
+def translate_add_dirs(dirs: list[str]) -> list[str]:
+    """Sandbox + external: `--add-dir` paths inside the kit become `/kit/…`; any other host
+    path is refused (it would not exist in the container, ADR-15, I-24)."""
+    out = []
+    for d in dirs:
+        try:
+            out.append(kit_ref(Path(d)))
+        except ValueError:
+            raise SandboxPathError(
+                f"add_dir {d} is outside the kit ({LAB}): not reachable from the sandbox"
+            ) from None
+    return out
+
+
 def guardrail_options() -> dict:
     """Plugin dir, run settings and hard rules for EVERY agent call (implementer and
     reviewer alike). Resolved from the KIT root (LAB), never from PROJECT (I-2). Kit mode
@@ -207,10 +298,15 @@ def guardrail_options() -> dict:
     /workspace (ADR-10). External instance: absolute paths under the kit. The engine never
     passes `--bare`."""
     external = PROJECT != LAB
-    base = LAB if external else Path()
+    if sandboxed_external():  # kit mounted read-only at /kit (ADR-15)
+        plugin_dir = kit_ref(LAB / PLUGIN_REL)
+        settings = kit_ref(LAB / RUN_SETTINGS_REL)
+    else:
+        base = LAB if external else Path()
+        plugin_dir, settings = str(base / PLUGIN_REL), str(base / RUN_SETTINGS_REL)
     return {
-        "plugin_dir": str(base / PLUGIN_REL),
-        "settings": str(base / RUN_SETTINGS_REL),
+        "plugin_dir": plugin_dir,
+        "settings": settings,
         "append_system_prompt": (LAB / RULES_REL).read_text(encoding="utf-8"),
     }
 
@@ -224,6 +320,46 @@ def agent_file(role: str) -> Path:
 def _parse_version(text: str) -> tuple[int, ...] | None:
     m = re.search(r"(\d+)\.(\d+)\.(\d+)", text)
     return tuple(int(x) for x in m.groups()) if m else None
+
+
+def resolve_policy(
+    force: bool,
+) -> tuple[dict | None, str | None, list[str]]:
+    """Effective policy of PROJECT (ADR-14, ADR-16). Returns (policy, profile, refusals).
+    Refusals (rc 1): no .lab/lab.toml (names `lab init`), PolicyError, sandbox_required
+    without LAB_RUNNER=sandbox, allow_force=false with --force."""
+    from lab_init import LabTomlError, read_lab_toml
+    from policy import PolicyError, effective_policy
+
+    try:
+        lab_toml = read_lab_toml(PROJECT)
+        policy = effective_policy(lab_toml)
+    except (LabTomlError, PolicyError) as e:
+        return None, None, [str(e)]
+    refusals = []
+    runner = (os.environ.get("LAB_RUNNER") or "").strip().lower()
+    if policy["sandbox_required"][0] is True and runner != "sandbox":
+        refusals.append(
+            f"sandbox_required is true (profile '{lab_toml['profile']}'): "
+            "set LAB_RUNNER=sandbox to run"
+        )
+    if force and policy["allow_force"][0] is False:
+        refusals.append(
+            f"allow_force is false (profile '{lab_toml['profile']}'): --force is refused"
+        )
+    return policy, lab_toml["profile"], refusals
+
+
+def apply_policy(policy: dict) -> None:
+    """The engine constants become reads of the effective policy (I-20)."""
+    global MAX_EVAL_RETRIES, MAX_PARALLEL, MAX_CP_REJECTS, BUDGET_USD
+    MAX_EVAL_RETRIES = int(policy["max_task_attempts"][0])
+    MAX_PARALLEL = int(policy["max_parallel"][0])
+    MAX_CP_REJECTS = int(policy["max_cp_rejects"][0])
+    if (os.environ.get("LAB_BUDGET_USD") or "").strip():
+        BUDGET_USD = float(os.environ["LAB_BUDGET_USD"])  # operator setting wins
+    else:
+        BUDGET_USD = float(policy["budget_usd"][0] or 0)
 
 
 def preflight() -> list[str]:
@@ -266,8 +402,6 @@ def preflight() -> list[str]:
         return [
             f"claude CLI {'.'.join(map(str, found))} is too old (need >= {minimum})"
         ]
-    if external and (os.environ.get("LAB_RUNNER") or "").strip().lower() == "sandbox":
-        return ["sandbox + external instance not supported before iteration 2"]
     return []
 
 
@@ -290,6 +424,12 @@ def run_claude(
     # live under the LAB — grant that dir explicitly. When PROJECT==LAB (every test and
     # the in-repo path) no --add-dir is added, so the argv is unchanged.
     add_dirs = [str(LAB)] if PROJECT != LAB else None
+    extra: dict = {}
+    if (
+        sandboxed_external()
+    ):  # ADR-15: kit at /kit (ro); host paths translated or refused
+        add_dirs = translate_add_dirs(add_dirs or [])
+        extra["kit_mount"] = LAB
     r = RUNNER.run(
         prompt,
         cwd=PROJECT,
@@ -300,6 +440,7 @@ def run_claude(
         timeout=TASK_TIMEOUT_S,
         env=child_env,
         add_dirs=add_dirs,
+        **extra,
         **guardrail_options(),
     )
     with COST_LOCK:
@@ -502,10 +643,11 @@ def _commit_message(node: Node, feature: Path, real_ids: list[str]) -> str:
 
 def _build_base_prompt(node: Node, feature: Path) -> str:
     return (
-        f"You act as the implementer agent ({agent_file('implementer')}). "
+        f"You act as the implementer agent ({kit_ref(agent_file('implementer'))}). "
         f"Framework references (engineering rules, deployment standard, other agent files) "
-        f"live under {LAB} — resolve any such path there, not under the project. "
-        f"Read {feature}/spec.md then {feature}/design.md then {feature}/tasks.md. "
+        f"live under {kit_ref()} — resolve any such path there, not under the project. "
+        f"Read {project_ref(feature)}/spec.md then {project_ref(feature)}/design.md "
+        f"then {project_ref(feature)}/tasks.md. "
         f"Execute ONLY task {node.id} — {node.title}. "
         f"Respect its files_touched scope and its done_when. "
         f"If the spec is ambiguous or has gaps: do not invent, record the question (OQ-n format) in spec.md §8 "
@@ -648,12 +790,22 @@ def run_owner_task(node: Node, feature: Path, dry: bool, real_ids: list[str]) ->
 
 
 def run_task(node: Node, feature: Path, dry: bool) -> str:
+    try:
+        return _run_task(node, feature, dry)
+    finally:
+        _set_active(node.id, False)  # finished, blocked or failed: never hold siblings
+
+
+def _run_task(node: Node, feature: Path, dry: bool) -> str:
     """Returns done | failed | blocked. Per attempt: run the agent → parse the
     STATUS verdict → run verify → run the eval gate → scoped commit on green."""
     if node.agent == "owner":
         ids = list(
             dict.fromkeys(s for t in node.implements for s in SPEC_ID.findall(t))
         )
+        _set_active(
+            node.id, False
+        )  # no agent turn: waiting on a human never holds siblings
         return run_owner_task(node, feature, dry, ids)
     if dry:
         print(
@@ -668,13 +820,9 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
     mid = resolve_model("implementer", node.model, REGISTRY)
     base_prompt = _build_base_prompt(node, feature) + REGISTRY.profile_text(mid)
     baseline = _dirty_paths()
-    with RUNNING_LOCK:
+    with RUNNING_LOCK:  # cleared at the start of the next wave, not here
         RUNNING_FILES[node.id] = list(node.files)
-    try:
-        return _run_task_attempts(node, feature, real_ids, base_prompt, mid, baseline)
-    finally:
-        with RUNNING_LOCK:
-            RUNNING_FILES.pop(node.id, None)
+    return _run_task_attempts(node, feature, real_ids, base_prompt, mid, baseline)
 
 
 def _run_task_attempts(
@@ -698,7 +846,9 @@ def _run_task_attempts(
             )
         else:
             prompt = base_prompt + extra
+        _set_active(node.id, True)
         r = run_claude(prompt, resume=session, model=mid)
+        _settle(node.id)  # judge the turn only on a tree no sibling is still editing
         journal(
             feature,
             event="task_attempt",
@@ -818,7 +968,7 @@ def run_review(cp: Node, feature: Path, dry: bool) -> tuple[str, Path, bool]:
     for i, mid in enumerate(models):
         lens = REVIEW_LENSES[i % len(REVIEW_LENSES)] if n > 1 else "full review"
         prompt = (
-            f"You act as the reviewer agent ({agent_file('reviewer')}). Feature: {feature}. "
+            f"You act as the reviewer agent ({kit_ref(agent_file('reviewer'))}). Feature: {project_ref(feature)}. "
             f"Checkpoint {cp.id} — {cp.title}. Tasks covered: {', '.join(cp.depends_on) or 'all'}. "
             f"REVIEW LENS imposed: {lens}. "
             f"Produce the report (✅/⚠️/❌ with file:line) and you MUST end with a "
@@ -860,10 +1010,19 @@ def parse_rejection(path: Path) -> dict:
     return info
 
 
+def is_merge_checkpoint(node: Node, nodes: list[Node]) -> bool:
+    """Final/merge checkpoint — same test as plan-lint (INV-5): sink of the graph, or
+    "merge" in its title."""
+    is_sink = not any(node.id in m.depends_on for m in nodes)
+    return is_sink or "merge" in (node.title + " ").lower()
+
+
 def wait_checkpoint(
-    node: Node, feature: Path, dry: bool, supervised: bool
+    node: Node, feature: Path, dry: bool, supervised: bool, merge: bool = False
 ) -> tuple[str, dict]:
-    """Returns ("approved", {}) or ("rejected", {reason, tasks})."""
+    """Returns ("approved", {}) or ("rejected", {reason, tasks}).
+    `merge`: a final/merge CP is NEVER auto-approved — whatever its mode, --force or the
+    profile (INV-5); it always waits for a signed human approval."""
     approval = feature / ".approvals" / node.id
     if dry:
         print(
@@ -881,7 +1040,12 @@ def wait_checkpoint(
     verdict, report, self_only = run_review(node, feature, dry)
     evals_ok, _ = run_evals()
 
-    if node.mode == "auto" and not supervised:
+    if node.mode == "auto" and merge:
+        notify(
+            f"{node.id} (auto): final/merge checkpoint — never auto-approved (INV-5) "
+            "→ human validation required."
+        )
+    elif node.mode == "auto" and not supervised:
         if self_only:
             notify(
                 f"{node.id} (auto): separation of duties impossible (reviewer = implementer's model) "
@@ -999,6 +1163,17 @@ def main() -> int:
         global PROJECT
         PROJECT = Path(args.project).resolve()
 
+    # Effective policy, resolved ONCE after --project (ADR-14). Pre-flight refusals apply
+    # to real runs and --dry-run, never to --validate (which only lints, policy if any).
+    global POLICY, PROFILE
+    POLICY, PROFILE, policy_refusals = resolve_policy(args.force)
+    if policy_refusals and not args.validate:
+        for m in policy_refusals:
+            print(f"⛔ pre-flight: {m}", file=sys.stderr)
+        return 1
+    if POLICY is not None:
+        apply_policy(POLICY)
+
     feature = (PROJECT / args.feature).resolve()
     fm, nodes = parse_tasks_md(feature / "tasks.md")
 
@@ -1010,7 +1185,7 @@ def main() -> int:
     except (OSError, json.JSONDecodeError, AttributeError):
         done_ids = set()
     errors, warnings = validate(
-        feature, fm, nodes, REGISTRY, project=PROJECT, done=done_ids
+        feature, fm, nodes, REGISTRY, project=PROJECT, done=done_ids, policy=POLICY
     )
     if args.validate or errors or warnings:
         print(
@@ -1089,6 +1264,15 @@ def main() -> int:
         except OSError as e:
             print(f"⛔ {e}", file=sys.stderr)
             return 1
+    if not args.dry_run:
+        journal(
+            feature,
+            event="run_start",
+            profile=PROFILE,
+            policy={
+                k: {"value": v, "origin": o} for k, (v, o) in (POLICY or {}).items()
+            },
+        )
     if state_f.exists() and not args.dry_run:
         # Tolerant resume (finding L9): a truncated state.json (kill mid-write)
         # must not crash the resume — we start clean rather than crash.
@@ -1139,6 +1323,12 @@ def main() -> int:
         if tasks:
             wave = ", ".join(n.id for n in tasks)
             print(f"\n=== Parallel wave: {wave} ===")
+            with RUNNING_LOCK:
+                RUNNING_FILES.clear()
+            with ACTIVE_COND:  # registered before any starts: no task judges too early
+                ACTIVE.clear()
+                JUDGING.clear()
+                ACTIVE.update(n.id for n in tasks[:MAX_PARALLEL])
             with ThreadPoolExecutor(max_workers=MAX_PARALLEL) as ex:
                 futs = {ex.submit(run_task, n, feature, args.dry_run): n for n in tasks}
                 for fut in as_completed(futs):
@@ -1148,7 +1338,13 @@ def main() -> int:
                         skip_dependents(n, nodes)
                     save()
         for cp in cps:
-            outcome, info = wait_checkpoint(cp, feature, args.dry_run, args.supervised)
+            outcome, info = wait_checkpoint(
+                cp,
+                feature,
+                args.dry_run,
+                args.supervised,
+                merge=is_merge_checkpoint(cp, nodes),
+            )
             if outcome == "approved":
                 cp.status = "done"
             else:  # rejected — on_reject: back to the targeted tasks with a comment

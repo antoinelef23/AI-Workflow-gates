@@ -1,0 +1,69 @@
+# Profils d'organisation — la table de BHV-3, telle quelle (design ADR-13).
+# kind   : "safety" (soumise au plancher) | "free" (override libre)
+# strict : direction « plus strict » d'une clé de sécurité — "true" | "false" | "up" | "down"
+#          (omis pour une clé libre). Valeurs par profil : solo / squad / regulated.
+# goldfish_min_score : déclarée, sans valeur (non déclaré) — mesure seule (BHV-8c).
+schema_version = 1
+
+[auto_checkpoints_allowed]
+kind = "safety"
+strict = "false"
+solo = true
+squad = true
+regulated = false
+
+[min_reviewers]
+kind = "safety"
+strict = "up"
+solo = 1
+squad = 1
+regulated = 2
+
+[max_tasks_between_checkpoints]
+kind = "safety"
+strict = "down"
+solo = 8
+squad = 5
+regulated = 3
+
+[sandbox_required]
+kind = "safety"
+strict = "true"
+solo = false
+squad = false
+regulated = true
+
+[allow_force]
+kind = "safety"
+strict = "false"
+solo = true
+squad = true
+regulated = false
+
+[max_task_attempts]
+kind = "free"
+solo = 3
+squad = 3
+regulated = 3
+
+[max_parallel]
+kind = "free"
+solo = 3
+squad = 3
+regulated = 2
+
+[max_cp_rejects]
+kind = "free"
+solo = 2
+squad = 2
+regulated = 2
+
+[budget_usd]
+kind = "free"
+solo = 0
+squad = 0
+regulated = 0
+
+[goldfish_min_score]
+kind = "safety"
+strict = "up"

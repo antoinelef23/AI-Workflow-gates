@@ -19,6 +19,7 @@ REPO = Path(__file__).resolve().parents[2]
 ORCH = REPO / "lab" / "engine" / "orchestrate.py"
 sys.path.insert(0, str(REPO / "lab" / "engine"))
 import approvals  # noqa: E402
+import kit  # noqa: E402
 
 # Test secret: the tests exercise the SECURE path (signed tokens) by default.
 TEST_SECRET = "test-approval-secret"
@@ -84,6 +85,11 @@ def sandbox(tmp_path: Path) -> Path:
     (sb / "lab" / "engine").mkdir(parents=True, exist_ok=True)
     (sb / "lab" / "engine" / "run_settings.json").write_text("{}")
     (sb / "work" / "feat" / "spec.md").write_text(SPEC)
+    # The kit is an instance of itself (ADR-16): an explicit control level, always.
+    (sb / ".lab").mkdir()
+    (sb / ".lab" / "lab.toml").write_text(
+        f'schema_version = 1\nkit_version = "{kit.kit_version()}"\nprofile = "squad"\n'
+    )
     # The shim dir (scenarios, call log, counters) is harness state, not agent
     # edits: keep it out of `git status` so the scope-leak check ignores it.
     (sb / ".gitignore").write_text(".shim/\n")

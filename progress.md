@@ -93,14 +93,26 @@ Leçons de planification : une tâche scindée doit rester verte à chaque étap
 deux lignes de test) ; un rejet doit prescrire le **besoin** (« le modèle lit son fichier de
 rôle sans voir les clés »), pas un mécanisme (l'`--add-dir` prescrit a ouvert une fuite).
 
-## 7. Prochaine action
+## 7. Itération 2 (profils d'organisation) — terminée le 2026-11-13
 
-Itération 1 **terminée** (20 nœuds ✅, coût agents du run 4 : 8,37 $). L'Owner a décidé :
-PR `ccr-99c581ba-w0vhys` → `main` (correctifs moteur dans la même PR), **merge par l'Owner** sur
-GitHub, puis tag **`v0.1.0`** sur `main` après le merge. À annoncer : O-6 (une session dans le kit
-sans `--plugin-dir lab/plugin` n'a plus de garde-fous). Ensuite : itération 2 (profils
-solo/squad/regulated) et une feature dédiée au lot de correctifs ci-dessous ; recalibrer
-`reviewer.md` via la boucle EVOLUTION (WARN sur code propre sous conditions réelles).
+État : itération 1 mergée (PR #1, `b64b227`). Itération 2 : spec **0.8.0**, design **0.6.0**,
+tasks **0.2.0** ; 29 nœuds ✅ ; kit **0.2.0** (exemples ré-épinglés). Coût agents ≈ 5,3 $ (dernier run).
+Checkpoints, tous signés par l'Owner : CP-6 (rejeté une fois → T16 : égal-au-plancher, spec 0.7.0
+BHV-3d), CP-7 (rejeté une fois → T18 garde INV-5 à l'exécution + T16 budget fini, spec 0.8.0 ;
+design 0.6.0 consigne les deux points d'application d'INV-5).
+
+Améliorations moteur pendant l'itération 2 : `a2a282c` (une vague parallèle juge chaque tâche sur
+un arbre stabilisé ; le périmètre de chaque tâche vaut pour toute la vague) et `369bdec` (aucune
+tâche n'édite pendant qu'une sœur se fait juger — trou des tâches en file). `reviewer.md` 1.2.0
+(`8479c4c`, boucle EVOLUTION) : les revues CP-6/CP-7 séparent écarts établis / « non vérifié » / OQ.
+
+**Reste à faire (Owner) :**
+1. Merger la PR de l'itération 2.
+2. **Avant le tag `v0.2.0`** : run `regulated` réel en sandbox Docker (commandes dans la
+   conversation de session et `docs/how-to/use-the-sandbox.md`) — seule preuve réelle d'ADR-15.
+3. Créer les tags `v0.1.0` (`b64b227`) et `v0.2.0` (la session cloud ne peut pas pousser de tag).
+Ensuite : itération 3 (workflow de bout en bout, retours arrière R1–R7, goldfish) et la feature
+« lot de correctifs » ci-dessous.
 
 ## 8. Lot de correctifs du lab (hors plan)
 
@@ -131,6 +143,12 @@ Faits : 4 (`2b8f327`), 9 (`5a70c84`), 13 (`ed61c07`), 14 (`f4f151c`), 17 (`2f3fe
 25. `46ab6dc` porte un tag `[BHV-7]` parasite (périmètre itération 4).
 26. `brand_denylist.txt` vide : `check-brand` passe à vide (voulu ? à confirmer avant la première mission).
 27. ✅ Vert en local, rouge en CI (PR #1) : le lint de capacité lisait les tâches « done » dans `.runs/state.json`, **gitignoré** — corrigé en les dérivant de l'historique git (`1dbfd26`). Règle à retenir : aucun contrôle de gate ne doit dépendre d'un état hors git.
+28. Un orchestrateur arrêté par SIGINT laisse tourner ses threads de travail : l'un a auto-commité un changement moteur sous le nom de T20 (non poussé, réécrit dans `a2a282c`). L'arrêt doit stopper les workers.
+29. Un prompt de tâche qui demande de corriger « partout où tu le vois » invite une fuite de périmètre (T22 : `README.md`, `docs/how-to/evaluate-models.md`) ; la syntaxe `just eval-models` y reste fausse.
+30. ✅ Test qui fige un littéral de version (`test_kit_root.py`) : cassait à chaque bump — vérifie désormais la cohérence (`2cf51a8`).
+31. Message « Budget reached » : cite encore `LAB_BUDGET_USD` quand le plafond vient de la politique.
+32. ✅ Vague parallèle : jugement sur l'arbre d'une sœur en cours, fuite attribuée à tort, tâches en file (`a2a282c`, `369bdec`).
+33. Ne jamais manipuler `git stash` pendant que le travail d'une tâche y est mis de côté (incident de session, sans perte).
 
 ## 9. Environnement (session cloud)
 

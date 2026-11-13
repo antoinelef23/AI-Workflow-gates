@@ -19,6 +19,7 @@ Entry point of the `fde-kit` package (`lab = "lab.engine.cli:main"`), installed 
 ```
 lab version
 lab init <project> --profile <solo|squad|regulated> [--dry-run]
+lab policy [--project <path>]
 lab run <feature> [--project <path>] [orchestrate.py options]
 lab validate <feature> [--project <path>]
 ```
@@ -26,7 +27,8 @@ lab validate <feature> [--project <path>]
 | Command | Effect |
 |---|---|
 | `version` | Prints the kit version (installed package metadata; falls back to `pyproject.toml` in a checkout). |
-| `init` | Activates an instance: computes the full plan, prints one line per file (`create` / `identical` / `skip`, never overwrite), applies it unless `--dry-run`. Creates `.lab/lab.toml`, `work/README.md`, `work/_templates/{spec,design,tasks}.template.md`, and the `evals` / `evals-collect` justfile recipes when absent (an existing `evals` recipe is kept). Writes nothing under `.claude/` and no `CLAUDE.md` / `AGENTS.md`. `--profile` is mandatory (absent: rc 1 listing the three profiles); the value is recorded only, its effect arrives in iteration 2. A second run reports "0 changement". |
+| `init` | Activates an instance: computes the full plan, prints one line per file (`create` / `identical` / `skip`, never overwrite), applies it unless `--dry-run`. Creates `.lab/lab.toml`, `work/README.md`, `work/_templates/{spec,design,tasks}.template.md`, and the `evals` / `evals-collect` justfile recipes when absent (an existing `evals` recipe is kept). Writes nothing under `.claude/` and no `CLAUDE.md` / `AGENTS.md`. `--profile` is mandatory (absent: rc 1 listing the three profiles); the value is the instance's policy floor ([policy-profiles.md](policy-profiles.md)). A second run reports "0 changement". |
+| `policy` | Prints the effective policy of the instance: floor + `[overrides]`, see [`lab policy`](#lab-policy). |
 | `run` | Relay to `orchestrate.py`: every argument is passed through. |
 | `validate` | Same as `run … --validate` (plan-lint). |
 
@@ -36,9 +38,12 @@ Exit codes: 0 success; 1 refusal (see pre-flight below); 2 usage error or unknow
 
 Fail-closed, rc 1. Checked in order: kit root resolved; `lab/plugin/` present; `.lab/lab.toml`
 present and `kit_version` equal to the installed kit version (else `plugin X ≠ pinned kit Y`);
-`claude` CLI version recent enough; runner/instance combination allowed — `LAB_RUNNER=sandbox` with
-`--project` is refused (`sandbox + external instance not supported before iteration 2`). Without
-`--project` (kit mode) only the kit root, plugin and CLI checks apply.
+`claude` CLI version recent enough; effective policy resolved and its start-time keys applied —
+`sandbox_required = true` without `LAB_RUNNER=sandbox` is refused, `allow_force = false` with
+`--force` is refused. `LAB_RUNNER=sandbox` with `--project` is allowed: the kit is mounted read-only
+([use-the-sandbox.md](../how-to/use-the-sandbox.md)). A real run without `.lab/lab.toml` is refused
+in kit mode too (the message names `lab init … --profile`). Without `--project` (kit mode) the kit
+root, plugin, CLI and policy checks apply.
 
 ### What the engine passes on every agent call
 
@@ -53,10 +58,32 @@ Never `--bare`. The guardrails therefore apply to an instance that has no `.clau
 ```toml
 schema_version = 1
 kit_version = "0.1.0"   # exact pin, compared with the installed kit version
-profile = "squad"       # solo | squad | regulated — recorded; applied from iteration 2
+profile = "squad"       # solo | squad | regulated — the policy floor
+
+[overrides]             # optional: tighten a safety key, tune a free key
+max_parallel = 4
+
+[overrides.routes]      # optional: R1..R7 = auto | proposal | human (applied from iteration 3)
+R6 = "human"
 ```
 
+Keys, bounds and errors: [policy-profiles.md](policy-profiles.md).
+
 Upgrading the kit in an instance is an explicit commit that bumps `kit_version`.
+
+### lab policy
+
+```
+lab policy [--project <path>]      # default: current directory
+```
+
+Reads `.lab/lab.toml` of the project, computes the effective policy (floor ⊕ overrides, key by key)
+and prints one line per key: `<key> = <value>  (<origin>)`, origin ∈ `floor`, `override`,
+`override (free key)`. Overridden routes follow as `routes.Rn`, tagged `[applied from iteration 3]`.
+`goldfish_min_score` prints `undeclared` until declared. Exit 0; rc 1 with `lab policy: <reason>` on
+a missing or invalid `.lab/lab.toml`, an unknown key or route, a safety key looser than the floor,
+a free key out of bounds, or `auto` on R2–R5. Reference: [policy-profiles.md](policy-profiles.md);
+how-to: [choose-an-organization-profile.md](../how-to/choose-an-organization-profile.md).
 
 ### Kit root (`LAB_ROOT`)
 
@@ -91,11 +118,13 @@ How-to: [run-the-orchestrator.md](../how-to/run-the-orchestrator.md).
 | `--dry-run` | Print the plan and per-node actions; run nothing. Skips the orchestrator lock, state persistence, and the checkpoint-secret requirement. | off |
 | `--validate` | Plan-lint `tasks.md` and exit. Prints node count, frontmatter status, warnings, errors, and the `verify` commands. Exit 1 if errors, else 0. | off |
 | `--supervised` | Force every checkpoint to `blocking` (ignore `mode: auto`). | off |
-| `--force` | Ignore `status: approved` and plan-lint errors. Not recommended. | off |
+| `--force` | Ignore `status: approved` and plan-lint errors. Not recommended; refused when `allow_force = false`. | off |
 
 ### Behavior constants
 
-These are fixed in `lab/engine/orchestrate.py` (not CLI flags); some are
+These are defined in `lab/engine/orchestrate.py` (not CLI flags). `MAX_EVAL_RETRIES`, `MAX_PARALLEL`,
+`MAX_CP_REJECTS` and `BUDGET_USD` take the effective policy's value (`max_task_attempts`,
+`max_parallel`, `max_cp_rejects`, `budget_usd`); the values below are the `squad` defaults. Some are
 overridable by environment variable (see [environment.md](environment.md)).
 
 | Constant | Value | Meaning |
@@ -146,7 +175,7 @@ script; recipes no-op cleanly when `pyproject.toml` is absent.
 | `report feature="" json=""` | `python3 lab/engine/run_report.py [feature] [--json]` | Run-telemetry report: first-pass rate, attempts, cost per role/model, failure clusters. Read-only. |
 | `check-trajectory feature` | `python3 lab/engine/trajectory_guard.py "{{feature}}"` | Trajectory guard: journal integrity + commit scope of a feature run (HOW, not WHAT). |
 | `context-budget` | `python3 lab/engine/context_budget.py` | Static-context payload per role; gates only once `[context] max_static_tokens` is declared in the registry. |
-| `eval-models layer="all" live="" models=""` | `python3 lab/engine/eval_models.py --layer "{{layer}}" [--live] [--models {{models}}]` | Run the model-eval harness; `--live` calls real (billed) models. |
+| `eval-models layer="all" live="" models=""` (positional: `just eval-models behavioral 1 <models>`) | `python3 lab/engine/eval_models.py --layer "{{layer}}" [--live] [--models {{models}}]` | Run the model-eval harness; `--live` calls real (billed) models. |
 | `install` | `uv sync --locked` (if `pyproject.toml`) | Install dependencies, hash-pinned; refuses an out-of-sync `uv.lock`. |
 | `lint` | `uv run ruff check --fix . && uv run ruff format .` | Mutating lint: auto-fix + format. Local/agent path. |
 | `lint-check` | `uv run ruff check . && uv run ruff format --check .` | Non-mutating lint: fails on drift instead of fixing. |
@@ -224,6 +253,9 @@ python3 lab/engine/eval_models.py [--layer L] [--models a,b] [--runs N] [--live]
 | `--live` | Call the real (billed) models. | off |
 | `--stamp` | Scorecard name. | `latest` |
 | `--budget` | Campaign `$` cap; 0 = none. | 0.0 |
+
+Through `just`, parameters are **positional**: `just eval-models <layer> <live> <models>`, e.g.
+`just eval-models behavioral 1 a,b` (any non-empty `live` adds `--live`; pass `""` to skip it).
 
 Without `--live` and without `LAB_MODEL_SHIM`, refuses to run (exit 2).
 Exit 2 also if no model resolves. Invoked by `just eval-models`.

@@ -85,6 +85,10 @@ def test_validate_resolves_feature_under_external_project(tmp_path):
     lab = tmp_path / "lab"
     proj = tmp_path / "proj"
     lab.mkdir()
+    (lab / ".lab").mkdir()
+    (lab / ".lab" / "lab.toml").write_text(
+        'schema_version = 1\nkit_version = "0.1.0"\nprofile = "squad"\n'
+    )
     (proj / "work" / "feat").mkdir(parents=True)
     # No tasks.md in the project feature: the orchestrator must fail trying to read it
     # FROM THE PROJECT path — proving resolution moved off the lab repo.

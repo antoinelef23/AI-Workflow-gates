@@ -6,7 +6,7 @@
       "name": "fde-kit",
       "source": "./lab/plugin",
       "description": "Portable agentic SDLC kit: agents, skills, guardrails and hard rules.",
-      "version": "0.1.0"
+      "version": "0.2.0"
     }
   ]
 }

@@ -105,6 +105,62 @@ def _capability_lint(
             )
 
 
+def _pv(policy: dict, key: str):
+    """Value of a policy key — accepts `{key: (value, origin)}` or `{key: value}`."""
+    v = policy.get(key)
+    return v[0] if isinstance(v, tuple) else v
+
+
+def _policy_lint(
+    nodes: list[Node], policy: dict, done: set[str], errors: list[str]
+) -> None:
+    """Plan-time safety keys (ADR-14, I-21). The final/merge CP rule (INV-5) lives in
+    `validate` and has no key: nothing here can relax it. Done tasks are not re-linted."""
+    auto_ok = _pv(policy, "auto_checkpoints_allowed")
+    min_rev = _pv(policy, "min_reviewers")
+    max_tasks = _pv(policy, "max_tasks_between_checkpoints")
+
+    for cp in (n for n in nodes if n.is_checkpoint and n.id not in done):
+        if auto_ok is False and cp.mode == "auto":
+            errors.append(
+                f"{cp.id}: mode auto is not allowed by the policy "
+                "(auto_checkpoints_allowed = false) — make the checkpoint blocking"
+            )
+        if min_rev is not None and cp.reviewers < min_rev:
+            errors.append(
+                f"{cp.id}: reviewers = {cp.reviewers} is below the policy "
+                f"min_reviewers = {min_rev}"
+            )
+
+    if max_tasks is None:
+        return
+    # Longest chain of not-done tasks linked by depends_on; checkpoints cut a chain
+    # (a path "between two checkpoints", or before the first).
+    live = {n.id: n for n in nodes if not n.is_checkpoint and n.id not in done}
+    memo: dict[str, list[str]] = {}
+
+    def longest(nid: str, stack: tuple[str, ...] = ()) -> list[str]:
+        if nid in memo:
+            return memo[nid]
+        if nid in stack:  # cycle — reported elsewhere
+            return []
+        best: list[str] = []
+        for d in live[nid].depends_on:
+            if d in live:
+                sub = longest(d, (*stack, nid))
+                if len(sub) > len(best):
+                    best = sub
+        memo[nid] = [*best, nid]
+        return memo[nid]
+
+    worst = max((longest(i) for i in live), key=len, default=[])
+    if len(worst) > max_tasks:
+        errors.append(
+            f"{len(worst)} tasks between checkpoints ({' → '.join(worst)}) exceed the "
+            f"policy max_tasks_between_checkpoints = {max_tasks} — add a checkpoint"
+        )
+
+
 def validate(
     feature: Path,
     fm: dict,
@@ -112,9 +168,12 @@ def validate(
     registry,
     project: Path | None = None,
     done: set[str] | None = None,
+    policy: dict | None = None,
 ) -> tuple[list[str], list[str]]:
     """Plan-lint. Returns (errors, warnings). `project` enables the capability
-    lint (agent vs protected paths / tool allowlist); `done` = nodes already done."""
+    lint (agent vs protected paths / tool allowlist); `done` = nodes already done;
+    `policy` = `policy.effective_policy(...)` (values only are read) enables the
+    plan-time safety keys (ADR-14). None ⇒ those rules are skipped."""
     errors: list[str] = []
     warnings: list[str] = []
     by_id = {n.id: n for n in nodes}
@@ -266,6 +325,9 @@ def validate(
             errors.append(
                 f"{cp.id}: a final/merge checkpoint cannot be mode auto — the merge is human, always"
             )
+
+    if policy is not None:
+        _policy_lint(nodes, policy, set(done or ()), errors)
 
     # Separation of duties: one model should not both implement AND arbitrate alone
     if registry.models:

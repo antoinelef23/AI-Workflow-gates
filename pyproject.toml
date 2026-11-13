@@ -1,6 +1,6 @@
 [project]
 name = "fde-kit"
-version = "0.1.0"
+version = "0.2.0"
 description = "FDE kit — portable agentic SDLC workflow: engine, model registry, templates"
 requires-python = ">=3.12"
 dependencies = []

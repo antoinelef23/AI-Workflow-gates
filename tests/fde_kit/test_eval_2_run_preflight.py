@@ -80,6 +80,11 @@ def _make_kit(root: Path, *, plugin: bool = True) -> Path:
     (root / "lab" / "engine" / "run_settings.json").write_text(
         '{"permissions": {"deny": ["Edit(**/.approvals/**)", "Edit(**/.runs/**)"]}}'
     )
+    # The kit is an instance of itself (ADR-16): its own explicit control level.
+    (root / ".lab").mkdir()
+    (root / ".lab" / "lab.toml").write_text(
+        f'schema_version = 1\nkit_version = "{kit.kit_version()}"\nprofile = "squad"\n'
+    )
     if plugin:
         (root / "lab" / "plugin" / ".claude-plugin").mkdir(parents=True)
         (root / "lab" / "plugin" / ".claude-plugin" / "plugin.json").write_text(
@@ -219,14 +224,13 @@ def test_eval_2_cli_min_version_accepted(world):
     assert r.returncode == 0, r.stdout + r.stderr
 
 
-def test_eval_2_sandbox_with_project_refuses(world):
+def test_eval_2_sandbox_with_project_passes_preflight(world):
+    """ADR-15 (supersedes ADR-10): the refusal is gone; the kit is mounted read-only
+    instead (argv covered by test_sandbox_external.py)."""
     k, i = world
-    r = _run(k, "--project", str(i), env_extra={"LAB_RUNNER": "sandbox"})
-    assert r.returncode == 1
-    assert (
-        "sandbox + external instance not supported before iteration 2"
-        in r.stdout + r.stderr
-    )
+    r = _run(k, "--project", str(i), "--dry-run", env_extra={"LAB_RUNNER": "sandbox"})
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "not supported before iteration 2" not in r.stdout + r.stderr
 
 
 def test_eval_2_kit_mode_uses_relative_paths(tmp_path):

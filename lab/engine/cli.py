@@ -19,7 +19,7 @@ from kit import kit_version  # noqa: E402
 
 USAGE = (
     "usage: lab {version | init <project> --profile <solo|squad|regulated> [--dry-run]"
-    " | run <feature> [args…] | validate <feature> [args…]}"
+    " | policy [--project p] | run <feature> [args…] | validate <feature> [args…]}"
 )
 
 
@@ -48,6 +48,24 @@ def _init(args: list[str]) -> int:
     return lab_init.run(Path(ns.project), ns.profile, dry_run=ns.dry_run)
 
 
+def _policy(args: list[str]) -> int:
+    import argparse
+
+    import lab_init
+    import policy
+
+    ap = argparse.ArgumentParser(prog="lab policy", add_help=True)
+    ap.add_argument("--project", default=".")
+    ns = ap.parse_args(args)
+    try:
+        eff = policy.effective_policy(lab_init.read_lab_toml(Path(ns.project)))
+    except (policy.PolicyError, lab_init.LabTomlError) as e:
+        print(f"lab policy: {e}", file=sys.stderr)
+        return 1
+    print("\n".join(policy.format_policy(eff)))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if not args or args[0] in ("-h", "--help"):
@@ -59,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if cmd == "init":
         return _init(rest)
+    if cmd == "policy":
+        return _policy(rest)
     if cmd == "run":
         return _relay(rest)
     if cmd == "validate":
