@@ -3,71 +3,56 @@
 ## Panelist 1 — claude-opus-5-5 — lens: full review
 VERDICT: WARN
 
-# Reviewer report: lab-fixes, CP-1 (T1, T2, T4, T5)
+Tests and lint are green. I'm finishing the report now, and I found one small issue in the new T2 code.
 
-**Verdict: WARN.** I found one deviation from the spec. In T2, interrupting a run while it waits on an Owner-lane task records that task as in-flight, but spec BHV-1b says such an interrupt has no in-flight task. Everything else in T1, T2, T4 and T5 matches the spec and design, and the tests and lint I ran are green.
+# CP-1 review, second pass: lab-fixes (T1, T2, T4, T5), full review
+
+**Verdict: WARN.** The T2 rework fixes all three points from the CP-1 rejection. The checks I ran pass: 164 tests, ruff lint and the format check. I found one small new problem: a task that never started can still be listed as in-flight in `run_interrupted`. It only happens if a wave has more tasks than run in parallel, and only in a timing race. T1, T4 and T5 have not changed since the first CP-1 pass (`f5c11d9`), and its findings on them still hold.
 
 ## ✅ Conformant
 
+**What the T2 rework (`787be0e`) fixed**
+- **BHV-1b (Owner-lane wait):** if the run is interrupted while an Owner-lane task waits for its signature, `run_owner_task` now returns a separate result, `interrupted_waiting` (`lab/engine/orchestrate.py:795-796`). The main loop skips it instead of adding it to `inflight` (`orchestrate.py:1435-1436`). The task stays `pending`.
+- **BHV-1c (interrupt after signing):** an interrupt after the Owner signs is caught in two places: before verify (`orchestrate.py:806`) and after verify plus the eval gate (`:810`). Both happen before `scoped_commit`, so nothing is committed (INV-1). The signature is used up when it is accepted: the approval file is renamed to `.handled-*` (`orchestrate.py:1188-1190`). So after a restart the engine waits for a new signature.
+- **Public kill function:** `runner.kill_all_now()` (`lab/engine/runner.py:108-115`) copies the list of running processes under `_TRACKED_LOCK`, then sends SIGKILL. The signal handler calls it (`orchestrate.py:208`) and no longer touches runner's private names.
+- **EVAL-1 now covers both Owner-lane cases:**
+  - Interrupt while waiting: rc 130, no new commit, task `pending`, and `inflight == []` (`tests/lab_fixes/test_eval_1_interrupt.py:243-261`).
+  - Interrupt after signing: no commit, task `pending`, `inflight == ["T1"]`. After a restart the engine waits again and commits only after a new `approve` (`test_eval_1_interrupt.py:264-303`).
+
+**Scope**
+- In `787be0e`, the only change to `runner.py` is adding `kill_all_now`, which the plan delta allows. Everything else is in `orchestrate.py` and the EVAL-1 test.
+
 **Traceability**
-- All 4 commits (`52015e8`, `089930d`, `4052e13`, `211b04a`) use the canonical subject `[IDs]`, include a `Why:` body, and carry the `Spec-IDs:` and `Run: auto` trailers. Their IDs match the `implements` list of each task.
-- Each commit touched only its task's `files_touched`, plus the `tasks.md` run-log line. Both OQ deltas from spec 0.2.0 were applied:
-  - OQ-2: the two test stubs now patch `run_tracked`.
-  - OQ-1: `test_eval_8_kit_work_holds_no_demo_feature`.
+- `787be0e` uses the canonical subject. Its tags and `Spec-IDs` (BHV-1, 1a, 1b, 1c, INV-1, EVAL-1) match T2's `implements` list.
+- Its `Why:` body records why the task was reworked: the CP-1 rejection.
+- The spec 0.3.0 amendment (`55ca955`) and its coherence pass (`ac26b3a`) are separate commits. The `version :` pointers in design.md and tasks.md say 0.3.0.
 
-**T1 (ADR-1)**
-- `lab/engine/runner.py:58` `run_tracked` uses `Popen(start_new_session=True)`, keeps a registry protected by a lock, and kills the whole process group on timeout before re-raising. Both runners keep their timeout messages.
-- `runner.py:89` `terminate_all` sends SIGTERM, waits a grace period while polling the whole group (not just its leader), then sends SIGKILL and returns the count. This follows E-2.
-- `lab/engine/sandbox_runner.py:195` uses `run_tracked`, and `--rm` is still on the `docker run` (`:97`).
-
-**T2 (ADR-2)**
-- The signal handler only sets things up and does the actual work in a helper thread (`orchestrate.py:202`), which follows E-1.
-- `STOP` is checked before the agent turn, after it, after settling, after verify, after the eval gate, and right before `scoped_commit`. This satisfies INV-1.
-- Futures are cancelled and the pool shuts down with `cancel_futures` (`:1439`), following E-3.
-- `finish_interrupted` (`:1356`) does what BHV-1 asks: it resets tasks to pending, writes state atomically through `save()`, writes the `run_interrupted` event with `inflight` and `signal` (matching the design §5 contract), prints how to resume, and returns rc 130.
-- A second signal calls `os._exit(130)` (BHV-1a).
-- The checkpoint wait is interruptible: `STOP.wait(20)` at `:1196` and the `interrupted` check at `:1450` (BHV-1b, checkpoint case).
-- Handlers are installed only on real runs (`:1376`).
-- `_set_active(False)` in `run_task`'s `finally` makes sure an interrupted task never leaves a sibling stuck in `_settle`/`_set_active`.
-
-**T4 (ADR-5, ADR-7)**
-- `justfile:107` is `gate: lint-check …` and `lint` is documented as the explicit fixer. The comment at `justfile:39` uses positional parameters.
-- EVAL-4 checks the dependency through `just --dump` and runs a seeded-drift case on a temporary project. It does not run `just gate` on the kit, as the plan required.
-
-**T5 (ADR-6)**
-- `lab/engine/eval_models.py:334` `default_stamp` builds `<date>-<layer>` and appends `-2`, `-3`… when the `.md` already exists. An explicit `--stamp` is used as given (`:484`).
-- EVAL-6 covers EX-4 exactly, the collision suffix, and the explicit stamp, all using the shim and never `--live`.
+**Rest of BHV-1 still holds:** stop flag set from a helper thread (E-1), queued work cancelled and the pool shut down with `cancel_futures` (E-3), state written atomically, one `run_interrupted` event, resume instructions printed, rc 130, and an immediate `os._exit(130)` on a second signal (BHV-1a).
 
 **Quality**
-- `ruff check` and `ruff format --check` are clean on `lab` and `tests`.
+- `ruff check` and `ruff format --check` pass on `lab` and `tests`.
+- `pytest tests/lab_fixes tests/test_runner.py tests/orchestrator tests/fde_kit/test_sandbox_external.py tests/fde_kit/test_eval_8_examples.py`: **164 passed**. This includes EVAL-1 (6 cases, with real signals), EVAL-4 and EVAL-6.
 - No new TODOs, no secrets, no new dependency.
-- I ran `pytest tests/lab_fixes tests/test_runner.py tests/orchestrator tests/fde_kit/test_sandbox_external.py tests/fde_kit/test_eval_8_examples.py`: **162 passed**, 0 skipped. This includes EVAL-1 (with real SIGINT and SIGTERM), EVAL-4 and EVAL-6.
 
 ## ⚠️ Deviations to arbitrate
 
-1. **An interrupt while waiting on an Owner-lane task reports that task as in-flight, which contradicts BHV-1b.**
-   - `lab/engine/orchestrate.py:796`: `_await_token` returns `interrupted`, and `run_owner_task` passes it up as `"interrupted"`.
-   - The main loop then adds the task to `inflight` (`orchestrate.py:1432`), so `run_interrupted` lists it.
-   - The spec says "Interrupt while waiting at a checkpoint or an Owner-lane task: same as BHV-1, **with no in-flight task**". The glossary also defines in-flight as a task whose agent turn or judging has started, and a pure wait is neither.
-   - State is still correct (the task ends up `pending`), but the journal is wrong. That matters because iterations 3 and 4 read this journal.
-   - EVAL-1 only tests the checkpoint case, so this path is not covered.
-   - **Fix options:** a separate outcome for "interrupted while waiting" that is not counted as in-flight, or an Owner amendment to BHV-1b. This goes back to T2.
-
-2. **Minor, quality only, not blocking:** `_on_signal` reaches into the private names `runner._TRACKED` and `runner._killpg` (`orchestrate.py:208-209`) without taking the lock. Under CPython the `list(set)` copy is effectively atomic, so this is a coupling smell rather than a bug. A public `runner.kill_all_now()` would be cleaner.
+1. **A task that never started can be listed as in-flight.**
+   - **Where:** `orchestrate.py:848` (a queued task picked up after the interrupt) and `orchestrate.py:889` (just before attempt 1's agent turn) both return `"interrupted"`. The main loop then adds the task to `inflight` (`orchestrate.py:1432-1434`).
+   - **Why it's wrong:** the glossary defines an in-flight task as one whose agent turn or judging has started. BHV-1 says `run_interrupted` lists the in-flight tasks. The CP-1 rejection was about exactly this: only agent turns and judging count as in-flight.
+   - **How it happens:** when a wave has more tasks than `MAX_PARALLEL` (3), a worker that has just returned `interrupted` immediately takes the next queued task. That happens before the main loop cancels the queue, which it does only on its next 0.2 s check (`:1428-1429`). The queued task then reaches `:848` and is listed even though its agent never ran.
+   - **Impact:** `state.json` is still correct, because the task is `pending` either way. Only the journal is wrong, and iterations 3–4 read that journal.
+   - **Tests:** EVAL-1 doesn't cover this because its wave has 2 tasks, fewer than `MAX_PARALLEL`.
+   - **Fix:** return `interrupted_waiting` (or a similar "not started" result) at `:848`, and at `:889` when `attempt == 1`. This is small and should go back to T2. The Owner can also accept it as is.
 
 ## Not verified here
 
-- The `Artifacts:` trailers of these 4 commits leave out `work/lab-fixes/tasks.md`, which each commit does stage. This is exactly the INV-3 defect that T3 fixes after CP-1, produced by the pre-T3 engine. Under NG-4 those commits stay as they are, so I am not counting it as a T1–T5 deviation.
-- These CP-1 items are for the Owner to check by hand, and I did not run them:
-  - a live Ctrl-C on a real run in a scratch instance, including checking that no `claude` process is left;
-  - the real Docker case, where the container should be removed along with its client's process group (design risk R-1);
-  - `just gate-ci`;
+- **Known issue from before T3:** the `Artifacts:` trailers of `52015e8`, `089930d`, `787be0e`, `4052e13` and `211b04a` leave out `work/lab-fixes/tasks.md`, even though each commit includes it. This is the INV-3 defect T3 is planned to fix, produced by the engine as it was before T3. Under NG-4 those commits stay as they are, so I don't count it against these tasks.
+- **CP-1 checks the Owner does by hand; I did not run them:**
+  - a live Ctrl-C on a real run in a scratch instance, checking that no `claude` process is left;
+  - the real Docker case: the container should go away with its client's process group (design risk R-1);
   - `just gate` on a seeded drift in the kit itself;
+  - `just gate-ci`;
   - the mandatory engine restart (`self_hosting`).
-- Whether design ADR-1 / E-2 is anchored on reference repos beyond what design.md §2 cites.
-
-## Proposed OQs
-
-- **OQ-3:** An interrupt after an Owner-lane task was approved but before its verify/gate finished (`orchestrate.py:797-810`) returns the task to `pending`, after `owner_signed` has already been journaled and the approval token consumed. On restart, should the Owner have to sign again, or should the engine honour the existing `owner_signed`? The spec does not say.
+- **Trajectory guard:** after a BHV-1c restart, the journal holds two `owner_signed` events for one `task_done`. EVAL-1 checks the restart succeeds, but I did not run `just check-trajectory` on that journal.
 
 VERDICT: WARN
