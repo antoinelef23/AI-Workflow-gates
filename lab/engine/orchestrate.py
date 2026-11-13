@@ -43,12 +43,13 @@ import fcntl
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import tempfile
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import datetime
 from pathlib import Path
 
@@ -64,6 +65,7 @@ from plan import (
 )
 from kit import kit_root, kit_version
 from registry import load_registry, resolve_model
+import runner
 from runner import DEFAULT_ALLOWED_TOOLS, get_runner
 from verify import parse_verify
 
@@ -107,6 +109,13 @@ ALLOWED_TOOLS = list(DEFAULT_ALLOWED_TOOLS)
 # Execution backend (LAB_RUNNER: claude-cli default | sandbox). The orchestrator
 # depends on this interface, not on the `claude` binary.
 RUNNER = get_runner()
+
+# Interrupt (spec BHV-1, INV-1; design ADR-2): set by the SIGINT/SIGTERM handler of a real
+# run. Workers poll it before an agent turn, after it and before any commit, and drain
+# ("interrupted") instead of committing; checkpoint / Owner-lane waits return on it.
+STOP = threading.Event()
+_SIGNALS_SEEN: list[str] = []  # names of the signals received, in order (plain list:
+# appended by the handler on the main thread, no lock taken in handler context)
 
 COMMIT_LOCK = threading.Lock()
 LOG_LOCK = threading.Lock()
@@ -181,6 +190,30 @@ def acquire_orchestrator_lock(feature: Path) -> None:
             "on this feature. Wait for it to finish (or delete the .lock if it is stale)."
         ) from e
     _ORCH_LOCK_FD = fd
+
+
+def _begin_shutdown() -> None:
+    """Runs in a helper thread (never in handler context, so it cannot deadlock on a lock
+    the interrupted main thread holds): raise the stop flag, then kill the agents."""
+    STOP.set()
+    runner.terminate_all()
+
+
+def _on_signal(signum: int, _frame) -> None:
+    """SIGINT / SIGTERM handler (main thread only — E-1). First signal: start a graceful
+    drain. Second signal: exit at once (BHV-1a) — state.json is only ever written
+    atomically, so what is already on disk stays valid."""
+    _SIGNALS_SEEN.append(signal.Signals(signum).name)
+    if len(_SIGNALS_SEEN) > 1:
+        for p in list(runner._TRACKED):  # best effort: leave no agent process behind
+            runner._killpg(p, signal.SIGKILL)
+        os._exit(130)
+    threading.Thread(target=_begin_shutdown, daemon=True).start()
+
+
+def install_signal_handlers() -> None:
+    signal.signal(signal.SIGINT, _on_signal)
+    signal.signal(signal.SIGTERM, _on_signal)
 
 
 def atomic_write_json(path: Path, obj: dict) -> None:
@@ -760,6 +793,8 @@ def run_owner_task(node: Node, feature: Path, dry: bool, real_ids: list[str]) ->
         f'(or reject.sh {node.id} {rel} "reason" to block it)'
     )
     outcome, info = _await_token(node, feature, "owner task")
+    if outcome == "interrupted":
+        return "interrupted"
     if outcome == "approved":
         # The Owner-lane counterpart of a successful task_attempt: the trajectory
         # guard (BHV-2a) accepts a task_done only after one of the two.
@@ -771,6 +806,8 @@ def run_owner_task(node: Node, feature: Path, dry: bool, real_ids: list[str]) ->
         return "blocked"
     passed, feedback, label = _run_verify(node)
     ok, out = _eval_gate(node, real_ids) if passed else (False, feedback)
+    if STOP.is_set():
+        return "interrupted"
     if not (passed and ok):
         run_log(
             feature,
@@ -807,6 +844,8 @@ def _run_task(node: Node, feature: Path, dry: bool) -> str:
             node.id, False
         )  # no agent turn: waiting on a human never holds siblings
         return run_owner_task(node, feature, dry, ids)
+    if STOP.is_set():  # a queued task picked up after the interrupt never starts
+        return "interrupted"
     if dry:
         print(
             f"  [dry-run] {RUNNER.name} run: {node.id} "
@@ -846,9 +885,17 @@ def _run_task_attempts(
             )
         else:
             prompt = base_prompt + extra
+        if STOP.is_set():  # INV-1: no agent turn after an interrupt
+            return "interrupted"
         _set_active(node.id, True)
+        if STOP.is_set():
+            return "interrupted"
         r = run_claude(prompt, resume=session, model=mid)
+        if STOP.is_set():  # the turn was killed (or ended) by the interrupt: drop it
+            return "interrupted"
         _settle(node.id)  # judge the turn only on a tree no sibling is still editing
+        if STOP.is_set():
+            return "interrupted"
         journal(
             feature,
             event="task_attempt",
@@ -883,6 +930,8 @@ def _run_task_attempts(
             )
 
         passed, feedback, label = _run_verify(node)
+        if STOP.is_set():
+            return "interrupted"
         if not passed:
             extra = feedback
             run_log(feature, node, "implementer", f"{label} (t{attempt})")
@@ -893,6 +942,8 @@ def _run_task_attempts(
             continue
 
         ok, out = _eval_gate(node, real_ids)
+        if STOP.is_set():
+            return "interrupted"
         leaks = _scope_leaks(node, feature, baseline) if ok else []
         if leaks:
             # Green, but only thanks to files the scoped commit will NOT carry.
@@ -911,6 +962,8 @@ def _run_task_attempts(
             )
             continue
         if ok:
+            if STOP.is_set():  # last check before the commit (INV-1)
+                return "interrupted"
             run_log(feature, node, "implementer", f"done, evals green (t{attempt})")
             scoped_commit(node, feature, _commit_message(node, feature, real_ids))
             journal(feature, event="task_done", id=node.id, attempts=attempt)
@@ -1037,8 +1090,14 @@ def wait_checkpoint(
     if (feature / ".approvals" / f"{node.id}.rejected").exists():
         return _await_token(node, feature, "checkpoint")
 
+    if STOP.is_set():
+        return "interrupted", {}
     verdict, report, self_only = run_review(node, feature, dry)
+    if STOP.is_set():
+        return "interrupted", {}
     evals_ok, _ = run_evals()
+    if STOP.is_set():
+        return "interrupted", {}
 
     if node.mode == "auto" and merge:
         notify(
@@ -1093,6 +1152,8 @@ def _await_token(node: Node, feature: Path, kind: str) -> tuple[str, dict]:
     rejection = feature / ".approvals" / f"{node.id}.rejected"
     print(f"⏸  {node.id} — waiting for {approval} (or .rejected)", flush=True)
     while True:
+        if STOP.is_set():  # interrupted while waiting: the checkpoint stays pending
+            return "interrupted", {}
         if rejection.exists():
             info = parse_rejection(rejection)
             rejection.rename(
@@ -1132,7 +1193,7 @@ def _await_token(node: Node, feature: Path, kind: str) -> tuple[str, dict]:
             run_log(feature, node, "owner", f"{kind} validated")
             notify(f"{node.id} validated — resuming execution")
             return "approved", {}
-        time.sleep(20)
+        STOP.wait(20)
 
 
 def main() -> int:
@@ -1292,7 +1353,31 @@ def main() -> int:
         if not args.dry_run:
             atomic_write_json(state_f, {n.id: n.status for n in nodes})
 
+    def finish_interrupted(inflight: list[str]) -> int:
+        """BHV-1: in-flight tasks go back to pending (done ones keep done), atomic state
+        write, one run_interrupted event, how to resume, rc 130. Never a commit."""
+        runner.terminate_all()  # a worker may have launched an agent after the handler ran
+        for n in nodes:
+            if n.id in inflight:
+                n.status = "pending"
+        save()
+        sig = _SIGNALS_SEEN[0] if _SIGNALS_SEEN else "SIGINT"
+        journal(feature, event="run_interrupted", inflight=inflight, signal=sig)
+        print(
+            f"\n⛔ Interrupted ({sig}) — {len(inflight)} in-flight task(s) back to pending: "
+            f"{', '.join(inflight) or 'none'}. Nothing was committed after the signal.\n"
+            f"   Resume: python3 lab/engine/orchestrate.py {args.feature} "
+            "(done tasks are kept in .runs/state.json).",
+            flush=True,
+        )
+        return 130
+
+    if not args.dry_run:
+        install_signal_handlers()
+
     while any(n.status == "pending" for n in nodes):
+        if STOP.is_set():
+            return finish_interrupted([])
         if BUDGET_USD and COST_TOTAL["usd"] >= BUDGET_USD:
             notify(
                 f"⛔ Budget reached: ${COST_TOTAL['usd']:.2f} ≥ ${BUDGET_USD:.2f} (LAB_BUDGET_USD) — "
@@ -1329,14 +1414,31 @@ def main() -> int:
                 ACTIVE.clear()
                 JUDGING.clear()
                 ACTIVE.update(n.id for n in tasks[:MAX_PARALLEL])
-            with ThreadPoolExecutor(max_workers=MAX_PARALLEL) as ex:
-                futs = {ex.submit(run_task, n, feature, args.dry_run): n for n in tasks}
-                for fut in as_completed(futs):
-                    n = futs[fut]
-                    n.status = fut.result()
-                    if n.status in ("failed", "blocked"):
-                        skip_dependents(n, nodes)
-                    save()
+            ex = ThreadPoolExecutor(max_workers=MAX_PARALLEL)
+            futs = {ex.submit(run_task, n, feature, args.dry_run): n for n in tasks}
+            waiting = set(futs)
+            inflight: list[str] = []
+            try:
+                while waiting:
+                    finished, waiting = wait(waiting, timeout=0.2)
+                    if STOP.is_set():
+                        # Queued futures never start (E-3); late agent launches are killed.
+                        waiting = {f for f in waiting if not f.cancel()}
+                        runner.terminate_all()
+                    for fut in finished:
+                        n = futs[fut]
+                        res = fut.result()
+                        if res == "interrupted":
+                            inflight.append(n.id)
+                            continue
+                        n.status = res
+                        if n.status in ("failed", "blocked"):
+                            skip_dependents(n, nodes)
+                        save()
+            finally:
+                ex.shutdown(wait=True, cancel_futures=True)
+            if STOP.is_set():
+                return finish_interrupted([n.id for n in tasks if n.id in inflight])
         for cp in cps:
             outcome, info = wait_checkpoint(
                 cp,
@@ -1345,6 +1447,8 @@ def main() -> int:
                 args.supervised,
                 merge=is_merge_checkpoint(cp, nodes),
             )
+            if outcome == "interrupted":  # BHV-1b: the checkpoint stays pending
+                return finish_interrupted([])
             if outcome == "approved":
                 cp.status = "done"
             else:  # rejected — on_reject: back to the targeted tasks with a comment
