@@ -4,8 +4,8 @@ feature: lab-fixes
 version: 0.1.0
 status: approved         # proposed | approved | in_progress | done
 generated_by: planner (Claude, following lab/plugin/agents/planner.md — session 2026-11-13)
-approved_by: Owner — 2026-11-13 (CP-1 et CP-2 bloquants, signés par l'Owner) ; delta OQ-1/OQ-2 (spec 0.2.0) approuvé par l'Owner le 2026-11-13
-spec: ./spec.md          # version : 0.2.0
+approved_by: Owner — 2026-11-13 (CP-1 et CP-2 bloquants, signés par l'Owner) ; delta OQ-1/OQ-2 (spec 0.2.0) approuvé par l'Owner le 2026-11-13 ; delta CP-1 (rejet → T2, décidé par l'Owner) : BHV-1b/1c, kill_all_now public
+spec: ./spec.md          # version : 0.3.0
 design: ./design.md      # version : 0.1.0
 ---
 
@@ -124,9 +124,9 @@ Parallel waves: {T1, T4, T5} (disjoint: runner/sandbox · justfile · eval_model
 - **agent:** implementer
 - **depends_on:** [T1]
 - **parallel_group:** B
-- **implements:** [BHV-1, BHV-1a, BHV-1b, INV-1, EVAL-1]
+- **implements:** [BHV-1, BHV-1a, BHV-1b, BHV-1c, INV-1, EVAL-1]
 - **anchored_on:** ADR-2, E-1, E-3, E-4, I-1
-- **files_touched:** `lab/engine/orchestrate.py`, `tests/lab_fixes/test_eval_1_interrupt.py`
+- **files_touched:** `lab/engine/orchestrate.py`, `lab/engine/runner.py`, `tests/lab_fixes/test_eval_1_interrupt.py`
 - **prompt:**
   > Per spec BHV-1 (+1a, 1b) / INV-1 and design ADR-2. In a real run, `main()` installs SIGINT and
   > SIGTERM handlers that set a module `STOP` (`threading.Event`) and call `runner.terminate_all()`.
@@ -141,6 +141,13 @@ Parallel waves: {T1, T4, T5} (disjoint: runner/sandbox · justfile · eval_model
   > sleeps; once the journal shows the attempts, send SIGINT ⇒ EX-1 exactly (rc 130, 0 new commit,
   > no shim process left, state, `run_interrupted`); a second signal exits at once; an interrupt
   > while waiting at a blocking CP leaves it pending. Do not change `runner.py` (T1).
+  > *Plan delta (CP-1 rejection, spec 0.3.0):* (a) BHV-1b — a node interrupted while WAITING (checkpoint
+  > or Owner-lane signature) is NOT listed in `run_interrupted.inflight` (it stays `pending`); use a
+  > distinct outcome for "interrupted while waiting". (b) BHV-1c — an interrupt between an Owner-lane
+  > signature and its checks returns the task to `pending`; on restart a NEW signature is required (the
+  > consumed token is never reused). (c) Replace the signal handler's use of runner's private
+  > `_TRACKED` / `_killpg` with a public `runner.kill_all_now()` (no grace, for the second signal) —
+  > `runner.py` joins your scope for that only. EVAL-1 gains both Owner-lane cases.
   > Check with `uv run pytest`; the orchestrator runs `verify`.
 - **done_when:** EX-1 exact; second signal exits at once; checkpoint wait interruptible; EVAL-1 green; existing orchestrator suite green
 - **verify:** `uv run pytest -q tests/lab_fixes/test_eval_1_interrupt.py tests/orchestrator`
