@@ -2,7 +2,7 @@
 
 > **Point d'entrée unique pour reprendre le travail dans une nouvelle session ou un autre compte.**
 > `main` contient lab-fixes (PR #3 → `5b8d424`). Des PR attendent la décision de l'Owner
-> (#4, #5, #6, #8, #9, #10 et celle-ci, §10.7) ; chacune part de `main`. Une nouvelle session repart de
+> (#4, #5, #6, #8, #9, #10, #11 et celle-ci, §10.7) ; chacune part de `main`. Une nouvelle session repart de
 > `main` (`git fetch origin && git switch main`), sous **WSL Ubuntu** (§0).
 >
 > Ordre de lecture : ce fichier en entier → `lab/plugin/rules/hard-rules.md` (la méthode) →
@@ -24,7 +24,8 @@
 | Items 7 + 8 (cas de mesure défectueux) | ⏸ PR #8 ouverte, CI verte ; **change l'instrument** → merge + runs facturés | `fix-eval-instruments`, §10.7 |
 | Item 11 (`LAB_ROOT` relatif) | ⏸ PR #9 ouverte | `fix-lab-root-relative`, §10.7 |
 | Item 12 (rapports de revue dans les commits de tâche) | ⏸ PR #10 ouverte | `fix-commit-scope-feature-dir`, §10.7 |
-| Items 2, 3, 6, 10, 23–26 | revus en session 5 : chacun demande une décision Owner (preuves et options écrites en §8) | §8 |
+| Item 3 (couverture EVAL suite entière) | ⏸ PR #11 ouverte, CI verte ; change trois tests (dit dans la PR) | `fix-eval-coverage-scope`, §10.7 |
+| Items 2, 6, 10, 23–26 | revus en session 5 : chacun demande une décision Owner (preuves et options écrites en §8) | §8 |
 | Dépôt `portable` (Claudo-portable) : retrait Windows + modèles 5.5 | ⏸ commits locaux **non poussés** (push refusé par le classifieur) | §10.7 |
 | fde-kit itération 3 | à faire ; le spec workshop demande l'Owner | §11 |
 
@@ -183,7 +184,7 @@ Faits : 4 (`2b8f327`), 9 (`5a70c84`), 13 (`ed61c07`), 14 (`f4f151c`), 17 (`2f3fe
 
 1. ⏸ PR #6 (`1144cb6`) — plan-lint : la vérif d'existence d'un ID de spec matche aussi les IDs supprimés cités dans le changelog.
 2. `work/sdlc-rework/tasks.md` : 17 erreurs plan-lint ; plan-lint seulement informatif en CI. Revu en session 5 : les 17 sont de vrais chevauchements de tâches parallèles (`justfile`, `tests/sdlc_rework/`) dans le plan **approuvé** d'une feature livrée (PR #33) → le corriger = éditer un plan approuvé : **décision Owner** (corriger l'historique, ou le laisser et exclure la feature du lint).
-3. Couverture d'evals (`eval_covers`) cherchée dans toute la suite, pas par feature. **Revu en session 5, preuve que le trou est réel** : aucun test de `tests/sdlc_rework/` ne suit le nommage `test_eval_n_*`, et pourtant les 7 tâches EVAL de `sdlc-rework` ont passé le contrôle — couvertes par les `test_eval_1_…` d'autres features. Dans les features conformes, 22 paires tâche/EVAL sur 22 ont leur test dans le `files_touched` de la tâche. **Décision Owner** : borner la couverture au `files_touched` de la tâche contredit trois tests qui fixent volontairement le comportement actuel (`tests/orchestrator/test_orchestrate.py:322`, `:416`, `:436` — ce dernier dit « NO engine change » pour le seam JS) ; borner par dossier de tests de la feature suppose une correspondance feature → dossier qui n'est définie nulle part. Options : (a) bornage `files_touched` + réécriture de ces trois tests, (b) correspondance feature → dossier à définir, (c) statu quo documenté.
+3. ⏸ PR #11 (`0876b6f`) — Couverture d'evals (`eval_covers`) cherchée dans toute la suite, pas par feature. Correctif proposé : seule compte une eval dont le fichier est dans le `files_touched` de la tâche ; les trois tests qui fixaient l'ancien comportement listent maintenant leur fichier d'eval (assertions inchangées, verts aussi sur l'ancien code). **Revu en session 5, preuve que le trou est réel** : aucun test de `tests/sdlc_rework/` ne suit le nommage `test_eval_n_*`, et pourtant les 7 tâches EVAL de `sdlc-rework` ont passé le contrôle — couvertes par les `test_eval_1_…` d'autres features. Dans les features conformes, 22 paires tâche/EVAL sur 22 ont leur test dans le `files_touched` de la tâche. **Décision Owner** : borner la couverture au `files_touched` de la tâche contredit trois tests qui fixent volontairement le comportement actuel (`tests/orchestrator/test_orchestrate.py:322`, `:416`, `:436` — ce dernier dit « NO engine change » pour le seam JS) ; borner par dossier de tests de la feature suppose une correspondance feature → dossier qui n'est définie nulle part. Options : (a) bornage `files_touched` + réécriture de ces trois tests, (b) correspondance feature → dossier à définir, (c) statu quo documenté.
 4. ✅ (`2b8f327`)
 5. ✅ lab-fixes T3 — `--dry-run` n'écrit plus rien sous `.runs/` (BHV-2, EVAL-2).
 6. `eval_models.py` compte une erreur d'API comme un échec. Revu en session 5 : aucun contrat écrit (code, EVOLUTION.md, how-to) ne dit quoi faire d'une erreur ; chaque option change la notation et la comparabilité des campagnes, et la couche chain est éliminatoire → **décision Owner** : (a) exclure l'essai du dénominateur et le compter à part, (b) le rejouer N fois, (c) statut `error` distinct qui bloque la recommandation de rôle. `call_model` ne distingue aujourd'hui ni erreur d'API, ni timeout, ni max-turns (`ok = returncode == 0`).
@@ -368,7 +369,8 @@ tout ce qui demande une signature ou un merge est laissé prêt et documenté.
 | #6 `fix-planlint-changelog` (`1144cb6`, `7bc0312`) | Items 1 et 46 | rc 0, 189 tests ; sortie plan-lint identique sur les 6 features existantes | ✅ |
 | #8 `fix-eval-instruments` (`11be242`, `c3a0fbb`) | Items 8 et 7 — **change des cas de référence** : merge Owner puis runs facturés (`just eval-models scorecard 1 …`, `behavioral 1 …`) | rc 0, 191 tests + 1 skip ; chaque garde échoue sans son correctif | ✅ |
 | #9 `fix-lab-root-relative` (`2626a89`) | Item 11 | rc 0, 187 tests ; le test échoue sans le correctif | ✅ |
-| #10 `fix-commit-scope-feature-dir` (`78638cb`) | Items 12 et 43 : un commit de tâche prend spec/design/tasks, plus tout le dossier (les rapports de revue gardent leur commit `docs(...)`) | rc 0, 186 tests ; le test échoue sans le correctif | voir PR |
+| #10 `fix-commit-scope-feature-dir` (`78638cb`, `2a06cbb`) | Items 12 et 43 + INV-10 : un commit de tâche ne prend plus que `tasks.md` dans le dossier de la feature (ni rapports de revue, ni `spec.md`/`design.md`) | rc 0, 187 tests ; chaque test échoue sans son correctif | ✅ |
+| #11 `fix-eval-coverage-scope` (`0876b6f`) | Item 3 : couverture EVAL bornée au `files_touched` de la tâche — **change trois tests** (fichiers ajoutés à `files_touched`, assertions inchangées) | rc 0, 186 tests ; le nouveau test échoue sans le correctif | ✅ |
 
 **Dépôt `portable`** (Claudo-portable, `main` local de `D:\Projets\ai-workflow-gates\_build`) :
 deux branches committées dans le clone WSL `~/work/portable` (cloné depuis `_build`, `main` = `5ccdfd1`),
@@ -388,11 +390,11 @@ Pour pousser (Owner) : `cd D:\Projets\ai-workflow-gates\_build && git fetch //ws
 
 ## 11. Ensuite
 
-1. Décisions Owner : merge des PR #4, #5, #6, #8, #9, #10 (et de celle-ci) ; push des deux branches `portable` (§10.7) ; trancher les items 2, 3, 6, 10, 23, 24, 25, 26 (§8, options écrites).
+1. Décisions Owner : merge des PR #4, #5, #6, #8, #9, #10, #11 (et de celle-ci) ; push des deux branches `portable` (§10.7) ; trancher les items 2, 6, 10, 15, 19, 20, 23–26, 33, 37, 38 (§8) et les 6 questions du rapport design-scout (itération 3).
 2. **fde-kit itération 3** — bloquée à l'étape **design** : la spec 0.8.0 (validée) couvre déjà BHV-4..6 et BHV-8, mais le design 0.6.0 dit que les itérations 3 et 4 « seront conçues à leur tour, par amendement de ce document » ; chaque amendement précédent est venu d'un rapport `design-scout` + décisions Owner par QCM. Prochaine étape : lancer `design-scout` sur BHV-4..6, BHV-8 (avec 37 et 38), puis QCM Owner. **Fait en session 5 (piste interne seulement)** :  — 20 patterns internes I-26..I-45 avec fichier:ligne, anti-patterns (dont I-38 : le prompt implementer fait écrire les OQ dans , cause du lab-fix 34), 6 questions pour l’Owner ; piste externe (web) non faite. Contenu prévu : workflow de bout en bout, retours arrière R1–R7 (avec reset ciblé des
    dépendants), OQ d'agent écrites par le moteur dans `.runs/` (item 34), test goldfish à deux
    lecteurs (Haiku + modèle de l'implementer), interruption live sous Docker. Candidats à absorber :
    items 15, 20, 37, 38 (12 : PR #10).
 3. Itération 4 : retro + rôle `improver` (propose, n'applique jamais).
 4. Itération multi-outils : Copilot, opencode, Codex CLI ; spike promptfoo (ADR-12).
-5. Reste du lot : 15, 19, 20, 33, 37–39 (itération 3 ou conception), 41, 42 (Owner) ; décisions Owner : 2, 3, 6, 10, 23–26 ; PR ouvertes : 1, 7, 8, 11, 12, 40, 43, 46.
+5. Reste du lot : 15, 19, 20, 33, 37–39 (itération 3 ou conception), 41, 42 (Owner) ; décisions Owner : 2, 6, 10, 23–26 ; PR ouvertes : 1, 3, 7, 8, 11, 12, 40, 43, 46.
