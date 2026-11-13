@@ -2,7 +2,7 @@
 #
 # Adding a model = one [[model]] entry. The orchestrator and the eval harness
 # take it into account WITHOUT code changes (designed for model evolution).
-# After each new model: `just eval-models live=1` then arbitration — see lab/models/EVOLUTION.md.
+# After each new model: `just eval-models all 1` then arbitration — see lab/models/EVOLUTION.md.
 #
 # The metrics (cost, latency, pass rate) are NOT in this file:
 # they are MEASURED by the harness (fairness), not declared. Here: identity,
@@ -11,35 +11,10 @@
 schema_version = 1
 
 # ------------------------------------------------------------------ candidates
-[[model]]
-id = "claude-opus-4-8"          # passed as-is to `claude --model` (alias "opus" also accepted)
-label = "Opus 4.8"
-family = "claude"
-tier = "frontier"               # frontier | balanced | fast (descriptive)
-released = ""                   # to fill in
-roles = ["planner", "implementer", "reviewer"]
-context_profile = "base"
-
-[[model]]
-id = "claude-sonnet-4-6"
-label = "Sonnet 4.6"
-family = "claude"
-tier = "balanced"
-released = ""
-roles = ["planner", "implementer", "reviewer", "eval-runner"]
-context_profile = "base"
-
-[[model]]
-id = "claude-haiku-4-5-20251001"
-label = "Haiku 4.5"
-family = "claude"
-tier = "fast"
-released = "2025-10-01"
-roles = ["eval-runner"]                  # implementer REMOVED: fails COC-merge even in verbose (loop 2026-06-15)
-context_profile = "base"                 # verbose tested, does not lift the eliminatory score → reverted
-
 # --- Claude 5 family — added 2026-11-12 as candidates, promoted to [roles] the same day on the
 #     campaign's measured proof (lab/models/scorecards/2026-11-12-claude5.md).
+#     The Claude 4 generation was removed on 2026-11-13 (Owner decision: latest models only);
+#     its measured results stay in the dated scorecards.
 [[model]]
 id = "claude-opus-5-5"
 label = "Opus 5.5"
@@ -91,10 +66,18 @@ context_profile = "base"
 # 2026-11-12 campaign (lab/models/scorecards/2026-11-12-claude5.md + incumbents re-run):
 # every Claude 5 candidate clears the eliminatory chain layer; Sonnet 5.5 matches the
 # incumbent implementer at lower cost, Opus 5.5 7/7 as reviewer (≠ implementer model).
-# Previous: planner/reviewer = claude-opus-4-8, implementer = claude-sonnet-4-6,
-# eval-runner = claude-haiku-4-5-20251001.
+# Previous: the Claude 4 generation (removed 2026-11-13, results kept in the scorecards).
 [roles]
 planner = "claude-opus-5-5"
 implementer = "claude-sonnet-5-5"
 reviewer = "claude-opus-5-5"
 eval-runner = "claude-haiku-5-5"
+
+# ------------------------------------------------------------------ review panel
+# Models seated on a checkpoint's review panel, in seat order (cycled when a CP asks for
+# more reviewers). Each must be reviewer-eligible above; otherwise the engine falls back to
+# the default pick (non-implementer first). 2026-11-13, Owner: Opus 5.5 on every seat —
+# Haiku 5.5 is not reviewer-eligible (WARNs on clean code, scorecards/2026-11-12-reviewer-1.2.0.md)
+# and Sonnet 5.5 is the implementer (separation of duties).
+[review]
+panel = ["claude-opus-5-5", "claude-opus-5-5"]

@@ -129,7 +129,7 @@ The output should look something like:
 
 ```
 Plan: 6 nodes — T1, T2, T3, CP-1, T4, CP-2
-Models (registry): implementer=claude-sonnet-4-6, reviewer=claude-opus-4-8
+Models (registry): implementer=claude-sonnet-5-5, reviewer=claude-opus-5-5
 
 === Parallel wave: T1 ===
   [dry-run] claude-cli run: T1 (acceptEdits, max_turns=100, 7 allowed tools)

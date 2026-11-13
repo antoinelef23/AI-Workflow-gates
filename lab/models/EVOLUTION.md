@@ -114,6 +114,8 @@ First evolution loop actually closed (not just documented):
    (doctrine confirmed empirically). Profile reverted to `base`, and **Haiku dropped from the
    `implementer` role** in the registry's `[roles]`/`roles` (remains eligible for `eval-runner`).
 
+(The Claude 4 entries, Haiku 4.5 included, were removed from the registry on 2026-11-13 — latest models only; their results stay in the dated scorecards.)
+
 This is the model for any future evolution: a scaffolding patch that does not raise the
 targeted score is rejected, and the decision (here: restricting eligibility) is traced in the registry.
 

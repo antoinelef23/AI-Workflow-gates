@@ -384,6 +384,49 @@ def test_pick_reviewer_models_prefers_non_implementer():
     )  # separation of duties: not the implementer as first arbiter
 
 
+def _panel_registry(panel: list[str]):
+    from registry import Model, Registry
+
+    return Registry(
+        models=[
+            Model(id="m-impl", roles=["implementer", "reviewer"]),
+            Model(id="m-rev", roles=["reviewer"]),
+            Model(id="m-other", roles=["reviewer"]),
+            Model(id="m-fast", roles=["eval-runner"]),
+        ],
+        role_defaults={"implementer": "m-impl", "reviewer": "m-rev"},
+        review_panel=panel,
+    )
+
+
+def test_real_registry_panel_is_opus_on_every_seat():
+    # Owner decision 2026-11-13: [review] panel = Opus 5.5 on both seats
+    cp = orchestrate.Node(id="CP-1", title="x", is_checkpoint=True)
+    assert orchestrate.REGISTRY.review_panel == ["claude-opus-5-5", "claude-opus-5-5"]
+    assert orchestrate.pick_reviewer_models(cp, 2) == ["claude-opus-5-5"] * 2
+
+
+def test_explicit_panel_is_used_and_cycled(monkeypatch):
+    monkeypatch.setattr(orchestrate, "REGISTRY", _panel_registry(["m-rev", "m-other"]))
+    cp = orchestrate.Node(id="CP-1", title="x", is_checkpoint=True)
+    assert orchestrate.pick_reviewer_models(cp, 3) == ["m-rev", "m-other", "m-rev"]
+
+
+def test_panel_with_an_ineligible_seat_falls_back(monkeypatch):
+    # m-fast is not reviewer-eligible → default pick: role default first, non-implementer next
+    monkeypatch.setattr(orchestrate, "REGISTRY", _panel_registry(["m-rev", "m-fast"]))
+    cp = orchestrate.Node(id="CP-1", title="x", is_checkpoint=True)
+    assert orchestrate.pick_reviewer_models(cp, 2) == ["m-rev", "m-other"]
+
+
+def test_checkpoint_model_override_beats_the_panel(monkeypatch):
+    monkeypatch.setattr(
+        orchestrate, "REGISTRY", _panel_registry(["m-other", "m-other"])
+    )
+    cp = orchestrate.Node(id="CP-1", title="x", is_checkpoint=True, model="m-rev")
+    assert orchestrate.pick_reviewer_models(cp, 2)[0] == "m-rev"
+
+
 def test_gchat_no_crash_when_unreachable(monkeypatch):
     import notify
 
