@@ -4,7 +4,7 @@ feature: lab-fixes
 version: 0.1.0
 status: approved         # proposed | approved | in_progress | done
 generated_by: planner (Claude, following lab/plugin/agents/planner.md — session 2026-11-13)
-approved_by: Owner — 2026-11-13 (CP-1 et CP-2 bloquants, signés par l'Owner) ; delta OQ-1/OQ-2 (spec 0.2.0) approuvé par l'Owner le 2026-11-13 ; delta CP-1 (rejet → T2, décidé par l'Owner) : BHV-1b/1c, kill_all_now public
+approved_by: Owner — 2026-11-13 (CP-1 et CP-2 bloquants, signés par l'Owner) ; delta OQ-1/OQ-2 (spec 0.2.0) approuvé par l'Owner le 2026-11-13 ; delta CP-1 (rejet → T2, décidé par l'Owner) : BHV-1b/1c, kill_all_now public ; delta CP-1 (approuvé par l'Owner) : la tâche jamais démarrée n'est pas in-flight, corrigée dans T3
 spec: ./spec.md          # version : 0.3.0
 design: ./design.md      # version : 0.1.0
 ---
@@ -165,9 +165,9 @@ Parallel waves: {T1, T4, T5} (disjoint: runner/sandbox · justfile · eval_model
 - **agent:** implementer
 - **depends_on:** [CP-1]
 - **parallel_group:** C *(∥ T6 — disjoint paths)*
-- **implements:** [BHV-2, INV-2, BHV-3, INV-3, BHV-5, EVAL-2, EVAL-3, EVAL-5]
+- **implements:** [BHV-2, INV-2, BHV-3, INV-3, BHV-5, BHV-1, EVAL-1, EVAL-2, EVAL-3, EVAL-5]
 - **anchored_on:** ADR-3, ADR-4, ADR-6, I-2, I-4, I-5
-- **files_touched:** `lab/engine/orchestrate.py`, `tests/lab_fixes/test_eval_2_dry_run.py`, `tests/lab_fixes/test_eval_3_trailers.py`, `tests/lab_fixes/test_eval_5_budget.py`
+- **files_touched:** `lab/engine/orchestrate.py`, `tests/lab_fixes/test_eval_2_dry_run.py`, `tests/lab_fixes/test_eval_3_trailers.py`, `tests/lab_fixes/test_eval_5_budget.py`, `tests/lab_fixes/test_eval_1_interrupt_queue.py`
 - **prompt:**
   > Per spec BHV-2, BHV-3, BHV-5 / INV-2, INV-3 and design ADR-3, ADR-4, ADR-6. (1) `journal()` is a
   > no-op in a dry run (module flag set from `args.dry_run`, like `save()`'s guard). (2)
@@ -179,6 +179,13 @@ Parallel waves: {T1, T4, T5} (disjoint: runner/sandbox · justfile · eval_model
   > `test_eval_2_<case>` (`.runs/` byte-identical / absent around a dry run), `test_eval_3_<case>`
   > (task, Owner-lane and run-log-only commits: trailer = staged paths; EX-2), `test_eval_5_<case>`
   > (EX-3 exact; env var named when set). Do not touch the interrupt code (T2) beyond what these need.
+  > *Plan delta (CP-1, approved by the Owner with this fix moved here):* a task interrupted BEFORE its
+  > first agent turn (picked from the queue after the signal, or stopped just before attempt 1) is not
+  > in-flight: it must not appear in `run_interrupted.inflight` (BHV-1 glossary). Use a "not started"
+  > outcome distinct from "interrupted". Test `tests/lab_fixes/test_eval_1_interrupt_queue.py`
+  > (`@pytest.mark.eval`, `test_eval_1_<case>`): a wave larger than `max_parallel` (e.g. 3 tasks with
+  > `max_parallel = 2` in the sandbox's `.lab/lab.toml`), SIGINT while the first two are mid-turn ⇒
+  > `inflight` lists only those two, the queued one stays pending.
   > Check with `uv run pytest`; the orchestrator runs `verify`.
 - **done_when:** EVAL-2, EVAL-3, EVAL-5 green; orchestrator suite green
 - **verify:** `uv run pytest -q tests/lab_fixes tests/orchestrator`
