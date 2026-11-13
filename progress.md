@@ -1,8 +1,8 @@
 # Progress — passation de session (mise à jour 2026-11-14, fin de session 5)
 
 > **Point d'entrée unique pour reprendre le travail dans une nouvelle session ou un autre compte.**
-> `main` contient lab-fixes (PR #3 → `5b8d424`). Trois PR attendent la décision de l'Owner
-> (#4, #5, #6, §10.7) ; chacune part de `main` et a sa CI verte. Une nouvelle session repart de
+> `main` contient lab-fixes (PR #3 → `5b8d424`). Des PR attendent la décision de l'Owner
+> (#4, #5, #6, #8, #9 et celle-ci, §10.7) ; chacune part de `main`. Une nouvelle session repart de
 > `main` (`git fetch origin && git switch main`), sous **WSL Ubuntu** (§0).
 >
 > Ordre de lecture : ce fichier en entier → `lab/plugin/rules/hard-rules.md` (la méthode) →
@@ -21,6 +21,9 @@
 | Modèles 5.5 seulement (4.x retirés, panel Opus 5.5 ×2) | ⏸ PR #4 ouverte, CI verte, **en attente du merge** | `models-latest-only`, §10.7 |
 | Item 40 (course résiduelle à l'interruption) | ⏸ PR #5 ouverte, CI verte, **en attente du merge** | `fix-interrupt-race`, §10.7 |
 | Items 1 + 46 (plan-lint : changelog ignoré, IDs entiers) | ⏸ PR #6 ouverte, CI verte, **en attente du merge** | `fix-planlint-changelog`, §10.7 |
+| Items 7 + 8 (cas de mesure défectueux) | ⏸ PR #8 ouverte, CI verte ; **change l'instrument** → merge + runs facturés | `fix-eval-instruments`, §10.7 |
+| Item 11 (`LAB_ROOT` relatif) | ⏸ PR #9 ouverte | `fix-lab-root-relative`, §10.7 |
+| Items 2, 6, 10, 23–26 | revus en session 5 : chacun demande une décision Owner (options écrites en §8) | §8 |
 | Dépôt `portable` (Claudo-portable) : retrait Windows + modèles 5.5 | ⏸ commits locaux **non poussés** (push refusé par le classifieur) | §10.7 |
 | fde-kit itération 3 | à faire ; le spec workshop demande l'Owner | §11 |
 
@@ -178,16 +181,16 @@ Faits : 4 (`2b8f327`), 9 (`5a70c84`), 13 (`ed61c07`), 14 (`f4f151c`), 17 (`2f3fe
 `lab-fixes`** (en attente du merge CP-2).
 
 1. ⏸ PR #6 (`1144cb6`) — plan-lint : la vérif d'existence d'un ID de spec matche aussi les IDs supprimés cités dans le changelog.
-2. `work/sdlc-rework/tasks.md` : 17 erreurs plan-lint ; plan-lint seulement informatif en CI.
+2. `work/sdlc-rework/tasks.md` : 17 erreurs plan-lint ; plan-lint seulement informatif en CI. Revu en session 5 : les 17 sont de vrais chevauchements de tâches parallèles (`justfile`, `tests/sdlc_rework/`) dans le plan **approuvé** d'une feature livrée (PR #33) → le corriger = éditer un plan approuvé : **décision Owner** (corriger l'historique, ou le laisser et exclure la feature du lint).
 3. Couverture d'evals (`eval_covers`) cherchée dans toute la suite, pas par feature.
 4. ✅ (`2b8f327`)
 5. ✅ lab-fixes T3 — `--dry-run` n'écrit plus rien sous `.runs/` (BHV-2, EVAL-2).
-6. `eval_models.py` compte une erreur d'API comme un échec.
-7. Cas `BEH-eval-correct` : demande un fichier hors `files_touched`. Non traité en session 5 : corriger le cas change l'instrument de mesure (scorecards antérieures non comparables) et sa vérification exige un run behavioral **live, facturé** → décision et feu vert de l'Owner (EVOLUTION.md).
-8. Golden `remise-paliers` échoue pour 5 modèles sur 6.
+6. `eval_models.py` compte une erreur d'API comme un échec. Revu en session 5 : aucun contrat écrit (code, EVOLUTION.md, how-to) ne dit quoi faire d'une erreur ; chaque option change la notation et la comparabilité des campagnes, et la couche chain est éliminatoire → **décision Owner** : (a) exclure l'essai du dénominateur et le compter à part, (b) le rejouer N fois, (c) statut `error` distinct qui bloque la recommandation de rôle. `call_model` ne distingue aujourd'hui ni erreur d'API, ni timeout, ni max-turns (`ok = returncode == 0`).
+7. ⏸ PR #8 (`c3a0fbb`) — Cas `BEH-eval-correct` : demande un fichier hors `files_touched`. Le cas a maintenant son propre tasks.md (les deux fichiers) + garde `tests/golden/test_case_scope.py`. Change l'instrument de mesure : merge par l'Owner, puis run behavioral **facturé** pour mesurer.
+8. ⏸ PR #8 (`11be242`) — Golden `remise-paliers` échoue pour 5 modèles sur 6. **Cause trouvée** : l'oracle exige `is_estimate is True` alors que la spec saute de INV-1 à INV-3 (l'INV-2 de `devis-calc` manque) ; prouvé hors ligne (implémentation fidèle à la spec avec `False` → logic FAIL, avec `True` → logic OK). INV-2 rétabli + garde `tests/golden/test_spec_oracle_rules.py`. Change l'instrument : merge Owner, puis run scorecard **facturé**. Non expliqué : l'échec `scorecard-api` (`No module named 'compute'`) de 5 modèles — les répertoires d'essai sont supprimés, il faut un run pour l'observer.
 9. ✅ `guard_paths.sh` lit `notebook_path` (`5a70c84`).
-10. Pré-vol : compare la version du kit, pas celle de `plugin.json` (à trancher : texte BHV-2a vs ADR-2).
-11. `LAB_ROOT` relatif + `--project` sur le même dossier.
+10. Pré-vol : compare la version du kit, pas celle de `plugin.json` (à trancher : texte BHV-2a vs ADR-2) — **décision Owner** (laquelle des deux sources fait foi).
+11. ⏸ PR #9 (`2626a89`) — `LAB_ROOT` relatif + `--project` sur le même dossier : `kit_root()` résout maintenant `LAB_ROOT` (comparé à un `PROJECT` résolu).
 12. `scoped_commit` stage tout le dossier de la feature (rapports de revue embarqués dans les commits de tâche — encore vu sur T6 de lab-fixes, qui embarque `CP-1-review.md`).
 13. ✅ (`ed61c07`)
 14. ✅ (`f4f151c`)
@@ -199,10 +202,10 @@ Faits : 4 (`2b8f327`), 9 (`5a70c84`), 13 (`ed61c07`), 14 (`f4f151c`), 17 (`2f3fe
 20. Un rejet de checkpoint consomme vite le budget (max 2) quand c'est la **prescription** du rejet qui est fausse : prévoir un « amendement de note de rejet » ou un rejet qui ne compte pas.
 21. ✅ lab-fixes T5 — tampons `<date>-<layer>` (+ `-2`…), plus d'écrasement (BHV-6, EVAL-6).
 22. ✅ lab-fixes T4 — `gate: lint-check test evals check-brand check-lock` (BHV-4, EVAL-4).
-23. `eval_gate.sh` : filtre d'extensions (`.py|.toml|.ts…`) — une instance non-Python n'est pas gardée en fin de session.
-24. `lab init` pas atomique : seul le justfile est restauré en cas d'échec (conforme ADR-8, mais surprenant).
-25. `46ab6dc` porte un tag `[BHV-7]` parasite (périmètre itération 4).
-26. `brand_denylist.txt` vide : `check-brand` passe à vide (voulu ? à confirmer avant la première mission).
+23. `eval_gate.sh` : filtre d'extensions (`.py|.toml|.ts…`) — une instance non-Python n'est pas gardée en fin de session. **Décision Owner** : élargir le déclencheur fait payer les evals sur plus de tours et demande de choisir ce qui compte comme du code (liste par langage, ou « tout sauf `*.md` »). Le design fde-kit dit que ce hook est « un plus » à côté du gate du moteur.
+24. `lab init` pas atomique : seul le justfile est restauré en cas d'échec (conforme ADR-8, mais surprenant) — le changer = amender ADR-8 : **décision Owner**.
+25. `46ab6dc` porte un tag `[BHV-7]` parasite (périmètre itération 4) — le corriger = réécrire l'historique (NG-4) : à clore sans correctif si l'Owner l'accepte.
+26. `brand_denylist.txt` vide : `check-brand` passe à vide (voulu ? à confirmer avant la première mission) — **décision Owner** : seul l'Owner connaît les noms à interdire.
 27. ✅ (`1dbfd26`) — règle : aucun contrôle de gate ne dépend d'un état hors git.
 28. ✅ lab-fixes T1+T2 — SIGINT/SIGTERM : drapeau STOP, workers drainés, aucun commit, groupes de process tués, tâches en vol → `pending`, `run_interrupted`, rc 130 (BHV-1, EVAL-1).
 29. ✅ lab-fixes T6 — même cause que 18 (prompt « corrige partout » = invitation à la fuite de périmètre : leçon de planification).
@@ -362,6 +365,8 @@ tout ce qui demande une signature ou un merge est laissé prêt et documenté.
 | #4 `models-latest-only` (`0a5dea4`) | Registre : entrées Claude 4 retirées ; `[review] panel = Opus 5.5 ×2` lu par `pick_reviewer_models` ; docs/tests/exemple `eval_models` en 5.5 ; test de garde `tests/test_latest_models_only.py` (aucun fichier vivant ne nomme un ID absent du registre ; historique exempté : scorecards, `work/`, `progress.md`) | `just gate-ci` rc 0, 192 tests, 162 evals | ✅ |
 | #5 `fix-interrupt-race` (`c47edb6`) | Item 40 : drapeau `runner._STOPPING` posé sous verrou par `terminate_all`/`kill_all_now` ; `run_tracked` se tue s'il s'enregistre après | rc 0, 188 tests ; le test échoue sans le correctif (timeout 30 s) | ✅ |
 | #6 `fix-planlint-changelog` (`1144cb6`, `7bc0312`) | Items 1 et 46 | rc 0, 189 tests ; sortie plan-lint identique sur les 6 features existantes | ✅ |
+| #8 `fix-eval-instruments` (`11be242`, `c3a0fbb`) | Items 8 et 7 — **change des cas de référence** : merge Owner puis runs facturés (`just eval-models scorecard 1 …`, `behavioral 1 …`) | rc 0, 191 tests + 1 skip ; chaque garde échoue sans son correctif | ✅ |
+| #9 `fix-lab-root-relative` (`2626a89`) | Item 11 | rc 0, 187 tests ; le test échoue sans le correctif | voir PR |
 
 **Dépôt `portable`** (Claudo-portable, `main` local de `D:\Projets\ai-workflow-gates\_build`) :
 deux branches committées dans le clone WSL `~/work/portable` (cloné depuis `_build`, `main` = `5ccdfd1`),
@@ -381,11 +386,11 @@ Pour pousser (Owner) : `cd D:\Projets\ai-workflow-gates\_build && git fetch //ws
 
 ## 11. Ensuite
 
-1. Décisions Owner : merge des PR #4, #5, #6 ; push des deux branches `portable` (§10.7).
+1. Décisions Owner : merge des PR #4, #5, #6, #8, #9 (et de celle-ci) ; push des deux branches `portable` (§10.7) ; trancher les items 2, 6, 10, 23, 24, 25, 26 (§8, options écrites).
 2. **fde-kit itération 3** : workflow de bout en bout, retours arrière R1–R7 (avec reset ciblé des
    dépendants), OQ d'agent écrites par le moteur dans `.runs/` (item 34), test goldfish à deux
    lecteurs (Haiku + modèle de l'implementer), interruption live sous Docker. Candidats à absorber :
    items 12, 15, 20, 37, 38.
 3. Itération 4 : retro + rôle `improver` (propose, n'applique jamais).
 4. Itération multi-outils : Copilot, opencode, Codex CLI ; spike promptfoo (ADR-12).
-5. Reste du lot : 2, 3, 6–8, 10–12, 15, 19, 20, 23–26, 33, 37–39, 41, 42 (1, 40, 46 : PR ouvertes).
+5. Reste du lot : 3, 12, 15, 19, 20, 33, 37–39 (itération 3 ou conception), 41, 42 (Owner) ; décisions Owner : 2, 6, 10, 23–26 ; PR ouvertes : 1, 7, 8, 11, 40, 46.
