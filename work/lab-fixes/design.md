@@ -5,7 +5,7 @@ version: 0.1.0
 status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
 validated_by: Owner — 2026-11-13 (validé en session, ADR-1..7 acceptés)
-spec: ./spec.md          # version : 0.1.0
+spec: ./spec.md          # version : 0.2.0
 ---
 
 # Design — Lab fixes before iteration 3

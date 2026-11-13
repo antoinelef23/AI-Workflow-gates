@@ -4,8 +4,8 @@ feature: lab-fixes
 version: 0.1.0
 status: approved         # proposed | approved | in_progress | done
 generated_by: planner (Claude, following lab/plugin/agents/planner.md — session 2026-11-13)
-approved_by: Owner — 2026-11-13 (CP-1 et CP-2 bloquants, signés par l'Owner)
-spec: ./spec.md          # version : 0.1.0
+approved_by: Owner — 2026-11-13 (CP-1 et CP-2 bloquants, signés par l'Owner) ; delta OQ-1/OQ-2 (spec 0.2.0) approuvé par l'Owner le 2026-11-13
+spec: ./spec.md          # version : 0.2.0
 design: ./design.md      # version : 0.1.0
 ---
 
@@ -55,7 +55,7 @@ Parallel waves: {T1, T4, T5} (disjoint: runner/sandbox · justfile · eval_model
 - **parallel_group:** A *(∥ T4, T5 — disjoint paths)*
 - **implements:** [BHV-1, INV-1]
 - **anchored_on:** ADR-1, I-3, E-2
-- **files_touched:** `lab/engine/runner.py`, `lab/engine/sandbox_runner.py`, `tests/lab_fixes/__init__.py`, `tests/lab_fixes/test_tracked_launch.py`
+- **files_touched:** `lab/engine/runner.py`, `lab/engine/sandbox_runner.py`, `tests/lab_fixes/__init__.py`, `tests/lab_fixes/test_tracked_launch.py`, `tests/test_runner.py`, `tests/fde_kit/test_sandbox_external.py`
 - **prompt:**
   > Per spec BHV-1 / INV-1 and design ADR-1. In `runner.py`, add `run_tracked(cmd, cwd, env,
   > timeout) -> (rc, stdout, stderr)`: `subprocess.Popen(..., start_new_session=True, text=True,
@@ -68,7 +68,10 @@ Parallel waves: {T1, T4, T5} (disjoint: runner/sandbox · justfile · eval_model
   > `orchestrate.py` (T2). Tests (not evals) in `tests/lab_fixes/test_tracked_launch.py` with a tiny
   > script that spawns a child and sleeps: `terminate_all` leaves no process of the group alive;
   > timeout still returns the timeout result; a normal run returns rc/stdout unchanged.
-  > Create `tests/lab_fixes/__init__.py` (empty). Check with `uv run pytest`; the orchestrator runs `verify`.
+  > Create `tests/lab_fixes/__init__.py` (empty). *Plan delta (OQ-2, spec 0.2.0):* in
+  > `tests/test_runner.py` and `tests/fde_kit/test_sandbox_external.py`, the stubs of
+  > `sandbox_runner.subprocess.run` move to `sandbox_runner.run_tracked`, same argv assertions.
+  > Check with `uv run pytest`; the orchestrator runs `verify`.
 - **done_when:** both runners launch through `run_tracked`; `terminate_all` kills a group and its children; timeout behavior unchanged; runner tests green
 - **verify:** `uv run pytest -q tests/lab_fixes/test_tracked_launch.py tests/test_runner.py tests/orchestrator`
 - **status:** ☐ pending → ☐ running → ☐ done
@@ -79,7 +82,7 @@ Parallel waves: {T1, T4, T5} (disjoint: runner/sandbox · justfile · eval_model
 - **parallel_group:** A *(∥ T1, T5)*
 - **implements:** [BHV-4, INV-4, BHV-7, EVAL-4]
 - **anchored_on:** ADR-5, ADR-7, I-6
-- **files_touched:** `justfile`, `tests/lab_fixes/test_eval_4_gate.py`
+- **files_touched:** `justfile`, `tests/lab_fixes/test_eval_4_gate.py`, `tests/fde_kit/test_eval_8_examples.py`
 - **prompt:**
   > Per spec BHV-4 / INV-4 and design ADR-5: `gate` depends on `lint-check` instead of `lint`
   > (`just lint` stays as the explicit fixer; say so in its comment). Per BHV-7 / ADR-7, fix the
@@ -89,6 +92,10 @@ Parallel waves: {T1, T4, T5} (disjoint: runner/sandbox · justfile · eval_model
   > json` (or the text) and assert `gate`'s dependencies include `lint-check` and not `lint`; on a
   > temp copy of a tiny project with a seeded format drift, the `gate`-style lint check fails and
   > `git status --porcelain` is unchanged. Do not run `just gate` on the kit itself.
+  > *Plan delta (OQ-1, spec 0.2.0):* in `tests/fde_kit/test_eval_8_examples.py`, replace the closed
+  > set asserted by `test_eval_8_kit_work_holds_only_sdlc_rework_and_fde_kit` with: none of
+  > `devis-pose`, `export-devis`, `salle-booking` is tracked under the kit's `work/` (rename the test
+  > accordingly, keep the `test_eval_8_` prefix).
   > Check with `uv run pytest`; the orchestrator runs `verify`.
 - **done_when:** `gate` depends on `lint-check`; recipe comment positional; EVAL-4 green
 - **verify:** `uv run pytest -q -m eval tests/lab_fixes/test_eval_4_gate.py`
@@ -203,3 +210,7 @@ Parallel waves: {T1, T4, T5} (disjoint: runner/sandbox · justfile · eval_model
 
 | Date | Task | Agent | Result | Commit |
 |---|---|---|---|---|
+| 2026-11-13 10:17 | T1 | implementer | BLOCKED — OQ-2 | |
+| 2026-11-13 10:17 | T4 | implementer | BLOCKED — OQ-1 | |
+| 2026-11-13 10:17 | T5 | eval-runner | FAIL (t1) | |
+| 2026-11-13 10:18 | T5 | implementer | BLOCKED — OQ-1 | |
