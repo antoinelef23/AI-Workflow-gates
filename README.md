@@ -142,7 +142,7 @@ Full docs live in [`docs/`](docs/README.md), organized by the [Diátaxis](https:
 
 The lab evaluates not only the **product** (the code, via the spec §7 evals) but also the **models** it uses, per role. Source of truth: `lab/models/registry.toml` (data-driven — adding a model is one entry, zero code). The orchestrator assigns a model to each role (`[roles]`), overridable per task (`**model :**`), and logs which model produced what.
 
-`lab/engine/eval_models.py` (target `just eval-models live=1`) measures three layers:
+`lab/engine/eval_models.py` (target `just eval-models all 1`) measures three layers:
 
 1. **Scorecard** — on the golden tasks (`evals/golden/`), does the produced code pass **our** hidden evals (never the ones the model writes itself)? Raw capability per role, judged fairly. The oracle is held out: the model never sees `goldeval/` during execution.
 2. **Behavioral** (`evals/behavioral/`) — does the model respect its role contract: scope, the `STATUS` verdict, stopping on ambiguity, evals-first, calibrated reviewer verdicts?

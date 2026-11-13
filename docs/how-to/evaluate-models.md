@@ -57,7 +57,7 @@ the campaign compares against.
 ### 2. Run the campaign
 
 ```bash
-just eval-models live=1
+just eval-models all 1
 ```
 
 This runs all three layers against every model in the registry and writes a
@@ -67,7 +67,7 @@ Narrow the run while iterating:
 
 ```bash
 # one layer, two named models
-just eval-models layer=chain live=1 models=claude-opus-4-8,claude-haiku-4-5-20251001
+just eval-models chain 1 claude-opus-4-8,claude-haiku-4-5-20251001
 ```
 
 `layer` accepts `behavioral`, `chain`, `scorecard`, or `all` (default). Under the

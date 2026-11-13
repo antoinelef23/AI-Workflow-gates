@@ -32,7 +32,7 @@ this one. `CLAUDE.md` (hard rules) > role `.md` > task prompt = our chain of com
 
 1. **Add to the registry** — a `[[model]]` entry in `lab/models/registry.toml` (id, eligible roles).
    No code to touch.
-2. **Run the campaign** — `just eval-models live=1` (the 3 layers, all the models in the registry).
+2. **Run the campaign** — `just eval-models all 1` (the 3 layers, all the models in the registry).
    Produces a dated scorecard in `lab/models/scorecards/`.
 3. **Compare to the incumbent** — the registry's `[roles]` is the baseline. Does the new
    model beat the current one on its layer, at an acceptable cost?
