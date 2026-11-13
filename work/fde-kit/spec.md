@@ -1,10 +1,10 @@
 ---
 type: spec
 feature: fde-kit
-version: 0.7.0
+version: 0.8.0
 status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by: Owner — 2026-11-12 (OQ-1..8 tranchées par QCM en session, spec 0.2.0 validée en l'état) ; amendement 0.3.0 (test goldfish) approuvé le 2026-11-12 ; amendement 0.4.0 (deux lecteurs goldfish) approuvé le 2026-11-12 ; amendement 0.5.0 (multi-outils) approuvé le 2026-11-12 ; amendement 0.6.0 (improver) approuvé le 2026-11-12 ; amendement 0.7.0 (bornes des clés libres, BHV-3d) approuvé le 2026-11-12
+validated_by: Owner — 2026-11-12 (OQ-1..8 tranchées par QCM en session, spec 0.2.0 validée en l'état) ; amendement 0.3.0 (test goldfish) approuvé le 2026-11-12 ; amendement 0.4.0 (deux lecteurs goldfish) approuvé le 2026-11-12 ; amendement 0.5.0 (multi-outils) approuvé le 2026-11-12 ; amendement 0.6.0 (improver) approuvé le 2026-11-12 ; amendement 0.7.0 (bornes des clés libres, BHV-3d) approuvé le 2026-11-12 ; amendement 0.8.0 (BHV-3d : nombres finis) approuvé le 2026-11-13
 ---
 
 # Spec — Kit FDE portable : workflow agentique templatisé, profils d'organisation, retours arrière routés
@@ -178,7 +178,7 @@ référence**, et GitHub Copilot, opencode et Codex CLI le reçoivent d'abord en
   - **BHV-3c** — Override tentant de passer une route R2/R3/R4/R5 en `auto` : refus, rc 1 (INV-3).
   - **BHV-3d** — Override d'une clé libre hors de ses bornes : refus, rc 1, message nommant la clé,
     la valeur et la borne. Bornes : `max_task_attempts`, `max_parallel`, `max_cp_rejects` ≥ 1
-    (entiers) ; `budget_usd` ≥ 0 (0 = sans plafond).
+    (entiers) ; `budget_usd` nombre **fini** ≥ 0 (0 = sans plafond ; `nan` et `inf` refusés).
 
 ### BHV-4 — Workflow de bout en bout (`lab next <feature>`)
 - **Given** un triplet dans n'importe quel état
@@ -588,5 +588,6 @@ covers: [BHV-12, BHV-12a, INV-16]
 | 0.3.0 | 2026-11-12 | Owner | Test goldfish emprunté au pattern Elephant/Goldfish (idée seule, aucun code ni grille repris) après revue critique : ses contrôles d'origine sont consultatifs, on n'en garde que la partie rendue mesurable. Ajouts BHV-8, INV-12, EX-8, EVAL-10, NG-7, clé `goldfish_min_score`, critère de conservation en §1 |
 | 0.4.0 | 2026-11-12 | Owner | Deux lecteurs goldfish (petit modèle + modèle de l'implementer) au lieu d'un : « goldfish » = sans mémoire, pas moins capable ; un petit modèle seul confondrait erreur de raisonnement et ambiguïté. Le croisement distingue `ambiguity` (signal fort) de `fragile` (spec implicite). Seuil éventuel sur le seul lecteur implementer ; choix final du signal par corrélation R3/R4. Rôle `goldfish` au registre. Ajouts BHV-8e, signal croisé ; BHV-7, BHV-8, INV-12, EX-8, EVAL-10 amendés |
 | 0.5.0 | 2026-11-12 | Owner | Multi-outils (QCM) : Claude Code reste l'outil de référence ; GitHub Copilot, opencode et Codex CLI supportés, interactif d'abord puis runs orchestrés, dans une nouvelle itération (l'itération 1 reprend telle quelle). Garanties déclarées par outil et vérifiées (matrice de capacités, refus ou sandbox), formats générés depuis une source unique, gouvernance par couple outil × modèle ; un outil qui ne lit ses règles que depuis le repo attend le mode instance (INV-8 inchangé). Ajouts INV-13..15, BHV-9..11, EX-9/10, EVAL-11..13, NG-8, OQ-12 ; NG-4 levé |
+| 0.8.0 | 2026-11-13 | Owner | Revue CP-7 : `budget_usd = nan` passait la borne (`nan < 0` est faux) et `inf` équivalait en silence à « sans plafond ». BHV-3d exige un nombre fini |
 | 0.7.0 | 2026-11-12 | Owner | Trou relevé au CP-6 (revue) : aucune borne pour les clés libres — `max_parallel = 0` faisait planter le moteur, `max_task_attempts = 0` ne tentait aucune tâche, un budget négatif passait. Ajout BHV-3d (bornes, refus rc 1) ; EVAL-3 précise aussi « égal au plancher accepté » pour chaque clé de sécurité (bug du même CP) |
 | 0.6.0 | 2026-11-12 | Owner | Rôle `improver` (itération 4) : l'expérience des runs devient des propositions d'amélioration du scaffolding, déclenchées par seuils, évaluées (incident → nouveau cas d'abord, aucune régression) puis validées par signature ; ne touche jamais à ce qui le juge. Ajouts BHV-12, INV-16, EX-11, EVAL-14 ; NG-5 précisé |
