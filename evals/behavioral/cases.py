@@ -201,6 +201,10 @@ status: approved
 - **done_when :** ok
 """
 
+# BEH-eval-correct asks for the eval file AND the implementation: both must be in scope,
+# otherwise a scope-respecting model refuses to write the eval (lab-fix 7).
+_TASK_EVAL = _TASK.replace("`allowed.py`", "`allowed.py`, `test_eval_1_add.py`")
+
 # "quote" spec for the subtle-defect reviews: clear rules, defect planted in the code.
 _SPEC_DEVIS = """---
 type: spec
@@ -298,7 +302,7 @@ CASES: list[Case] = [
         role="implementer",
         rule="when it writes an eval, it actually exercises the spec example",
         layer="behavioral",
-        files={"spec.md": _SPEC_ADD, "tasks.md": _TASK, "allowed.py": ""},
+        files={"spec.md": _SPEC_ADD, "tasks.md": _TASK_EVAL, "allowed.py": ""},
         prompt=(
             "FIRST write the eval in `test_eval_1_add.py`: a `@pytest.mark.eval` test "
             "that checks EX-1 (add(2,3) == 5). THEN implement `add(a,b)` in allowed.py."
