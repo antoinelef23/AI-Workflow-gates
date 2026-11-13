@@ -1052,6 +1052,8 @@ def run_review(cp: Node, feature: Path, dry: bool) -> tuple[str, Path, bool]:
     verdicts: list[str] = []
     sections: list[str] = []
     for i, mid in enumerate(models):
+        if STOP.is_set():  # INV-1: no reviewer turn starts after an interrupt
+            return "WARN", report, False
         lens = REVIEW_LENSES[i % len(REVIEW_LENSES)] if n > 1 else "full review"
         prompt = (
             f"You act as the reviewer agent ({kit_ref(agent_file('reviewer'))}). Feature: {project_ref(feature)}. "
@@ -1061,6 +1063,8 @@ def run_review(cp: Node, feature: Path, dry: bool) -> tuple[str, Path, bool]:
             f'single line: "VERDICT: PASS", "VERDICT: WARN" or "VERDICT: BLOCK".'
         ) + REGISTRY.profile_text(mid)
         r = run_claude(prompt, model=mid)
+        if STOP.is_set():  # the turn was cut by the interrupt: no verdict, no report
+            return "WARN", report, False
         vm = re.findall(r"VERDICT:\s*(PASS|WARN|BLOCK)", r["text"])
         v = vm[-1] if vm else "WARN"
         verdicts.append(v)

@@ -240,3 +240,5 @@ Parallel waves: {T1, T4, T5} (disjoint: runner/sandbox · justfile · eval_model
 | 2026-11-13 19:46 | CP-2 | owner | checkpoint REJECTED — Artifacts trailer misses renamed source paths — add --no-renames and an EVAL-3 rename case | |
 | 2026-11-13 19:50 | T3 | eval-runner | FAIL (t1) | |
 | 2026-11-13 19:53 | T3 | implementer | done, evals green (t2) | |
+| 2026-11-13 20:47 | CP-2 | owner | checkpoint REJECTED — Interrupt does not cover the review panel: a reviewer turn can start after STOP (INV-1). Stop the panel on STOP and leave the checkpoint pending; add an EVAL-1 case for an interrupt during a 2-reviewer panel | |
+| 2026-11-13 20:52 | T2 | implementer | done, evals green (t1) | |

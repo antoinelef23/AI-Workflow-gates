@@ -301,3 +301,39 @@ def test_eval_1_interrupt_after_an_owner_signature_requires_a_new_signature(
             proc.kill()
     assert proc.returncode == 0, seen + out
     assert _commits(sandbox) == before + 1
+
+
+PANEL_PLAN = CP_PLAN.replace(
+    "- **mode :** blocking", "- **mode :** blocking\n- **reviewers :** 2"
+)
+
+
+@pytest.mark.eval
+def test_eval_1_interrupt_during_a_two_reviewer_panel_starts_no_second_reviewer(
+    sandbox: Path,
+) -> None:
+    (_feat(sandbox) / "tasks.md").write_text(FM + PANEL_PLAN)
+    # Each reviewer turn logs itself, then sleeps: the signal lands during panelist 1.
+    (sandbox / ".shim" / "REVIEW.sh").write_text(
+        f"echo turn >> .shim/review_turns\nsleep {SLEEP_MARK}\necho 'VERDICT: PASS'\n"
+    )
+    proc = _start(sandbox)
+    try:
+        _wait_for(lambda: (sandbox / ".shim" / "review_turns").exists(), "reviewer 1")
+        before = _commits(sandbox)
+        proc.send_signal(signal.SIGINT)
+        out, _ = proc.communicate(timeout=60)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+    assert proc.returncode == 130, out
+    assert _commits(sandbox) == before
+    turns = (sandbox / ".shim" / "review_turns").read_text().split()
+    assert turns == ["turn"]  # INV-1: the second reviewer never started
+    assert not _stray_shim()
+    assert _state(sandbox) == {"T1": "done", "CP-1": "pending"}
+    events = _events(sandbox)
+    assert not [e for e in events if e["event"] == "review"]
+    assert events[-1]["event"] == "run_interrupted" and events[-1]["inflight"] == []
+    assert not (_feat(sandbox) / ".runs" / "CP-1-review.md").exists()
+    assert not list((_feat(sandbox) / ".approvals").glob("CP-1*"))

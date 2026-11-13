@@ -1,93 +1,115 @@
-# Review CP-2 — panel of 2 — aggregated verdict: WARN (WARN, PASS)
+# Review CP-2 — panel of 2 — aggregated verdict: BLOCK (BLOCK, PASS)
 
 ## Panelist 1 — claude-opus-5-5 — lens: correctness: does the code do what the spec says (INV/BHV), values and bounds included
-VERDICT: WARN
+VERDICT: BLOCK
 
-## CP-2 review: `lab-fixes` (correctness lens, T1–T6)
+# CP-2 review (merge): correctness lens, T1–T6
 
-I read the code diff from `54fecfc` to `HEAD` against spec 0.3.0 and design 0.1.0. `uv run pytest -q tests/lab_fixes`: **29 passed**. No commit's recorded `Why:` contradicts the findings below.
+I found one ❌ blocker. The interrupt does not cover the checkpoint review panel, so INV-1 can be broken at a checkpoint with 2 reviewers, and CP-2 is one. Everything else matches the spec. The 30 `tests/lab_fixes` tests pass, and ruff check and format are clean on `lab/engine` and `tests/lab_fixes`.
 
-### ✅ Matches the spec
+## ❌ Blocker
 
-- **BHV-1 / INV-1 (interrupt), T1 and T2**
-  - The SIGINT/SIGTERM handler raises `STOP` and kills the agent process groups from a helper thread (`lab/engine/orchestrate.py:198-218`).
-  - `STOP` is checked before each agent turn, after it, after settling, after verify, after the gate, and immediately before `scoped_commit` (`orchestrate.py:921-999`).
-  - Queued futures are cancelled, `terminate_all` runs again every 0.2 s, and the shutdown waits for the workers (`orchestrate.py:1454-1480`).
-  - On exit, in-flight tasks are set back to `pending` and the state write is atomic. Exactly one `run_interrupted` event is journaled with `inflight` and `signal`, the resume command is printed, and the exit code is 130 (`orchestrate.py:1393-1410`).
-  - Every group is killed with SIGTERM, then SIGKILL after the grace period, children included, and the code waits on the whole group, not just the leader (`lab/engine/runner.py:89-126`). The timeout keeps its old message (`runner.py:267-272`, `sandbox_runner.py:195-211`).
-- **BHV-1a:** a second signal calls `kill_all_now()` and then `os._exit(130)` (`orchestrate.py:212-215`). State is only ever written atomically.
-- **BHV-1b:** a checkpoint or Owner-lane wait returns `interrupted` / `interrupted_waiting` (`orchestrate.py:825-826`, `:1126-1133`, `:1188-1189`). The node stays `pending` and is not added to `inflight` (`:1471-1473`, `:1489-1490`). A task that never started returns `not_started` and is not added to `inflight` either (`:878-879`, `:921-925`).
-- **BHV-1c:** if the run is interrupted after the Owner signs, the task returns `interrupted` (`orchestrate.py:836-841`). The token was already renamed to `.handled-*` (`:1221-1223`), so a restart waits for a new signature.
-- **BHV-2 / INV-2 (dry run):** `journal()` does nothing in a dry run (`orchestrate.py:265-268`). `mkdir .runs`, the lock and `save()` only run on a real run (`:1354-1361`). The dry-run review path writes nothing (`:1045-1047`).
-- **BHV-3 / EX-2 (commit trailers):** `Artifacts:` is built from the staged paths after the golden-file un-staging, sorted, and placed before `Run:` (`orchestrate.py:603-627`). `_commit_message` no longer adds it (`:699-703`). The run-log `tasks.md` is included because the feature directory is staged.
-- **BHV-4 / INV-4:** `gate: lint-check …` (`justfile:107`), and `lint` is documented as the explicit fixer (`justfile:52`).
-- **BHV-5 / EX-3:** the cap's source is `LAB_BUDGET_USD` when set, otherwise `budget_usd, <origin>`, with "override (free key)" shortened to "override" (`orchestrate.py:396-403`, `:1420`). The message is exact up to "…next wave." and the pre-existing resume sentence follows it.
-- **BHV-6 / INV-5:** the default stamp is `<date>-<layer>`, suffixed `-2`, `-3`… while the `.md` exists. An explicit `--stamp` is used as given (`lab/engine/eval_models.py:329-342`, `:484`).
-- **BHV-7:** no `key=value` invocation is left in README, `docs/**`, `EVOLUTION.md` or the `justfile` comments. `docs/reference/cli.md:178` shows the recipe's signature, not a call, and also gives the positional form.
+**INV-1 / BHV-1: a reviewer agent turn can start after the interrupt** (`lab/engine/orchestrate.py:1063`, the loop in `run_review` at 1052–1079)
+- `run_review` starts one reviewer agent per panelist in a loop. It never checks `STOP` inside that loop, and `run_claude` (`orchestrate.py:449`) has no check either.
+- `wait_checkpoint` only checks `STOP` before and after the whole panel (`orchestrate.py:1126-1130`).
+- The signal handler's helper calls `terminate_all()` once (`orchestrate.py:198-202`). The 0.2 s loop that keeps killing late launches only runs during a task wave (`orchestrate.py:1462-1465`), and the main thread is inside `run_review` here.
+- **Scenario:** a checkpoint with `reviewers: 2` (CP-2 of this plan), SIGINT while panelist 1 is running.
+  1. Panelist 1 is killed.
+  2. Its empty result becomes a `WARN` and a `review` event is journaled.
+  3. The loop then starts panelist 2. That is a new, billed agent turn after the interrupt, which INV-1 forbids ("MUST NOT … start any agent turn").
+  4. Nothing kills that turn, so it runs to the end.
+  5. `.runs/CP-x-review.md` is then overwritten with the partial panel.
+  6. Only after that does the run exit with rc 130.
+- **Why EVAL-1 misses it:** it tests an interrupt while waiting for the checkpoint's approval token (`tests/lab_fixes/test_eval_1_interrupt.py:203-227`), not during the review panel.
+- **Fix:** add `if STOP.is_set(): break` (or return `"interrupted"`) at the top of the panelist loop, plus one EVAL-1 case: interrupt during a 2-reviewer panel ⇒ one reviewer turn only, rc 130, the checkpoint stays `pending`.
+- **Not a recorded decision:** I found no `Why:` in the branch's commits or the CP-1/CP-2 reviews that scopes the review panel out of INV-1.
 
-### ⚠️ Deviations for the Owner to decide
+## ✅ Matches the spec
 
-- **INV-3 / BHV-3: a renamed file leaves a path out of `Artifacts:`** (`lab/engine/orchestrate.py:605-611`)
-  - The trailer comes from `git diff --cached --name-only`, which has rename detection on by default. A staged rename only lists the new path.
-  - I checked this in a throwaway repo: after `a.txt → b.txt` was staged, `--name-only` gave `b.txt` and `--no-renames` gave `a.txt, b.txt`.
-  - So a task that renames or moves a file inside its `files_touched` produces a commit that deletes `a.txt` with a trailer that doesn't list it. INV-3 says "no more, no fewer".
-  - EVAL-3 doesn't test this case.
-  - Fix: add `--no-renames` to that call, plus an EVAL-3 case for a rename.
+- **BHV-1 / BHV-1a / INV-1, task path:**
+  - Every agent process starts in its own process group and is tracked while it runs (`runner.py:59-87`).
+  - On interrupt: SIGTERM to every group, then SIGKILL after the grace period (`runner.py:89-104`), and `kill_all_now` plus `os._exit(130)` on a second signal (`orchestrate.py:205-213`).
+  - `STOP` is checked before each agent turn, after it, after verify and the eval gate, and right before `scoped_commit` (`orchestrate.py:918-999`).
+  - Queued tasks are cancelled and late launches are killed (`orchestrate.py:1461-1465`).
+  - `finish_interrupted` writes state atomically, journals `run_interrupted` with the in-flight list and the signal, prints how to resume, and returns 130 (`orchestrate.py:1393-1410`).
+- **BHV-1b:** a task waiting for its Owner signature returns `interrupted_waiting` and is left out of `inflight` (`orchestrate.py:825-826`, `1472-1473`). A waiting checkpoint makes the run exit through `finish_interrupted([])` (`orchestrate.py:1489-1490`).
+- **BHV-1c:** the approval token is consumed when honoured (`orchestrate.py:1218-1221`). An interrupt after the signature returns `interrupted` and the task stays `pending` (`orchestrate.py:836-841`); EVAL-1 checks that a new signature is required on restart.
+- **Plan delta (task never started):** a task stopped before its first turn returns `not_started`, never `interrupted` (`orchestrate.py:878-879`, `921-924`), and `test_eval_1_interrupt_queue.py` covers it.
+- **BHV-2 / INV-2 (dry run):** `journal()` does nothing in a dry run (`orchestrate.py:267-268`). `.runs/` is only created by a real run (`orchestrate.py:1354-1357`). In a dry run, `run_review` returns before writing its report (`orchestrate.py:1045-1047`).
+- **BHV-3 / INV-3 (commit trailers):**
+  - `Artifacts:` is now computed from the paths actually staged, after golden files outside the task's scope are un-staged (`orchestrate.py:603-612`).
+  - Renamed files list both the old and the new path (`--no-renames`), which was the cause of the earlier CP-2 rejection.
+  - The line is inserted before `Run:` (`orchestrate.py:618-628`), and `_commit_message` no longer emits `Artifacts:`.
+  - EVAL-3 covers task commits, Owner-lane commits, the run-log-only case (EX-2) and renames.
+- **BHV-5 (budget message):** the source of the cap is resolved when the policy is applied, and `override (free key)` is shortened to `override` (`orchestrate.py:396-403`). EX-3 is asserted exactly (`test_eval_5_budget.py:48-50`).
+- **BHV-6 / INV-5 (scorecard stamps):** the default stamp is `<date>-<layer>`, with `-2`, `-3`… added while the `.md` already exists (`eval_models.py:334-342`). An explicit `--stamp` is used as given (`eval_models.py:484`).
+- **BHV-4 / INV-4 (gate):** `gate` now depends on `lint-check` (`justfile:107`), and `lint` is documented as the explicit fixer (`justfile:52`).
+- **BHV-7 (docs):** the recipe comment is positional (`justfile:39-41`), README, `docs/how-to/evaluate-models.md` and EVOLUTION.md were fixed, and EVAL-7 guards them.
 
-### Not verified here
+## Not verified here
 
-- I ran `tests/lab_fixes` only, not `tests/orchestrator`, `just gate-ci`, `just check-content work/lab-fixes` or `just check-trajectory work/lab-fixes`.
-- I didn't do a live Docker or `claude` interrupt. Design §8 leaves that check to the iteration-3 run.
+- I did not run `just gate-ci`, `just check-content work/lab-fixes` or `just check-trajectory work/lab-fixes`.
+- I did not run a live Docker interrupt. The `docker run --rm` container being removed together with its process group is design risk 1, to be checked at the iteration-3 Docker run.
+- Commits T3 (`ee844aa`, `3c5eb4e`) and T6 (`009939b`) were written by an engine started before T3's trailer fix, so their own `Artifacts:` lines still follow `files_touched`. This was noted earlier (`d10f294`) and NG-4 keeps old trailers as they are.
 
-### Notes (not deviations)
+## Proposed OQ
 
-- There is a tiny race: a worker can pass its last `STOP` check just before the signal and then launch an agent that the handler's snapshot misses. The main loop's repeated `terminate_all()` (`orchestrate.py:1461-1464`) and the one in `finish_interrupted` (`:1396`) kill it within about 0.2 s, and it can never commit.
-- A commit already under way when the signal arrives is allowed to finish, as the design accepts in §8.
+- **OQ-4:** if the interrupt lands after an Owner signature but before its verify starts (`orchestrate.py:836`), the task is listed in `inflight`. The glossary says a task is in-flight once its judging has started, so a strict reading would leave it out. Should a signed-but-not-yet-checked Owner-lane task count as in-flight? The current behaviour (listed) is defensible, so this is for the Owner to decide, not a code deviation.
 
-VERDICT: WARN
+VERDICT: BLOCK
 
 ---
 
 ## Panelist 2 — claude-opus-4-8 — lens: spec/design conformance: traceability, scope, ADR compliance, no scope creep
 VERDICT: PASS
 
-I have a complete picture. All artifacts read, full diff reviewed against the ADRs, traceability verified, scope swept, and the merge gate exercised live. Here is the dossier.
+All delta-scoped test changes match the documented OQ-1/OQ-2 plan deltas exactly. I have everything I need for the conformance report.
 
 ---
 
-# CP-2 Merge Review — `work/lab-fixes` (T1–T6)
+# CP-2 Reviewer Report — merge checkpoint (lab-fixes)
+
 **Lens:** spec/design conformance — traceability, scope, ADR compliance, no scope creep.
-**Base:** `54fecfc` (PR #2 merge, pre-feature) → `HEAD ee844aa`. 25 files, +1849/−53.
+**Base:** `origin/main` (`54fecfc`) → `HEAD` (`3c5eb4e`). 27 files, +2217/−136.
 
-## ✅ Conformant
+## Traceability ✅
 
-**Traceability** — every task commit uses the canonical subject `type(feature): title [IDs]`, a `Why:` body, and `Spec-IDs:`/`Run:` trailers; IDs match each task's `implements`:
-- T1 `52015e8` [BHV-1, INV-1] · T4 `4052e13` [BHV-4, INV-4, BHV-7, EVAL-4] · T5 `211b04a` [BHV-6, INV-5, EVAL-6] · T2 `787be0e` [BHV-1,1a,1b,1c, INV-1, EVAL-1] · T6 `009939b` [BHV-7, EVAL-7] · T3 `ee844aa` [BHV-2, INV-2, BHV-3, INV-3, BHV-5, EVAL-1/2/3/5].
-- Spec amendments are separate commits with `Version-Bump:` trailers (`55ca955` 0.2.0→0.3.0; `fd13a0d` 0.1.0→0.2.0) and coherence passes (`ac26b3a`, `d637605`); `version :` pointers in design/tasks read 0.3.0/0.1.0. OQ-1/OQ-2/OQ-3 resolved by the Owner and recorded.
+- Every spec ID is mapped to a task and an eval in the coverage table (`work/lab-fixes/tasks.md:19-29`); BHV-1..7, INV-1..5, EVAL-1..7 all accounted for.
+- Engine commits carry the canonical shape — subject `type(feature): title [IDs]`, mandatory `Why:`, `Spec-IDs:`, `Artifacts:`, `Run:` (e.g. T1 `52015e8`, T3 `3c5eb4e`).
+- The `Artifacts:` trailer on the T3 rework commit (`3c5eb4e`) lists exactly its three staged paths — the feature proving its own INV-3 on itself.
+- The two spec amendments (0.2.0 OQ-1/OQ-2, 0.3.0 BHV-1c/OQ-3) are separate `docs` commits with version bumps and coherence passes, and the `# version :` pointers in design.md/tasks.md agree (spec 0.3.0, design 0.1.0). `content_guard` confirms substance is unchanged since the last bump for both spec and design ✅.
 
-**ADR compliance** — each technical choice traces to its ADR:
-- **ADR-1** `runner.py:42-131` — `run_tracked` (`Popen(start_new_session=True)`, locked registry, group-kill on timeout re-raising), `terminate_all` (SIGTERM→grace→SIGKILL, waits on the group not the leader), public `kill_all_now` (plan delta c). Both runners route through it; sandbox keeps `docker run --rm` (`sandbox_runner.py:195`).
-- **ADR-2** `orchestrate.py:198-219, 1393-1409, 1454-1480` — handler on main thread only appends + spawns a drain thread (E-1), `STOP` polled before turn/after turn/before commit, `cancel_futures` (E-3), atomic `save` (I-1), one `run_interrupted{inflight,signal}`, resume print, rc 130, `os._exit(130)` on 2nd signal (BHV-1a). BHV-1b `interrupted_waiting` (`:825`, `:1489`) keeps waiting nodes out of `inflight`; BHV-1c re-sign (`:836, :841`); never-started tasks `not_started` (`:878, :925`).
-- **ADR-3** `orchestrate.py:266-268` journal no-op in dry run; `.runs/` mkdir guarded `:1354` (INV-2).
-- **ADR-4** `orchestrate.py:603-630` trailers computed from `git diff --cached --name-only`, sorted; `_commit_message` no longer emits `Artifacts:` (INV-3/BHV-3).
-- **ADR-5** `justfile:107` `gate: lint-check …`; `lint` documented as the explicit fixer (`:52`).
-- **ADR-6** `orchestrate.py:100, 392-402` budget source; `eval_models.py:329-344, 484` dated stamp + `-2/-3` collision suffix.
-- **ADR-7** README/`docs/how-to/evaluate-models.md`/EVOLUTION.md + justfile comment all positional (`just eval-models all 1`); EVOLUTION.md touched only on the command line (scaffolding preserved).
+## ADR compliance ✅
 
-**Scope — no creep.** Every changed file is in the union of T1–T6 `files_touched`, plus the three artifacts and `work/lab-fixes/.runs/CP-1-review.md` (the CP-1 review dossier — a feature review record, not spec code). No NG item touched (NG-1/2/3 untouched; NG-4 honored). The OQ-1/OQ-2 deltas (`test_eval_8_examples.py`, `test_sandbox_external.py`, `test_runner.py`) are inside the Owner-approved scope extensions.
+- **ADR-1** tracked launcher — `run_tracked` / `terminate_all` / `kill_all_now` in `lab/engine/runner.py:54-131`; both runners route through it (`runner.py:268`, `sandbox_runner.py:195`).
+- **ADR-2** interrupt = stop flag + drain, never a commit — `STOP` event + `_on_signal` + `_begin_shutdown` (`orchestrate.py:114-219`); `STOP` checked before/after each turn and before every commit (`orchestrate.py:920-998`); wave loop cancels queued futures and drains (`orchestrate.py:1454-1480`).
+- **ADR-3** journal no-op in dry run — `orchestrate.py:266-268`; `.runs/` mkdir moved under `not args.dry_run` (`orchestrate.py:1354`) → INV-2.
+- **ADR-4** trailers computed after staging — `_commit_message` no longer emits `Artifacts:` (`orchestrate.py:699`); `scoped_commit` reads staged paths and appends the trailer (`orchestrate.py:603-612`).
+- **ADR-5** gate uses non-mutating lint — `justfile:107` `gate: lint-check …`.
+- **ADR-6** budget source + dated stamps — `BUDGET_SOURCE` (`orchestrate.py:100`, `398-404`, message `:1420`); `default_stamp` (`eval_models.py:329-339`, `:484`).
+- **ADR-7** positional `eval-models` everywhere — README, docs, EVOLUTION.md, justfile comment all converted.
 
-**Merge gate (run live):**
-- `pytest -m eval tests/lab_fixes` → **22 passed**. Full suites `tests/lab_fixes tests/orchestrator tests/test_runner.py` + touched fde_kit tests → **174 passed**.
-- `ruff check` + `ruff format --check` (engine + lab_fixes) → clean. Brand guard → clean (empty denylist).
-- Feature journal (untracked) shows real-run events only — no dry-run noise.
+## Scope — no creep ✅ (two notes ⚠️)
 
-## ⚠️ For the Owner (conformance note — not a code deviation)
+- All `files_touched` fall inside declared task scopes. The three edits to pre-existing tests (`tests/test_runner.py`, `tests/fde_kit/test_sandbox_external.py`, `tests/fde_kit/test_eval_8_examples.py`) match the OQ-2 and OQ-1 plan deltas verbatim (stub moved to `run_tracked`; closed `work/` set replaced by a no-demo-feature assertion).
+- NG-3 (no policy/profile/checkpoint semantics), NG-4 (no history rewrite) respected. No new workflow capability (NG-1).
 
-- **Transitional trailers on the feature's own post-CP-1 commits.** T3 `ee844aa` staged `work/lab-fixes/tasks.md` but its `Artifacts:` trailer omits it and is not sorted (`…test_eval_1_interrupt_queue.py` last = `node.files` order); T6 `009939b` staged `CP-1-review.md` + `tasks.md`, trailer lists neither. **Cause:** the engine executing the plan was restarted once at CP-1 on T2's code — *before* T3's ADR-4 trailer fix existed — so the commits that introduce the fix cannot themselves use it (bootstrap). This is **documented** (`f5c11d9` Why: "the T1–T5 Artifacts trailers miss tasks.md: the INV-3 defect T3 fixes, produced by the pre-T3 engine"), **protected by NG-4** ("old commits keep their trailers; history is never rewritten"), and the **delivered code is correct** — EVAL-3 verifies exact sorted staged-path trailers on commits made by the new engine, and design §7 scopes the fix to iteration 3 forward ("must be exact *first*"). Per the git-archaeology rule, a choice justified in a prior `Why:` is conformant, not a finding. Flagged only so the Owner merges with eyes open.
+⚠️ **`progress.md` (+334, `156b493`/`3ef38a1`)** is not in any task's `files_touched`. It is the session-handoff / lab-fix batch tracker that spec §1 references, updated in `docs` commits — legitimate bookkeeping, not a feature deliverable, but it rides along into the merge. No conformance issue.
 
-## Not verified here
-- Live hardware interrupt / stray-process check and `just gate`/`gate-ci` end-to-end were exercised at CP-1 (validated `16:08`); I ran the eval suites and lint directly rather than the `just` wrappers (recipe multi-op approval), with equivalent coverage.
+⚠️ **Budget message** (`orchestrate.py:1420`) appends `Restart after review …` beyond EX-3's literal `expected_output` (which ends at "stopping before the next wave."). That trailing sentence pre-dates this feature; EX-3 is illustrative of the *source-naming* requirement (BHV-5), and EVAL-5 is green. Non-blocking.
 
-No established deviation of the reviewed code: every ADR is implemented, every INV/BHV is covered and eval-locked, scope is clean, gates are green. The one trailer observation is a documented, NG-4-protected bootstrap property, not a defect. CP-2 is `mode: blocking` — the merge remains a human action.
+## Prior CP-2 rejection — resolved ✅
+
+Rejection (2026-11-13 19:46): *Artifacts trailer misses renamed source paths — add `--no-renames` and an EVAL-3 rename case.* Fix in `3c5eb4e`: `--no-renames` added to both `git diff --cached` reads (`orchestrate.py:567`, `:605`) and `test_eval_3_rename_lists_both_source_and_destination` added (`tests/lab_fixes/test_eval_3_trailers.py:104`).
+
+## Gate evidence ✅
+
+- `tests/lab_fixes` evals: **23 passed**, 7 deselected.
+- Affected suites (lab_fixes + orchestrator + runner + sandbox + eval_8): **175 passed**.
+- `ruff check` + `ruff format --check`: clean (non-mutating). `content_guard` spec+design: substance identical. `trajectory_guard work/lab-fixes`: OK, 0 warnings (no dry-run noise). `brand_guard --all`: clean. `check-lock`: n/a (no new dep).
+
+## Verdict
+
+The diff conforms to spec 0.3.0 and design 0.1.0: traceability intact, every technical choice anchored to an ADR, no scope creep, the prior rejection closed, all evals and guards green. The merge itself remains the Owner's human action (CP-2 is `mode: blocking`, final human checkpoint).
 
 VERDICT: PASS
