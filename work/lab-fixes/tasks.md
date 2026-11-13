@@ -242,3 +242,4 @@ Parallel waves: {T1, T4, T5} (disjoint: runner/sandbox · justfile · eval_model
 | 2026-11-13 19:53 | T3 | implementer | done, evals green (t2) | |
 | 2026-11-13 20:47 | CP-2 | owner | checkpoint REJECTED — Interrupt does not cover the review panel: a reviewer turn can start after STOP (INV-1). Stop the panel on STOP and leave the checkpoint pending; add an EVAL-1 case for an interrupt during a 2-reviewer panel | |
 | 2026-11-13 20:52 | T2 | implementer | done, evals green (t1) | |
+| 2026-11-13 23:09 | CP-2 | owner | checkpoint validated | |

@@ -1,4 +1,4 @@
-# Progress — passation de session (mise à jour 2026-11-13, fin de session 3)
+# Progress — passation de session (mise à jour 2026-11-13, fin de session 4)
 
 > **Point d'entrée unique pour reprendre le travail dans une nouvelle session ou un autre compte.**
 > Branche de travail : **`ccr-99c581ba-w0vhys`** (tout est poussé ; `main` est à jour jusqu'à la
@@ -17,12 +17,16 @@
 | fde-kit itération 1 (kit portable) | ✅ mergée | PR #1 → `b64b227` |
 | fde-kit itération 2 (profils solo/squad/regulated, kit 0.2.0) | ✅ mergée | PR #2 → `54fecfc` |
 | `reviewer.md` 1.2.0 (verdict sur écarts établis seulement) | ✅ mergé avec la PR #2 | `8479c4c` |
-| **`work/lab-fixes`** (lot de correctifs 5, 16, 18, 21, 22, 28, 29, 31) | ⏸ **tout est fait, en attente de la signature CP-2 (merge) par l'Owner** | branche, `7fdc8da`…`d10f294` |
+| **`work/lab-fixes`** (lot de correctifs 5, 16, 18, 21, 22, 28, 29, 31) | ✅ **CP-2 signé par l'Owner** (après 2 rejets : T3, T2) ; PR ouverte, **en attente du merge** | branche, `7fdc8da`…`c9a44e4`, §10.6 |
+| Nettoyage modèles (4.x → 5.5 seulement) | décidé, à faire après le merge de lab-fixes, PR à part | §11 |
 | fde-kit itération 3 | à faire après le merge de lab-fixes | §11 |
 
-**Prochaine action (Owner) :** trancher CP-2 de `lab-fixes` (voir §10.4 : une revue a trouvé un vrai
-écart mineur, le renommage absent du trailer `Artifacts:`). Puis : PR `ccr-99c581ba-w0vhys` → `main`,
-merge **uniquement sur demande explicite de l'Owner**.
+**Prochaine action (Owner) :** relire la PR `ccr-99c581ba-w0vhys` → `main` et dire « merge » ;
+merge **uniquement sur demande explicite de l'Owner**. Ensuite : la PR « modèles 5.5 seulement » (§11).
+
+**Environnement depuis la session 4 : WSL Ubuntu uniquement** (décision Owner). Le moteur exige
+POSIX (`import fcntl`, groupes de process) : `just gate-ci` échoue en Windows natif. Clone de travail :
+`~/work/lab-fixes` sous WSL ; `claude` CLI installé et authentifié dans WSL.
 
 **Actions Owner hors session (la session cloud ne peut pas les faire) :**
 1. Créer les tags `v0.1.0` sur `b64b227` et `v0.2.0` sur `54fecfc` (push de tag refusé en 403 depuis la session).
@@ -50,7 +54,7 @@ correctifs (§8). Le kit s'améliore en se faisant tourner sur lui-même.
 | `work/fde-kit/tasks.md` | 0.2.0 | approved (itérations 1 et 2 terminées) |
 | `work/lab-fixes/spec.md` | 0.3.0 | validated |
 | `work/lab-fixes/design.md` | 0.1.0 | validated (ADR-1..7), pointeur spec 0.3.0 |
-| `work/lab-fixes/tasks.md` | 0.1.0 | approved ; T1–T6 + CP-1 faits, CP-2 en attente |
+| `work/lab-fixes/tasks.md` | 0.1.0 | approved ; T1–T6, CP-1, CP-2 faits (CP-2 signé 2026-11-13) |
 | `lab/plugin/agents/reviewer.md` | 1.2.0 | — |
 | `lab/models/registry.toml` | — | rôles Claude 5 (voir §4) |
 | Kit | 0.2.0 | `examples/` ré-épinglés |
@@ -213,6 +217,15 @@ Faits : 4 (`2b8f327`), 9 (`5a70c84`), 13 (`ed61c07`), 14 (`f4f151c`), 17 (`2f3fe
 38. **L'état de run est gitignoré** (`.runs/state.json`, `journal.jsonl`, `.approvals/`) : dans une session cloud, il meurt avec le conteneur → un changement de session force un rejeu ou une reconstruction à la main (déjà vu à l'itération 1, revu ici). Piste : dériver l'état « done » de l'historique git comme le lint de capacité (`1dbfd26`), ou un export/import explicite de l'état.
 39. `LAB_APPROVAL_SECRET` vit dans le scratchpad de la session : perdu avec elle. Un nouveau secret fonctionne, mais les jetons signés avec l'ancien deviennent invalides (sans conséquence tant qu'aucun jeton n'est en attente).
 
+**Nouveaux, relevés pendant la clôture lab-fixes (session 4) :**
+
+40. **Course résiduelle à l'interruption** (revue CP-2 finale, panéliste 1, non reproduite) : un signal entre le dernier `if STOP.is_set()` et `_TRACKED.add(p)` dans `runner.run_tracked` laisse un agent échapper au `terminate_all`. Dans une vague, la boucle à 0,2 s le rattrape ; dans le panel de revue (thread principal), rien ne re-signale et le tour va au bout. Aucun commit possible. Piste : drapeau « terminé » dans `runner`, posé par `terminate_all`/`kill_all_now`, vérifié par `run_tracked` juste après l'enregistrement.
+41. `work/lab-fixes/tasks.md:21` : la ligne de couverture ne cite pas `BHV-1c` (oubli de la passe de cohérence spec 0.3.0). Cosmétique.
+42. **OQ-4** (différée par l'Owner) : une tâche voie Owner signée mais pas encore vérifiée est listée dans `run_interrupted.inflight` ; le glossaire dit « en vol dès que le jugement commence ». BHV-1c tient dans les deux cas.
+43. Item 12 revu : le commit T2 (`c9a44e4`) embarque `work/lab-fixes/.runs/CP-2-review.md` (rapport de la revue précédente).
+44. La revue CP-2 utilise encore `claude-opus-4-8` comme second panéliste : le nettoyage « modèles 5.5 seulement » (§11) le remplace par `claude-sonnet-5-5`.
+45. Le secret d'approbation a été exposé dans le transcript de session (`pgrep -af` affiche la ligne de commande expansée) : ne jamais exporter un secret dans une commande `bash -lc "… export X=$(…)"` qu'on liste ensuite ; il a été régénéré après la clôture.
+
 ## 9. Environnement (session cloud)
 
 - `just` installé via `uv tool install rust-just` (à refaire dans une nouvelle session si absent) ;
@@ -315,13 +328,35 @@ L'état de run n'est pas versionné (item 38) ; dans la session 3 il valait :
    push, **PR `ccr-99c581ba-w0vhys` → `main`** (pas de template de PR dans le dépôt), surveiller la CI,
    merger **seulement sur demande explicite** de l'Owner.
 
+### 10.6 Session 4 (WSL) — clôture
+
+| Nœud | Résultat | Commit |
+|---|---|---|
+| CP-2 (1ᵉʳ rejet Owner) | renommage absent du trailer `Artifacts:` → T3 | — |
+| T3 (rework, 2 essais) | `--no-renames` + cas renommage dans EVAL-3 | `3c5eb4e` |
+| CP-2 (revue) | BLOCK (opus-5-5 : un panéliste démarre après STOP, INV-1) + PASS (opus-4-8) | — |
+| CP-2 (2ᵉ rejet Owner) | le panel de revue doit s'arrêter sur STOP → T2 | — |
+| T2 (rework) | contrôle `STOP` avant/après chaque tour de relecteur + cas EVAL-1 panel à 2 | `c9a44e4` |
+| CP-2 (revue) | WARN + WARN (items 40–42) | — |
+| CP-2 | **signé par l'Owner** (« approve CP-2 ») | commit de clôture |
+
+Coût agents session 4 : **6,14 $** (somme `cost_usd` du journal). Vérifié dans WSL après T2 :
+`just gate-ci` rc 0 (185 tests, 162 evals, exemples 8 + 1063), `just check-content work/lab-fixes` OK,
+`just check-trajectory work/lab-fixes` OK (0 warning).
+
 ## 11. Ensuite
 
-1. Merge de lab-fixes (et item 35 si non corrigé à CP-2).
+1. Merge de lab-fixes (PR ouverte ; merge sur demande explicite de l'Owner).
+1b. **Modèles 5.5 seulement** (décision Owner 2026-11-13), PR à part depuis `main` : retirer
+   `claude-opus-4-8`, `claude-sonnet-4-6`, `claude-haiku-4-5-20251001` de `lab/models/registry.toml`,
+   des défauts de `lab/engine/eval_models.py:28`, de `tests/test_runner.py` et des docs
+   (`docs/how-to/evaluate-models.md`, `docs/tutorials/getting-started.md`) ; second relecteur du panel =
+   `claude-sonnet-5-5` ; **historique conservé** (scorecards datées, `.runs/CP-*-review.md`, journaux) ;
+   test de garde : aucun fichier vivant ne nomme un modèle non courant.
 2. **fde-kit itération 3** : workflow de bout en bout, retours arrière R1–R7 (avec reset ciblé des
    dépendants), OQ d'agent écrites par le moteur dans `.runs/` (item 34), test goldfish à deux
    lecteurs (Haiku + modèle de l'implementer), interruption live sous Docker. Candidats à absorber :
    items 12, 15, 20, 37, 38.
 3. Itération 4 : retro + rôle `improver` (propose, n'applique jamais).
 4. Itération multi-outils : Copilot, opencode, Codex CLI ; spike promptfoo (ADR-12).
-5. Reste du lot : 1–3, 6–8, 10–12, 15, 19, 20, 23–26, 33, 37–39.
+5. Reste du lot : 1–3, 6–8, 10–12, 15, 19, 20, 23–26, 33, 37–42.
