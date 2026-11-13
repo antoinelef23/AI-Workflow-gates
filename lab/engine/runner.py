@@ -105,6 +105,16 @@ def terminate_all(grace_s: float = 5) -> int:
     return len(procs)
 
 
+def kill_all_now() -> int:
+    """SIGKILL every registered group at once, no grace (second signal). Returns the
+    number of groups signalled."""
+    with _TRACKED_LOCK:
+        procs = list(_TRACKED)
+    for p in procs:
+        _killpg(p, signal.SIGKILL)
+    return len(procs)
+
+
 def _group_alive(p: subprocess.Popen) -> bool:
     p.poll()  # reap the leader if it already exited, so it is not a zombie
     try:

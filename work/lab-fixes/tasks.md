@@ -225,3 +225,5 @@ Parallel waves: {T1, T4, T5} (disjoint: runner/sandbox · justfile · eval_model
 | 2026-11-13 10:44 | T5 | implementer | done, evals green (t1) | |
 | 2026-11-13 10:45 | T1 | implementer | done, evals green (t1) | |
 | 2026-11-13 10:51 | T2 | implementer | done, evals green (t1) | |
+| 2026-11-13 13:04 | CP-1 | owner | checkpoint REJECTED — BHV-1b: an Owner-lane task interrupted while WAITING for its signature is listed in run_interrupted.inflight — it must not be (only agent turns/judging are in-flight). BHV-1c (spec 0.3.0, OQ-3): an interrupt between an Owner-lane signature and its checks returns the task to pending and requires a NEW signature on restart. Replace runner._TRACKED/_killpg in the signal handler with a public runner.kill_all_now(). EVAL-1 must cover both Owner-lane cases. See the plan delta in your prompt. | |
+| 2026-11-13 13:13 | T2 | implementer | done, evals green (t1) | |

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.orchestrator.conftest import ORCH, TEST_SECRET
+from tests.orchestrator.conftest import ORCH, TEST_SECRET, approve
 
 # Reuse the orchestrator suite's git sandbox + claude shim fixture.
 pytest_plugins = ["tests.orchestrator.conftest"]
@@ -59,6 +59,15 @@ CP_PLAN = """
 - **trigger :** auto when [T1] done
 - **validator :** Owner
 - **mode :** blocking
+"""
+OWNER_PLAN = """
+### T1 — By hand
+- **depends_on :** —
+- **agent :** owner
+- **implements :** [doc]
+- **files_touched :** `owner.txt`
+- **done_when :** ok
+- **verify :** `python3 .shim/slow_verify.py`
 """
 
 
@@ -217,3 +226,78 @@ def test_eval_1_interrupt_at_a_blocking_checkpoint_leaves_it_pending(
     last = _events(sandbox)[-1]
     assert last["event"] == "run_interrupted" and last["inflight"] == []
     assert not list((_feat(sandbox) / ".approvals").glob("CP-1*"))
+
+
+def _read_until(proc: subprocess.Popen, needle: str) -> str:
+    seen = ""
+    end = time.monotonic() + 60
+    while needle not in seen and time.monotonic() < end:
+        line = proc.stdout.readline()
+        if not line:
+            break
+        seen += line
+    assert needle in seen, seen
+    return seen
+
+
+@pytest.mark.eval
+def test_eval_1_interrupt_waiting_for_an_owner_signature_is_not_inflight(
+    sandbox: Path,
+) -> None:
+    (_feat(sandbox) / "tasks.md").write_text(FM + OWNER_PLAN)
+    proc = _start(sandbox)
+    try:
+        seen = _read_until(proc, "waiting for")
+        before = _commits(sandbox)
+        proc.send_signal(signal.SIGINT)
+        out, _ = proc.communicate(timeout=30)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+    assert proc.returncode == 130, seen + out
+    assert _commits(sandbox) == before
+    assert _state(sandbox) == {"T1": "pending"}
+    last = _events(sandbox)[-1]
+    assert last["event"] == "run_interrupted" and last["inflight"] == []
+
+
+@pytest.mark.eval
+def test_eval_1_interrupt_after_an_owner_signature_requires_a_new_signature(
+    sandbox: Path,
+) -> None:
+    (_feat(sandbox) / "tasks.md").write_text(FM + OWNER_PLAN)
+    (sandbox / "owner.txt").write_text("done by hand\n")
+    (sandbox / ".shim" / "slow_verify.py").write_text(
+        "import pathlib, sys, time\n"
+        "pathlib.Path('.shim/verify_started').touch()\n"
+        "time.sleep(3)\n"
+        "sys.exit(0 if pathlib.Path('owner.txt').exists() else 1)\n"
+    )
+    approve(sandbox, "T1")
+    before = _commits(sandbox)
+    proc = _start(sandbox)
+    try:
+        _wait_for(lambda: (sandbox / ".shim" / "verify_started").exists(), "verify")
+        proc.send_signal(signal.SIGINT)
+        out, _ = proc.communicate(timeout=60)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+    assert proc.returncode == 130, out
+    assert _commits(sandbox) == before  # INV-1: signed, interrupted, never committed
+    assert _state(sandbox) == {"T1": "pending"}
+    last = _events(sandbox)[-1]
+    assert last["event"] == "run_interrupted" and last["inflight"] == ["T1"]
+
+    # Restart: the consumed signature is not reused — the engine waits for a new one.
+    proc = _start(sandbox)
+    try:
+        seen = _read_until(proc, "waiting for")
+        assert _commits(sandbox) == before
+        approve(sandbox, "T1")
+        out, _ = proc.communicate(timeout=60)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+    assert proc.returncode == 0, seen + out
+    assert _commits(sandbox) == before + 1

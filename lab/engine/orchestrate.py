@@ -205,8 +205,7 @@ def _on_signal(signum: int, _frame) -> None:
     atomically, so what is already on disk stays valid."""
     _SIGNALS_SEEN.append(signal.Signals(signum).name)
     if len(_SIGNALS_SEEN) > 1:
-        for p in list(runner._TRACKED):  # best effort: leave no agent process behind
-            runner._killpg(p, signal.SIGKILL)
+        runner.kill_all_now()  # best effort: leave no agent process behind
         os._exit(130)
     threading.Thread(target=_begin_shutdown, daemon=True).start()
 
@@ -793,8 +792,8 @@ def run_owner_task(node: Node, feature: Path, dry: bool, real_ids: list[str]) ->
         f'(or reject.sh {node.id} {rel} "reason" to block it)'
     )
     outcome, info = _await_token(node, feature, "owner task")
-    if outcome == "interrupted":
-        return "interrupted"
+    if outcome == "interrupted":  # BHV-1b: waiting, not in flight — stays pending
+        return "interrupted_waiting"
     if outcome == "approved":
         # The Owner-lane counterpart of a successful task_attempt: the trajectory
         # guard (BHV-2a) accepts a task_done only after one of the two.
@@ -804,9 +803,11 @@ def run_owner_task(node: Node, feature: Path, dry: bool, real_ids: list[str]) ->
             feature, event="task_blocked", id=node.id, reason=info.get("reason", "")
         )
         return "blocked"
+    if STOP.is_set():  # BHV-1c: signed, then interrupted: pending, the Owner re-signs
+        return "interrupted"
     passed, feedback, label = _run_verify(node)
     ok, out = _eval_gate(node, real_ids) if passed else (False, feedback)
-    if STOP.is_set():
+    if STOP.is_set():  # BHV-1c: the consumed signature is never reused
         return "interrupted"
     if not (passed and ok):
         run_log(
@@ -1430,6 +1431,8 @@ def main() -> int:
                         res = fut.result()
                         if res == "interrupted":
                             inflight.append(n.id)
+                            continue
+                        if res == "interrupted_waiting":  # BHV-1b: stays pending
                             continue
                         n.status = res
                         if n.status in ("failed", "blocked"):
