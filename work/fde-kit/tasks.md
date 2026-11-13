@@ -6,7 +6,7 @@ status: approved         # proposed | approved | in_progress | done
 generated_by: planner (session 2026-11-12)
 approved_by: Owner — 2026-11-12 (QCM en session ; CP-1..CP-5 bloquants ; exécution dans la session cloud, checkpoints signés sur instruction de l'Owner ; delta 2026-11-12 approuvé (« Amender le plan ») : prompts T7 et T9 — `verify` exécuté par l'orchestrateur, l'agent vérifie avec `uv run pytest -m eval`, sans lancer `just` ; delta CP-3 (rejet → T9) : `tests/fde_kit/test_kit_root.py` ajouté aux files_touched de T9 — il asserte le `pythonpath` transitoire que T9 retire ; delta T11 bloqué : T11 scindé — T15 (agent: owner, chemins protégés) puis T11 (moteur + tests, + lab_init.py et test_eval_2_run_preflight.py)) ; itération 2 (T16–T22, CP-6, CP-7) approuvée par l'Owner le 2026-11-12 — tous les checkpoints signés par l'Owner lui-même ; delta CP-6 (rejet → T16, approuvé par l'Owner) : spec 0.7.0 BHV-3d + égal-au-plancher accepté ; delta CP-7 (rejet → T18 + T16, décidé par l'Owner) : garde INV-5 à l'exécution, budget fini (spec 0.8.0)
 spec: ./spec.md          # version : 0.8.0
-design: ./design.md      # version : 0.5.0
+design: ./design.md      # version : 0.6.0
 ---
 
 # Tasks — Portable FDE kit, iteration 1 ("kit portable")

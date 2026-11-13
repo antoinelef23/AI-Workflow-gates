@@ -1,10 +1,10 @@
 ---
 type: design
 feature: fde-kit
-version: 0.5.0
+version: 0.6.0
 status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by: FDE — 2026-11-12 (validé en session par QCM ; plugin sous lab/plugin/ confirmé) ; amendement 0.3.0 (OQ-9..11 du planner) approuvé le 2026-11-12 ; amendement 0.4.0 (spike promptfoo) approuvé le 2026-11-12 ; amendement 0.5.0 (itération 2 : profils, sandbox d'instance, kit-instance — 3 décisions Owner par QCM) approuvé le 2026-11-12
+validated_by: FDE — 2026-11-12 (validé en session par QCM ; plugin sous lab/plugin/ confirmé) ; amendement 0.3.0 (OQ-9..11 du planner) approuvé le 2026-11-12 ; amendement 0.4.0 (spike promptfoo) approuvé le 2026-11-12 ; amendement 0.5.0 (itération 2 : profils, sandbox d'instance, kit-instance — 3 décisions Owner par QCM) approuvé le 2026-11-12 ; amendement 0.6.0 (INV-5 garanti aussi à l'exécution, revue CP-7) approuvé le 2026-11-13
 spec: ./spec.md          # version : 0.8.0
 ---
 
@@ -340,6 +340,12 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
   - **moteur** : `max_task_attempts`, `max_parallel`, `max_cp_rejects`, `budget_usd` remplacent les
     constantes de module (I-20). `LAB_BUDGET_USD` reste un réglage opérateur de cette clé libre
     (prioritaire s'il est posé) ; la politique fournit la valeur par défaut.
+  **INV-5 a deux points d'application, volontairement** : plan-lint refuse un CP final/merge en
+  `mode: auto` (I-21), **et** le moteur refuse à l'exécution de l'auto-valider, quels que soient son
+  `mode`, `--force` ou le profil (`is_merge_checkpoint`, même test que plan-lint). Le second existe
+  parce que `--force` ignore les erreurs de lint et qu'`allow_force` est vrai en `solo`/`squad` : un
+  seul point laissait une clé de profil ouvrir un merge automatique (revue CP-7). Exception assumée
+  au « un seul point par clé » : INV-5 n'est pas une clé, c'est une règle dure.
   plan-lint reçoit la politique effective en paramètre (fonction pure, comme le registre) : sans
   instance (tests, `lab validate` hors projet), le profil `squad` documenté sert de valeur d'essai,
   jamais pour un run réel (ADR-16).
@@ -424,4 +430,5 @@ Sans objet (outillage en ligne de commande, pas d'interface).
 | 0.2.0 | 2026-11-12 | FDE | Design validé : ADR-1..11 acceptés, emplacement `lab/plugin/` confirmé |
 | 0.3.0 | 2026-11-12 | FDE | Trous relevés par le planner tranchés : status line dans le plugin câblée par le FDE (OQ-9, ADR-3), modèles `work/_templates/*.template.md` (OQ-10, ADR-7), `--profile` obligatoire et exemples en `squad` (OQ-11, ADR-7/9) ; message d'ADR-6 aligné sur EX-5 |
 | 0.4.0 | 2026-11-12 | FDE | ADR-12 (proposed) : spike promptfoo pour le banc d'évaluation, à mener dans l'itération multi-outils ; pointeur spec 0.6.0 |
+| 0.6.0 | 2026-11-13 | Owner | INV-5 garanti aussi à l'exécution (ADR-14) : un CP final/merge n'est jamais auto-validé, même sous `--force` — trou relevé par la revue CP-7 et corrigé par T18 |
 | 0.5.0 | 2026-11-12 | Owner | Itération 2 (profils) : ADR-13 politique effective (plancher monotone ⊕ overrides, profils en données), ADR-14 un point d'application par clé, ADR-15 sandbox d'instance externe (kit monté en lecture seule, remplace ADR-10), ADR-16 le kit est une instance de lui-même. 3 décisions Owner par QCM : routes réservées dès l'itération 2, sandbox externe livrée, `.lab/lab.toml` du kit explicite |
