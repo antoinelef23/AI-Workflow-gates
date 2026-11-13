@@ -73,3 +73,31 @@ def test_a_stopped_siblings_leftovers_are_not_a_scope_leak(sandbox: Path) -> Non
     assert "scope leak" not in r.stdout, r.stdout
     state = json.loads((sandbox / "work" / "feat" / ".runs" / "state.json").read_text())
     assert state == {"T1": "done", "T2": "blocked"}
+
+
+def test_a_wave_larger_than_max_parallel_neither_deadlocks_nor_misjudges(
+    sandbox: Path,
+) -> None:
+    # 3 tasks, 2 workers: T3 is queued, then edits while T1/T2 may be judging.
+    lab = sandbox / ".lab" / "lab.toml"
+    lab.write_text(lab.read_text() + "\n[overrides]\nmax_parallel = 2\n")
+    _setup(sandbox)
+    (sandbox / "work" / "feat" / "tasks.md").write_text(
+        FM
+        + PLAN
+        + PLAN.split("### T2")[1]
+        .replace(" — Slow sibling", "### T3 — Queued sibling", 1)
+        .replace("t2.txt", "t3.txt")
+    )
+    (sandbox / ".shim" / "T1.sh").write_text('echo a > t1.txt\necho "STATUS: done"\n')
+    (sandbox / ".shim" / "T2.sh").write_text('echo b > t2.txt\necho "STATUS: done"\n')
+    (sandbox / ".shim" / "T3.sh").write_text(
+        "touch .shim/lint_fail\nsleep 2\nrm -f .shim/lint_fail\n"
+        'echo c > t3.txt\necho "STATUS: done"\n'
+    )
+    r = run_orch(sandbox)
+    assert r.returncode == 0, r.stdout + r.stderr
+    state = json.loads((sandbox / "work" / "feat" / ".runs" / "state.json").read_text())
+    assert state == {"T1": "done", "T2": "done", "T3": "done"}
+    ids = [e["id"] for e in _events(sandbox) if e["event"] == "task_attempt"]
+    assert sorted(ids) == ["T1", "T2", "T3"], r.stdout  # one attempt each, no LINT RED

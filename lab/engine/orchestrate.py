@@ -123,23 +123,37 @@ RUNNING_FILES: dict[str, list[str]] = {}
 # only once no sibling is mid-turn, so it never sees a sibling's half-done edits in the
 # shared tree (T22's lint gate went red on T20's unformatted work in progress).
 ACTIVE: set[str] = set()
+JUDGING: set[str] = set()  # settled tasks running verify / gate / scope check
 ACTIVE_COND = threading.Condition()
 
 
 def _set_active(node_id: str, active: bool) -> None:
+    """active=True: the task is about to edit (start or resume an agent turn). It first
+    leaves the judging set and waits until no sibling is judging, so a queued or retrying
+    task never edits the tree while a sibling's verify/gate reads it. active=False: the
+    task is done with the wave (finished, blocked, failed, or an Owner-lane wait)."""
     with ACTIVE_COND:
-        (ACTIVE.add if active else ACTIVE.discard)(node_id)
+        JUDGING.discard(node_id)
+        if active:
+            ACTIVE_COND.notify_all()
+            ACTIVE_COND.wait_for(lambda: not (JUDGING - {node_id}))
+            ACTIVE.add(node_id)
+        else:
+            ACTIVE.discard(node_id)
         ACTIVE_COND.notify_all()
 
 
 def _settle(node_id: str) -> None:
-    """Leave the active set and wait until no sibling agent is mid-turn. Waiting tasks
-    are not active, so siblings that all reach this point proceed together; a wave of
-    one never waits."""
+    """Leave the active set and wait until no sibling agent is mid-turn, then judge.
+    Waiting tasks are not active, so siblings that all reach this point proceed
+    together; a wave of one never waits. Queued tasks are not active until they start
+    (registering them up front would hold worker threads and deadlock the pool) —
+    _set_active keeps them from editing while this task is judging."""
     with ACTIVE_COND:
         ACTIVE.discard(node_id)
         ACTIVE_COND.notify_all()
         ACTIVE_COND.wait_for(lambda: not (ACTIVE - {node_id}))
+        JUDGING.add(node_id)
 
 
 # fd of the inter-process flock kept open for the whole run (released on process
@@ -1299,6 +1313,7 @@ def main() -> int:
                 RUNNING_FILES.clear()
             with ACTIVE_COND:  # registered before any starts: no task judges too early
                 ACTIVE.clear()
+                JUDGING.clear()
                 ACTIVE.update(n.id for n in tasks[:MAX_PARALLEL])
             with ThreadPoolExecutor(max_workers=MAX_PARALLEL) as ex:
                 futs = {ex.submit(run_task, n, feature, args.dry_run): n for n in tasks}
