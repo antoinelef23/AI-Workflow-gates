@@ -39,6 +39,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -325,6 +326,22 @@ def aggregate(results: list[dict]) -> list[dict]:
     return rows
 
 
+def _today() -> str:
+    """Injectable date seam (tests)."""
+    return f"{date.today():%Y-%m-%d}"
+
+
+def default_stamp(layer: str) -> str:
+    """BHV-6/INV-5: `<YYYY-MM-DD>-<layer>`, suffixed -2, -3… until the .md is free."""
+    out_dir = ROOT / "lab" / "models" / "scorecards"
+    base = f"{_today()}-{layer}"
+    stamp, n = base, 1
+    while (out_dir / f"{stamp}.md").exists():
+        n += 1
+        stamp = f"{base}-{n}"
+    return stamp
+
+
 def write_scorecard(rows: list[dict], results: list[dict], stamp: str) -> Path:
     out_dir = ROOT / "lab" / "models" / "scorecards"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -421,7 +438,7 @@ def main() -> int:
     ap.add_argument(
         "--stamp",
         default="",
-        help="scorecard name (default: date passed as arg or 'latest')",
+        help="scorecard name, used as given (default: <YYYY-MM-DD>-<layer>, -2, -3… if taken)",
     )
     ap.add_argument(
         "--budget", type=float, default=0.0, help="campaign $ cap (0 = none)"
@@ -464,7 +481,7 @@ def main() -> int:
         results += run_scorecard(models, args.runs, profile_text)
 
     rows = aggregate(results)
-    stamp = args.stamp or "latest"
+    stamp = args.stamp or default_stamp(args.layer)
     md = write_scorecard(rows, results, stamp)
     print(f"\nScorecard : {md.relative_to(ROOT)}")
     cap = f" / cap ${BUDGET['usd']:.2f}" if BUDGET["usd"] else ""
