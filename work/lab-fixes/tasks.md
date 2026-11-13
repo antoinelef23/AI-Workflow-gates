@@ -237,3 +237,6 @@ Parallel waves: {T1, T4, T5} (disjoint: runner/sandbox · justfile · eval_model
 | 2026-11-13 16:08 | CP-1 | owner | checkpoint validated | |
 | 2026-11-13 16:16 | T6 | implementer | done, evals green (t1) | |
 | 2026-11-13 16:17 | T3 | implementer | done, evals green (t1) | |
+| 2026-11-13 19:46 | CP-2 | owner | checkpoint REJECTED — Artifacts trailer misses renamed source paths — add --no-renames and an EVAL-3 rename case | |
+| 2026-11-13 19:50 | T3 | eval-runner | FAIL (t1) | |
+| 2026-11-13 19:53 | T3 | implementer | done, evals green (t2) | |

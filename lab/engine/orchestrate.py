@@ -564,7 +564,7 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
         # Oracle guardrail: a golden is committed only if it is explicitly in
         # files_touched. Otherwise we un-stage it (finding H3, scorecard anti-tamper).
         staged = subprocess.run(
-            ["git", "diff", "--cached", "--name-only"],
+            ["git", "diff", "--cached", "--no-renames", "--name-only"],
             cwd=PROJECT,
             capture_output=True,
             text=True,
@@ -603,7 +603,7 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
         # INV-3: the Artifacts trailer is what the commit really carries (staged paths,
         # after the golden un-staging), computed here and not from node.files.
         final = subprocess.run(
-            ["git", "diff", "--cached", "--name-only"],
+            ["git", "diff", "--cached", "--no-renames", "--name-only"],
             cwd=PROJECT,
             capture_output=True,
             text=True,

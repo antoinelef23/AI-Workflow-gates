@@ -39,7 +39,7 @@ def _last_message(sb: Path) -> str:
 
 def _last_paths(sb: Path) -> list[str]:
     return subprocess.run(
-        ["git", "show", "--name-only", "--format=", "HEAD"],
+        ["git", "show", "--no-renames", "--name-only", "--format=", "HEAD"],
         cwd=sb,
         capture_output=True,
         text=True,
@@ -98,3 +98,22 @@ def test_eval_3_run_log_only_commit_says_so(sandbox: Path) -> None:
     assert r.returncode == 0, r.stdout + r.stderr
     assert _last_paths(sandbox) == ["work/feat/tasks.md"]
     assert _trailer(_last_message(sandbox)) == "work/feat/tasks.md"
+
+
+@pytest.mark.eval
+def test_eval_3_rename_lists_both_source_and_destination(sandbox: Path) -> None:
+    """A rename deletes the source and adds the destination: both are in the commit."""
+    (sandbox / "work" / "feat" / "tasks.md").write_text(FM + TASK)
+    (sandbox / "a.txt").write_text(
+        "some content long enough to be detected as a rename\n"
+    )
+    subprocess.run(["git", "add", "a.txt", "work"], cwd=sandbox, check=True)
+    subprocess.run(["git", "commit", "-qm", "seed"], cwd=sandbox, check=True)
+    (sandbox / ".shim" / "T1.sh").write_text(
+        'git mv a.txt b.txt\necho "STATUS: done"\n'
+    )
+    r = run_orch(sandbox)
+    assert r.returncode == 0, r.stdout + r.stderr
+    staged = _last_paths(sandbox)
+    assert "a.txt" in staged and "b.txt" in staged
+    assert _trailer(_last_message(sandbox)) == ", ".join(sorted(staged))
