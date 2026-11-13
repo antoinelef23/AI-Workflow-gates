@@ -195,12 +195,12 @@ Faits : 4 (`2b8f327`), 9 (`5a70c84`), 13 (`ed61c07`), 14 (`f4f151c`), 17 (`2f3fe
 12. ⏸ PR #10 (`78638cb`) — `scoped_commit` stage tout le dossier de la feature (rapports de revue embarqués dans les commits de tâche — encore vu sur T6 de lab-fixes, qui embarque `CP-1-review.md`).
 13. ✅ (`ed61c07`)
 14. ✅ (`f4f151c`)
-15. Le reviewer ne peut lancer ni `just` ni `git` (approbation demandée) : les revues CP retombent sur la lecture de code ou `pytest`/`ruff` directs. → voie Owner / allowlist reviewer. — Revu en session 5 : élargir les permissions d'un agent (Bash `just`/`git` pour le reviewer) est une décision de sécurité → **Owner**.
+15. Le reviewer ne peut lancer ni `just` ni `git` (approbation demandée) : les revues CP retombent sur la lecture de code ou `pytest`/`ruff` directs. → voie Owner / allowlist reviewer. — Vérifié en session 5 : le tour du reviewer reçoit les mêmes `ALLOWED_TOOLS` que l'implementer (`runner.DEFAULT_ALLOWED_TOOLS` : `uv`, `make`, `python3`, `mkdir`, `ls`, `git diff`, `git log` — ni `just`, ni `git show`) ; `Bash(just:*)` ouvrirait toutes les recettes, y compris les mutantes (`lint`) → liste par recette ou par rôle à décider : **Owner** (sécurité).
 16. ✅ lab-fixes T3 — `Artifacts:` = chemins réellement stagés, triés (BHV-3, EVAL-3). Voir 35 (renommages).
 17. ✅ (`2f3fe92`)
 18. ✅ lab-fixes T6 — docs `just eval-models` en positionnel, verrouillé par EVAL-7.
-19. Isolation des essais de modèles : `--plugin-dir`/`--settings` restent des chemins du kit dans l'argv ; confinement complet = bac à sable OS (candidat ADR). — Revu en session 5 : candidat ADR (bac à sable OS) → conception, **Owner**.
-20. Un rejet de checkpoint consomme vite le budget (max 2) quand c'est la **prescription** du rejet qui est fausse : prévoir un « amendement de note de rejet » ou un rejet qui ne compte pas. — Revu en session 5 : change la règle des 2 rejets (spec/ADR) → **Owner**.
+19. Isolation des essais de modèles : `--plugin-dir`/`--settings` restent des chemins du kit dans l'argv ; confinement complet = bac à sable OS (candidat ADR). — Vérifié en session 5 : ADR-2 (design fde-kit, « accepted, décision Owner : `--plugin-dir` explicite ») fixe ces chemins dans l'argv ; un confinement OS est un nouvel ADR → **Owner**.
+20. Un rejet de checkpoint consomme vite le budget (max 2) quand c'est la **prescription** du rejet qui est fausse : prévoir un « amendement de note de rejet » ou un rejet qui ne compte pas. — Vérifié en session 5 : `max_cp_rejects = 2` est dans la spec fde-kit validée (tableau des profils l. 170, route R7 l. 213) → amendement de spec : **Owner**.
 21. ✅ lab-fixes T5 — tampons `<date>-<layer>` (+ `-2`…), plus d'écrasement (BHV-6, EVAL-6).
 22. ✅ lab-fixes T4 — `gate: lint-check test evals check-brand check-lock` (BHV-4, EVAL-4).
 23. `eval_gate.sh` : filtre d'extensions (`.py|.toml|.ts…`) — une instance non-Python n'est pas gardée en fin de session. **Décision Owner** : élargir le déclencheur fait payer les evals sur plus de tours et demande de choisir ce qui compte comme du code (liste par langage, ou « tout sauf `*.md` »). Le design fde-kit dit que ce hook est « un plus » à côté du gate du moteur.
@@ -213,16 +213,16 @@ Faits : 4 (`2b8f327`), 9 (`5a70c84`), 13 (`ed61c07`), 14 (`f4f151c`), 17 (`2f3fe
 30. ✅ (`2cf51a8`)
 31. ✅ lab-fixes T3 — le message de budget nomme sa source (`LAB_BUDGET_USD` ou `budget_usd, <origine>`) (BHV-5, EVAL-5).
 32. ✅ (`a2a282c`, `369bdec`)
-33. Ne jamais manipuler `git stash` pendant que le travail d'une tâche y est mis de côté. — Revu en session 5 : règle de conduite, pas un défaut du code ; l'inscrire dans `lab/plugin/rules/hard-rules.md` change la méthode → **Owner**.
+33. Ne jamais manipuler `git stash` pendant que le travail d'une tâche y est mis de côté. — Vérifié en session 5 : aucune règle `stash` dans `lab/plugin/rules/hard-rules.md`, `CLAUDE.md` ni les agents ; l'y inscrire change la méthode → **Owner**.
 
 **Nouveaux, relevés pendant le run lab-fixes (session 3) :**
 
 34. Au premier run lab-fixes, des agents ont **écrit leurs OQ directement dans `spec.md`** (artefact validé). Converties en amendements Owner (spec 0.2.0, 0.3.0). La décision « OQ d'agent → `.runs/`, écrit par le moteur » (itération 3) doit l'empêcher mécaniquement.
 35. **Renommage absent du trailer `Artifacts:`** (revue CP-2, panéliste 1) : `git diff --cached --name-only` a la détection de renommage active ; un `a → b` stagé ne liste que `b`. Correctif : `--no-renames` dans `scoped_commit` (`lab/engine/orchestrate.py` ~l. 605) + un cas renommage dans EVAL-3. Écart à INV-3 « ni plus ni moins ». **C'est la décision ouverte de CP-2 (§10.4).**
 36. Amorçage des trailers : les commits qui livrent un correctif du moteur sont faits par l'ancien moteur (T1–T6 de lab-fixes ont des `Artifacts:` incomplets). Documenté, protégé par NG-4 — à garder en tête pour toute feature qui modifie le moteur qui l'exécute.
-37. Redémarrer l'orchestrateur à un checkpoint **re-paie le panel de revue** même si seule la signature manque (voulu : « une approbation n'est jamais court-circuitée »). Coût ≈ 1–3 $ par redémarrage. Piste : réutiliser un rapport dont le HEAD n'a pas bougé.
-38. **L'état de run est gitignoré** (`.runs/state.json`, `journal.jsonl`, `.approvals/`) : dans une session cloud, il meurt avec le conteneur → un changement de session force un rejeu ou une reconstruction à la main (déjà vu à l'itération 1, revu ici). Piste : dériver l'état « done » de l'historique git comme le lint de capacité (`1dbfd26`), ou un export/import explicite de l'état.
-39. `LAB_APPROVAL_SECRET` vit dans le scratchpad de la session : perdu avec elle. Un nouveau secret fonctionne, mais les jetons signés avec l'ancien deviennent invalides (sans conséquence tant qu'aucun jeton n'est en attente).
+37. Redémarrer l'orchestrateur à un checkpoint **re-paie le panel de revue** même si seule la signature manque (voulu : « une approbation n'est jamais court-circuitée »). Coût ≈ 1–3 $ par redémarrage. Piste : réutiliser un rapport dont le HEAD n'a pas bougé. — Vérifié en session 5 : le moteur l'interdit explicitement (`orchestrate.py:1125-1126` : « An approval is never short-cut — the review is regenerated first (self-hosting protocol) »), alors que le dépôt `portable` a déjà une réutilisation (`50783e7` : rapport réutilisé tant que l'**arbre** relu ne change pas ; `b9b96c7` : jetons signés liés à un nonce par tour). Les deux lignées divergent → **Owner** : porter ce mécanisme ici, ou garder la règle.
+38. **L'état de run est gitignoré** (`.runs/state.json`, `journal.jsonl`, `.approvals/`) : dans une session cloud, il meurt avec le conteneur → un changement de session force un rejeu ou une reconstruction à la main (déjà vu à l'itération 1, revu ici). Piste : dériver l'état « done » de l'historique git comme le lint de capacité (`1dbfd26`), ou un export/import explicite de l'état. — Vérifié en session 5 : la spec fde-kit validée (BHV-4, itération 3) nomme `.runs/state.json` comme source de la phase courante ; dériver l'état de git = amendement de spec, un export/import = nouvelle commande non spécifiée → **Owner** (à trancher avec la conception de l'itération 3).
+39. `LAB_APPROVAL_SECRET` vit dans le scratchpad de la session : perdu avec elle. Un nouveau secret fonctionne, mais les jetons signés avec l'ancien deviennent invalides (sans conséquence tant qu'aucun jeton n'est en attente). — Session 5 (WSL) : le secret vit maintenant hors scratchpad, dans `~/.lab-secrets/approval` (mode 600) sur la machine de l'Owner ; il survit aux sessions locales, pas aux sessions cloud.
 
 **Nouveaux, relevés pendant la clôture lab-fixes (session 4) :**
 
@@ -389,10 +389,10 @@ Pour pousser (Owner) : `cd D:\Projets\ai-workflow-gates\_build && git fetch //ws
 ## 11. Ensuite
 
 1. Décisions Owner : merge des PR #4, #5, #6, #8, #9, #10 (et de celle-ci) ; push des deux branches `portable` (§10.7) ; trancher les items 2, 3, 6, 10, 23, 24, 25, 26 (§8, options écrites).
-2. **fde-kit itération 3** : workflow de bout en bout, retours arrière R1–R7 (avec reset ciblé des
+2. **fde-kit itération 3** — bloquée à l'étape **design** : la spec 0.8.0 (validée) couvre déjà BHV-4..6 et BHV-8, mais le design 0.6.0 dit que les itérations 3 et 4 « seront conçues à leur tour, par amendement de ce document » ; chaque amendement précédent est venu d'un rapport `design-scout` + décisions Owner par QCM. Prochaine étape : lancer `design-scout` sur BHV-4..6, BHV-8 (avec 37 et 38), puis QCM Owner. Contenu prévu : workflow de bout en bout, retours arrière R1–R7 (avec reset ciblé des
    dépendants), OQ d'agent écrites par le moteur dans `.runs/` (item 34), test goldfish à deux
    lecteurs (Haiku + modèle de l'implementer), interruption live sous Docker. Candidats à absorber :
-   items 12, 15, 20, 37, 38.
+   items 15, 20, 37, 38 (12 : PR #10).
 3. Itération 4 : retro + rôle `improver` (propose, n'applique jamais).
 4. Itération multi-outils : Copilot, opencode, Codex CLI ; spike promptfoo (ADR-12).
 5. Reste du lot : 15, 19, 20, 33, 37–39 (itération 3 ou conception), 41, 42 (Owner) ; décisions Owner : 2, 3, 6, 10, 23–26 ; PR ouvertes : 1, 7, 8, 11, 12, 40, 43, 46.
