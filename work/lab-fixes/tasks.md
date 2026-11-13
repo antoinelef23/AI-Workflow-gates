@@ -216,3 +216,4 @@ Parallel waves: {T1, T4, T5} (disjoint: runner/sandbox · justfile · eval_model
 | 2026-11-13 10:18 | T5 | implementer | BLOCKED — OQ-1 | |
 | 2026-11-13 10:44 | T4 | implementer | done, evals green (t1) | |
 | 2026-11-13 10:44 | T5 | implementer | done, evals green (t1) | |
+| 2026-11-13 10:45 | T1 | implementer | done, evals green (t1) | |

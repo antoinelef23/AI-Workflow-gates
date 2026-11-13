@@ -19,7 +19,10 @@ from __future__ import annotations
 import abc
 import json
 import os
+import signal
 import subprocess
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,6 +37,83 @@ DEFAULT_ALLOWED_TOOLS = [
     "Bash(git diff:*)",
     "Bash(git log:*)",
 ]
+
+
+# --- Tracked launcher (design ADR-1) -------------------------------------------
+# Every agent process is started in its own session/process group and registered
+# here while it runs, so the engine can terminate all of them (and their children)
+# on an interrupt. `docker run --rm` for the sandbox: the container goes with its
+# client's group.
+_TRACKED: set[subprocess.Popen] = set()
+_TRACKED_LOCK = threading.Lock()
+
+
+def _killpg(p: subprocess.Popen, sig: int) -> None:
+    try:
+        os.killpg(p.pid, sig)  # session leader ⇒ pgid == pid
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+def run_tracked(
+    cmd: list[str], cwd: Path | str | None, env: dict | None, timeout: float | None
+) -> tuple[int, str, str]:
+    """Run `cmd` in its own process group, tracked until it ends.
+
+    Returns (returncode, stdout, stderr). On timeout the whole group is killed and
+    subprocess.TimeoutExpired is re-raised (callers keep their timeout message)."""
+    p = subprocess.Popen(
+        cmd,
+        cwd=str(cwd) if cwd is not None else None,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    with _TRACKED_LOCK:
+        _TRACKED.add(p)
+    try:
+        try:
+            out, err = p.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _killpg(p, signal.SIGKILL)
+            p.communicate()
+            raise
+        return p.returncode, out, err
+    finally:
+        with _TRACKED_LOCK:
+            _TRACKED.discard(p)
+
+
+def terminate_all(grace_s: float = 5) -> int:
+    """SIGTERM every registered group, wait up to `grace_s`, SIGKILL the survivors.
+
+    Returns the number of groups signalled."""
+    with _TRACKED_LOCK:
+        procs = list(_TRACKED)
+    for p in procs:
+        _killpg(p, signal.SIGTERM)
+    deadline = time.monotonic() + grace_s
+    for p in procs:
+        # The leader may exit before its children: wait on the group, not the leader.
+        while time.monotonic() < deadline and _group_alive(p):
+            time.sleep(0.05)
+    for p in procs:
+        if _group_alive(p):
+            _killpg(p, signal.SIGKILL)
+    return len(procs)
+
+
+def _group_alive(p: subprocess.Popen) -> bool:
+    p.poll()  # reap the leader if it already exited, so it is not a zombie
+    try:
+        os.killpg(p.pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 @dataclass
@@ -175,19 +255,12 @@ class ClaudeCliRunner(AgentRunner):
             append_system_prompt=append_system_prompt,
         )
         try:
-            p = subprocess.run(
-                cmd,
-                cwd=str(cwd),
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                env=env,
-            )
+            rc, out, err = run_tracked(cmd, cwd, env, timeout)
         except subprocess.TimeoutExpired:
             return RunResult(
                 False, "", None, 0.0, f"timeout: agent killed after {timeout}s"
             )
-        return parse_claude_json(p.returncode, p.stdout, p.stderr)
+        return parse_claude_json(rc, out, err)
 
 
 def get_runner() -> AgentRunner:

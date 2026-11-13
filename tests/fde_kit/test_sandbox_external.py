@@ -125,11 +125,11 @@ def test_docker_argv_kit_mount_is_never_writable():
 def test_runner_passes_kit_mount_and_add_dirs_to_docker(monkeypatch, tmp_path):
     seen: dict = {}
 
-    def fake_run(argv, **kw):
+    def fake_run(argv, cwd, env, timeout):
         seen["argv"] = argv
-        return subprocess.CompletedProcess(argv, 0, '{"result": "ok"}', "")
+        return 0, '{"result": "ok"}', ""
 
-    monkeypatch.setattr(sandbox_runner.subprocess, "run", fake_run)
+    monkeypatch.setattr(sandbox_runner, "run_tracked", fake_run)
     r = sandbox_runner.SandboxedClaudeRunner().run(
         "p",
         cwd=tmp_path / "inst",
