@@ -76,3 +76,13 @@ def test_spec_body_keeps_the_sections_after_the_changelog():
     text = "## 1. A\nBHV-1\n## 9. Changelog\nBHV-9 dropped\n## 10. Annex\nINV-2\n"
     body = spec_body(text)
     assert "BHV-1" in body and "INV-2" in body and "BHV-9" not in body
+
+
+def test_an_id_is_matched_whole_not_as_a_prefix(tmp_path):
+    """BHV-1 must not be found inside BHV-10 (the check used a substring test)."""
+    (tmp_path / "spec.md").write_text(
+        "## 4. Behaviors\n\n- **BHV-10** — only this one.\n\n## 7. Evals\n\n- **EVAL-1**\n",
+        encoding="utf-8",
+    )
+    errors, _ = validate(tmp_path, {}, [_task(["BHV-1", "EVAL-1"])], _NoRegistry())
+    assert "T1: implements [BHV-1] not found in spec.md" in errors

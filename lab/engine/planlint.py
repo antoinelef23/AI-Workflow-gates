@@ -254,10 +254,12 @@ def validate(
     if spec_path.exists():
         spec_text = spec_path.read_text(encoding="utf-8")
         body = spec_body(spec_text)
+        # Whole IDs only: a plain substring test would find BHV-1 inside BHV-10.
+        spec_ids = set(SPEC_ID.findall(body))
         for n in nodes:
             for tok in n.implements:
                 for sid in SPEC_ID.findall(tok):
-                    if sid not in body:
+                    if sid not in spec_ids:
                         errors.append(
                             f"{n.id}: implements [{sid}] not found in spec.md"
                         )
