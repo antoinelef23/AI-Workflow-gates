@@ -4,8 +4,8 @@ feature: fde-kit
 version: 0.2.0
 status: approved         # proposed | approved | in_progress | done
 generated_by: planner (session 2026-11-12)
-approved_by: Owner — 2026-11-12 (QCM en session ; CP-1..CP-5 bloquants ; exécution dans la session cloud, checkpoints signés sur instruction de l'Owner ; delta 2026-11-12 approuvé (« Amender le plan ») : prompts T7 et T9 — `verify` exécuté par l'orchestrateur, l'agent vérifie avec `uv run pytest -m eval`, sans lancer `just` ; delta CP-3 (rejet → T9) : `tests/fde_kit/test_kit_root.py` ajouté aux files_touched de T9 — il asserte le `pythonpath` transitoire que T9 retire ; delta T11 bloqué : T11 scindé — T15 (agent: owner, chemins protégés) puis T11 (moteur + tests, + lab_init.py et test_eval_2_run_preflight.py)) ; itération 2 (T16–T22, CP-6, CP-7) approuvée par l'Owner le 2026-11-12 — tous les checkpoints signés par l'Owner lui-même ; delta CP-6 (rejet → T16, approuvé par l'Owner) : spec 0.7.0 BHV-3d + égal-au-plancher accepté
-spec: ./spec.md          # version : 0.7.0
+approved_by: Owner — 2026-11-12 (QCM en session ; CP-1..CP-5 bloquants ; exécution dans la session cloud, checkpoints signés sur instruction de l'Owner ; delta 2026-11-12 approuvé (« Amender le plan ») : prompts T7 et T9 — `verify` exécuté par l'orchestrateur, l'agent vérifie avec `uv run pytest -m eval`, sans lancer `just` ; delta CP-3 (rejet → T9) : `tests/fde_kit/test_kit_root.py` ajouté aux files_touched de T9 — il asserte le `pythonpath` transitoire que T9 retire ; delta T11 bloqué : T11 scindé — T15 (agent: owner, chemins protégés) puis T11 (moteur + tests, + lab_init.py et test_eval_2_run_preflight.py)) ; itération 2 (T16–T22, CP-6, CP-7) approuvée par l'Owner le 2026-11-12 — tous les checkpoints signés par l'Owner lui-même ; delta CP-6 (rejet → T16, approuvé par l'Owner) : spec 0.7.0 BHV-3d + égal-au-plancher accepté ; delta CP-7 (rejet → T18 + T16, décidé par l'Owner) : garde INV-5 à l'exécution, budget fini (spec 0.8.0)
+spec: ./spec.md          # version : 0.8.0
 design: ./design.md      # version : 0.5.0
 ---
 
@@ -121,7 +121,7 @@ ADR-7 T2 · ADR-8 T2 · ADR-9 T5–T10 · ADR-10 T4 · ADR-11 T13 + CP-4.
 | BHV-3d | T16 (free-key bounds, spec 0.7.0 after CP-6) | EVAL-3 |
 | INV-2 | T16 | EVAL-3 (EX-1) |
 | INV-3 (profile part) | T16 | EVAL-3 |
-| INV-5 | T19 (no key can make the merge auto; existing plan-lint rule kept) | EVAL-3 |
+| INV-5 | T19 (no key can make the merge auto; existing plan-lint rule kept), T18 (run-time refusal of an auto merge, even under `--force` — CP-7) | EVAL-3 |
 | INV-1 (external sandbox) | T20 | EVAL-2 (argv), CP-7 live Docker run |
 | INV-7 (kit 0.2.0, examples re-pinned) | T21 | EVAL-8 |
 
@@ -673,6 +673,8 @@ T21 is an Owner-lane task.*
   > `"false"`); BHV-3d: `max_task_attempts`, `max_parallel`, `max_cp_rejects` must be integers ≥ 1 and
   > `budget_usd` ≥ 0, else `PolicyError` naming key, value and bound. Tests: equal-to-floor for each
   > yes/no safety key on `solo` and `squad`; each BHV-3d bound (0 / negative refused, bound accepted).
+  > *Plan delta (CP-7 rejection, spec 0.8.0):* `budget_usd` must be a FINITE number ≥ 0 — `nan` and
+  > `inf` refused with the BHV-3d message (`nan < 0` is false, so test finiteness explicitly).
   > Check with `uv run pytest`; the orchestrator runs `verify`.
 - **done_when:** EVAL-3 policy cases green (EX-1 exact, table exact, BHV-3a/3b/3c/3d refusals, equal-to-floor accepted for every safety key); `lab policy` prints key/value/origin
 - **verify:** `uv run pytest -q -m eval tests/fde_kit/test_eval_3_policy.py`
@@ -729,7 +731,7 @@ T21 is an Owner-lane task.*
 - **agent:** implementer
 - **depends_on:** [T16, T17, T19]
 - **parallel_group:** L
-- **implements:** [BHV-3, EVAL-3]
+- **implements:** [BHV-3, INV-5, EVAL-3]
 - **anchored_on:** ADR-14, ADR-16, I-20, I-22, I-23
 - **files_touched:** `lab/engine/orchestrate.py`, `tests/fde_kit/test_eval_3_engine.py`
 - **prompt:**
@@ -745,6 +747,13 @@ T21 is an Owner-lane task.*
   > shim sandbox (fixtures already write `.lab/lab.toml`, T17), `@pytest.mark.eval`,
   > `test_eval_3_<case>`: missing lab.toml; regulated without sandbox; regulated + `--force`;
   > `max_parallel`/`max_task_attempts` overrides change the engine's behavior; run_start content.
+  > *Plan delta (CP-7 rejection, INV-5):* at RUN time, a final/merge checkpoint (sink of the graph,
+  > or "merge" in its title — the same test as plan-lint) is NEVER auto-approved, whatever its
+  > `mode`, `--force` or the profile: it always waits for a signed human approval. Today `--force`
+  > skips the plan-lint error and `wait_checkpoint` auto-approves it on green evals + PASS, and
+  > `allow_force` is true in solo/squad. Test (`test_eval_3_<case>`), in solo and squad: a plan whose
+  > merge CP is `mode: auto`, run with `--force`, green evals and reviewer PASS ⇒ the run waits for a
+  > human approval (no auto-approval token written).
   > Check with `uv run pytest`; the orchestrator runs `verify`.
 - **done_when:** constants read from the policy; pre-flight refusals for missing lab.toml, sandbox_required, allow_force; plan-lint wired; run_start carries the policy
 - **verify:** `uv run pytest -q tests/orchestrator tests/fde_kit tests/sdlc_rework`
