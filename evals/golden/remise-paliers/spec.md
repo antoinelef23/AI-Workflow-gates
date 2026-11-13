@@ -1,7 +1,7 @@
 ---
 type: spec
 feature: remise-paliers (golden task)
-version: 1.0.0
+version: 1.1.0
 status: validated
 ---
 
@@ -11,6 +11,7 @@ status: validated
 
 ## Invariants
 - **INV-1** — total ≥ 0; negative `products_subtotal_eur` and `surface_m2` clamped to 0.
+- **INV-2** — `is_estimate` MUST always be `True`.
 - **INV-3** — the discount applies to the PRODUCTS subtotal only, never to installation.
 
 ## Behaviors
