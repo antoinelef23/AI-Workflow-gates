@@ -8,6 +8,7 @@ Aucune clé ne concerne le merge (INV-5).
 
 from __future__ import annotations
 
+import math
 import sys
 import tomllib
 from pathlib import Path
@@ -72,9 +73,11 @@ def _check_bounds(key: str, value) -> None:
     if key not in BOUNDS:
         return
     integer, minimum = BOUNDS[key]
-    kind = "an integer " if integer else "a number "
+    kind = "an integer " if integer else "a finite number "
     bound = f"must be {kind}>= {minimum}"
     if integer and not isinstance(value, int):
+        raise PolicyError(f"{key}={show(value)} is out of bounds ({bound})")
+    if not integer and not math.isfinite(value):  # nan < 0 is False: test explicitly
         raise PolicyError(f"{key}={show(value)} is out of bounds ({bound})")
     if value < minimum:
         raise PolicyError(f"{key}={show(value)} is out of bounds ({bound})")

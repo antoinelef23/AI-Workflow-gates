@@ -237,3 +237,10 @@ def test_eval_3_bhv3d_budget_bounds():
         policy.effective_policy(_lab("solo", {"budget_usd": 12.5}))["budget_usd"][0]
         == 12.5
     )
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_eval_3_bhv3d_budget_must_be_finite(bad):
+    with pytest.raises(policy.PolicyError) as e:
+        policy.effective_policy(_lab("solo", {"budget_usd": bad}))
+    assert "budget_usd" in str(e.value) and "finite" in str(e.value)

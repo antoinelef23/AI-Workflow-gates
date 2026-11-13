@@ -915,3 +915,5 @@ T21 is an Owner-lane task.*
 | 2026-11-12 18:26 | T22 | implementer | done, evals green (t2) | |
 | 2026-11-13 07:46 | T21 | owner | owner task validated | |
 | 2026-11-13 07:47 | T21 | owner | done by the Owner, verify + evals green | |
+| 2026-11-13 08:35 | CP-7 | owner | checkpoint REJECTED — INV-5 hole (CP-7 review): --force skips plan-lint and wait_checkpoint auto-approves a merge CP in mode auto on green evals + PASS; allow_force is true in solo/squad. T18: a final/merge CP is never auto-approved at run time, whatever mode, --force or profile (eval in solo and squad). T16: budget_usd must be finite (spec 0.8.0) — nan and inf refused. See the plan deltas in your prompts. | |
+| 2026-11-13 08:36 | T16 | implementer | done, evals green (t1) | |
