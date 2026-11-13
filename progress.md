@@ -267,6 +267,9 @@ Coût agents du feature : **≈ 11,3 $** (somme des `cost_usd` du journal, 4 dé
 - **Ctrl-C live** sur un vrai run (instance temporaire) : rc 130, 1 process `claude` avant / 0 après,
   aucun nouveau commit, `state.json` revenu à T1 `pending`, `run_interrupted` journalisé avec
   `inflight: ["T1"]`.
+- **SIGTERM live à un checkpoint (BHV-1b)** : l'orchestrateur en attente à CP-2 a été arrêté par la
+  limite de temps de la tâche de fond (18:05) → `run_interrupted` avec `inflight: []`, CP-2 resté
+  `pending`, aucun commit, message de reprise affiché. Aucun orchestrateur ne tourne depuis.
 - Non fait : interruption live sous Docker (laissée au run de l'itération 3, design §8).
 
 ### 10.4 Décision ouverte : CP-2 (merge)
