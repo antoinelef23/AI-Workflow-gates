@@ -1010,10 +1010,19 @@ def parse_rejection(path: Path) -> dict:
     return info
 
 
+def is_merge_checkpoint(node: Node, nodes: list[Node]) -> bool:
+    """Final/merge checkpoint — same test as plan-lint (INV-5): sink of the graph, or
+    "merge" in its title."""
+    is_sink = not any(node.id in m.depends_on for m in nodes)
+    return is_sink or "merge" in (node.title + " ").lower()
+
+
 def wait_checkpoint(
-    node: Node, feature: Path, dry: bool, supervised: bool
+    node: Node, feature: Path, dry: bool, supervised: bool, merge: bool = False
 ) -> tuple[str, dict]:
-    """Returns ("approved", {}) or ("rejected", {reason, tasks})."""
+    """Returns ("approved", {}) or ("rejected", {reason, tasks}).
+    `merge`: a final/merge CP is NEVER auto-approved — whatever its mode, --force or the
+    profile (INV-5); it always waits for a signed human approval."""
     approval = feature / ".approvals" / node.id
     if dry:
         print(
@@ -1031,7 +1040,12 @@ def wait_checkpoint(
     verdict, report, self_only = run_review(node, feature, dry)
     evals_ok, _ = run_evals()
 
-    if node.mode == "auto" and not supervised:
+    if node.mode == "auto" and merge:
+        notify(
+            f"{node.id} (auto): final/merge checkpoint — never auto-approved (INV-5) "
+            "→ human validation required."
+        )
+    elif node.mode == "auto" and not supervised:
         if self_only:
             notify(
                 f"{node.id} (auto): separation of duties impossible (reviewer = implementer's model) "
@@ -1324,7 +1338,13 @@ def main() -> int:
                         skip_dependents(n, nodes)
                     save()
         for cp in cps:
-            outcome, info = wait_checkpoint(cp, feature, args.dry_run, args.supervised)
+            outcome, info = wait_checkpoint(
+                cp,
+                feature,
+                args.dry_run,
+                args.supervised,
+                merge=is_merge_checkpoint(cp, nodes),
+            )
             if outcome == "approved":
                 cp.status = "done"
             else:  # rejected — on_reject: back to the targeted tasks with a comment

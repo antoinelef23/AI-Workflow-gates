@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from orchestrator.conftest import run_orch, sandbox  # noqa: F401  (sandbox = fixture)
+from orchestrator.conftest import approve, run_orch, sandbox  # noqa: F401  (sandbox = fixture)
 
 pytestmark = pytest.mark.eval
 
@@ -206,3 +206,49 @@ def test_eval_3_run_start_carries_profile_and_policy(sandbox: Path) -> None:  # 
     assert pol["min_reviewers"] == {"value": 2, "origin": "override"}
     assert pol["allow_force"] == {"value": True, "origin": "floor"}
     assert pol["goldfish_min_score"] == {"value": None, "origin": "floor"}
+
+
+# ------------------------------------- INV-5 at run time: the merge CP is human
+
+
+def _auto_cp(n: int, deps: str, title: str) -> str:
+    return f"""
+### CP-{n} — CHECKPOINT : {title}
+- **trigger :** auto quand {deps} done
+- **validator :** Owner
+- **mode :** auto
+"""
+
+
+@pytest.mark.parametrize("profile", ["solo", "squad"])
+def test_eval_3_merge_cp_never_auto_approved_under_force(
+    sandbox: Path,  # noqa: F811
+    profile: str,
+) -> None:
+    # sink CP, mode auto, --force skips plan-lint, evals green (stub), reviewer PASS (shim)
+    _plan(sandbox, _task(1), _auto_cp(1, "[T1]", "final review"))
+    if profile != "squad":  # the fixture's default
+        _lab_toml(sandbox, profile)
+    approve(sandbox, "CP-1")  # the human approval the run must wait for / honor
+    r = run_orch(sandbox, "--force")
+    assert r.returncode == 0, r.stdout + r.stderr
+    handled = list((sandbox / "work" / "feat" / ".approvals").glob("CP-1.handled-*"))
+    assert handled, "the human approval must have been the one honored"
+    assert "auto-approved" not in handled[0].read_text()
+    assert "never auto-approved" in r.stdout or "never auto-approved" in r.stderr
+
+
+def test_eval_3_merge_titled_cp_never_auto_approved(sandbox: Path) -> None:  # noqa: F811
+    # not a sink (T2 follows) but "merge" in its title: same test as plan-lint
+    _plan(
+        sandbox,
+        _task(1),
+        _auto_cp(1, "[T1]", "merge"),
+        _task(2, "[CP-1]"),
+    )
+    _lab_toml(sandbox, "solo")
+    approve(sandbox, "CP-1")
+    r = run_orch(sandbox, "--force")
+    assert r.returncode == 0, r.stdout + r.stderr
+    handled = list((sandbox / "work" / "feat" / ".approvals").glob("CP-1.handled-*"))
+    assert handled and "auto-approved" not in handled[0].read_text()
