@@ -547,6 +547,10 @@ def evals_collected() -> str:
     return p.stdout
 
 
+# What a task commit takes from the feature directory besides its files_touched.
+FEATURE_ARTIFACTS = ("spec.md", "design.md", "tasks.md")
+
+
 def scoped_commit(node: Node, feature: Path, message: str) -> None:
     """Stage only the task's scope, under lock (parallel waves).
 
@@ -558,7 +562,14 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
     the feature directory (spec/design/tasks), then un-stage any undeclared golden.
     """
     with COMMIT_LOCK:
-        paths = [*node.files, str(feature.relative_to(PROJECT))]
+        # The feature's three artifacts (tasks.md carries the run log), NOT the whole feature
+        # directory: that also swept in `.runs/CP-n-review.md`, which belongs to its own
+        # `docs(...)` review commit (lab-fix 12).
+        rel = feature.relative_to(PROJECT)
+        artifacts = [
+            str(rel / name) for name in FEATURE_ARTIFACTS if (feature / name).exists()
+        ]
+        paths = [*node.files, *artifacts]
         for p in paths:
             subprocess.run(["git", "add", "--", p], cwd=PROJECT, capture_output=True)
         # Oracle guardrail: a golden is committed only if it is explicitly in
