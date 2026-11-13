@@ -236,3 +236,4 @@ Parallel waves: {T1, T4, T5} (disjoint: runner/sandbox · justfile · eval_model
 | 2026-11-13 13:13 | T2 | implementer | done, evals green (t1) | |
 | 2026-11-13 16:08 | CP-1 | owner | checkpoint validated | |
 | 2026-11-13 16:16 | T6 | implementer | done, evals green (t1) | |
+| 2026-11-13 16:17 | T3 | implementer | done, evals green (t1) | |

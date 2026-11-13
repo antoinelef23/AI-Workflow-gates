@@ -97,6 +97,7 @@ MAX_EVAL_RETRIES = 3  # policy: max_task_attempts
 MAX_PARALLEL = 3  # policy: max_parallel
 MAX_CP_REJECTS = 2  # policy: max_cp_rejects — beyond this: CP failed, manual resume
 BUDGET_USD = float(os.environ.get("LAB_BUDGET_USD", "0") or 0)  # 0 = no cap
+BUDGET_SOURCE = "LAB_BUDGET_USD" if os.environ.get("LAB_BUDGET_USD") else "budget_usd"
 POLICY: dict | None = None  # {key: (value, origin)} — policy.effective_policy
 PROFILE: str | None = None
 TASK_TIMEOUT_S = int(
@@ -116,6 +117,8 @@ RUNNER = get_runner()
 STOP = threading.Event()
 _SIGNALS_SEEN: list[str] = []  # names of the signals received, in order (plain list:
 # appended by the handler on the main thread, no lock taken in handler context)
+
+DRY_RUN = False  # set from args.dry_run in main(): journal() writes nothing (INV-2)
 
 COMMIT_LOCK = threading.Lock()
 LOG_LOCK = threading.Lock()
@@ -260,7 +263,9 @@ def run_log(feature: Path, node: Node, agent: str, result: str) -> None:
 
 
 def journal(feature: Path, **event) -> None:
-    """Run telemetry: one JSON line per event in .runs/journal.jsonl."""
+    """Run telemetry: one JSON line per event in .runs/journal.jsonl (no-op in a dry run)."""
+    if DRY_RUN:
+        return
     event["ts"] = datetime.now().isoformat(timespec="seconds")
     path = feature / ".runs" / "journal.jsonl"
     with LOG_LOCK:
@@ -384,14 +389,18 @@ def resolve_policy(
 
 def apply_policy(policy: dict) -> None:
     """The engine constants become reads of the effective policy (I-20)."""
-    global MAX_EVAL_RETRIES, MAX_PARALLEL, MAX_CP_REJECTS, BUDGET_USD
+    global MAX_EVAL_RETRIES, MAX_PARALLEL, MAX_CP_REJECTS, BUDGET_USD, BUDGET_SOURCE
     MAX_EVAL_RETRIES = int(policy["max_task_attempts"][0])
     MAX_PARALLEL = int(policy["max_parallel"][0])
     MAX_CP_REJECTS = int(policy["max_cp_rejects"][0])
     if (os.environ.get("LAB_BUDGET_USD") or "").strip():
         BUDGET_USD = float(os.environ["LAB_BUDGET_USD"])  # operator setting wins
+        BUDGET_SOURCE = "LAB_BUDGET_USD"
     else:
         BUDGET_USD = float(policy["budget_usd"][0] or 0)
+        # origin ∈ {floor, override}: "override (free key)" reads as plain "override" (BHV-5)
+        origin = str(policy["budget_usd"][1]).split(" (")[0]
+        BUDGET_SOURCE = f"budget_usd, {origin}"
 
 
 def preflight() -> list[str]:
@@ -591,9 +600,32 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
             )
             for line in out_of_scope[:10]:
                 print(f"     {line}", flush=True)
+        # INV-3: the Artifacts trailer is what the commit really carries (staged paths,
+        # after the golden un-staging), computed here and not from node.files.
+        final = subprocess.run(
+            ["git", "diff", "--cached", "--name-only"],
+            cwd=PROJECT,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+        if final:
+            message = _with_artifacts(message, sorted(set(final)))
         subprocess.run(
             ["git", "commit", "-m", message], cwd=PROJECT, capture_output=True
         )
+
+
+def _with_artifacts(message: str, paths: list[str]) -> str:
+    """Insert `Artifacts: <paths>` before the `Run:` trailer (canonical trailer order)."""
+    line = f"Artifacts: {', '.join(paths)}"
+    lines = message.split("\n")
+    for i, ln in enumerate(lines):
+        if ln.startswith("Run: "):
+            lines.insert(i, line)
+            break
+    else:
+        lines.append(line)
+    return "\n".join(lines)
 
 
 def _dirty_paths() -> set[str]:
@@ -667,8 +699,6 @@ def _commit_message(node: Node, feature: Path, real_ids: list[str]) -> str:
     lines = [subject, "", f"Why: {why}", ""]
     if real_ids:
         lines.append(f"Spec-IDs: {', '.join(real_ids)}")
-    if node.files:
-        lines.append(f"Artifacts: {', '.join(node.files)}")
     lines.append("Run: owner" if node.agent == "owner" else "Run: auto")
     return "\n".join(lines)
 
@@ -846,7 +876,7 @@ def _run_task(node: Node, feature: Path, dry: bool) -> str:
         )  # no agent turn: waiting on a human never holds siblings
         return run_owner_task(node, feature, dry, ids)
     if STOP.is_set():  # a queued task picked up after the interrupt never starts
-        return "interrupted"
+        return "not_started"
     if dry:
         print(
             f"  [dry-run] {RUNNER.name} run: {node.id} "
@@ -886,11 +916,13 @@ def _run_task_attempts(
             )
         else:
             prompt = base_prompt + extra
-        if STOP.is_set():  # INV-1: no agent turn after an interrupt
-            return "interrupted"
+        # INV-1: no agent turn after an interrupt. Before the first turn the task is
+        # not in flight (nothing started): it stays pending, outside `inflight`.
+        if STOP.is_set():
+            return "not_started" if attempt == 1 else "interrupted"
         _set_active(node.id, True)
         if STOP.is_set():
-            return "interrupted"
+            return "not_started" if attempt == 1 else "interrupted"
         r = run_claude(prompt, resume=session, model=mid)
         if STOP.is_set():  # the turn was killed (or ended) by the interrupt: drop it
             return "interrupted"
@@ -1236,6 +1268,8 @@ def main() -> int:
     if POLICY is not None:
         apply_policy(POLICY)
 
+    global DRY_RUN
+    DRY_RUN = bool(args.dry_run)
     feature = (PROJECT / args.feature).resolve()
     fm, nodes = parse_tasks_md(feature / "tasks.md")
 
@@ -1317,8 +1351,10 @@ def main() -> int:
 
     rejections: dict[str, int] = {}
     state_f = feature / ".runs" / "state.json"
-    state_f.parent.mkdir(exist_ok=True)
     if not args.dry_run:
+        state_f.parent.mkdir(
+            exist_ok=True
+        )  # INV-2: a dry run creates nothing under .runs/
         # Inter-process lock (finding H6): forbids two concurrent runs on the
         # same feature (race on state.json / git index / journal / budget).
         try:
@@ -1381,7 +1417,7 @@ def main() -> int:
             return finish_interrupted([])
         if BUDGET_USD and COST_TOTAL["usd"] >= BUDGET_USD:
             notify(
-                f"⛔ Budget reached: ${COST_TOTAL['usd']:.2f} ≥ ${BUDGET_USD:.2f} (LAB_BUDGET_USD) — "
+                f"⛔ Budget reached: ${COST_TOTAL['usd']:.2f} ≥ ${BUDGET_USD:.2f} ({BUDGET_SOURCE}) — "
                 "stopping before the next wave. Restart after review (resume via .runs/state.json)."
             )
             journal(
@@ -1432,8 +1468,8 @@ def main() -> int:
                         if res == "interrupted":
                             inflight.append(n.id)
                             continue
-                        if res == "interrupted_waiting":  # BHV-1b: stays pending
-                            continue
+                        if res in ("interrupted_waiting", "not_started"):
+                            continue  # never in flight (BHV-1b / not started): stays pending
                         n.status = res
                         if n.status in ("failed", "blocked"):
                             skip_dependents(n, nodes)
