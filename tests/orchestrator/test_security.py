@@ -18,7 +18,9 @@ import approvals  # noqa: E402
 
 
 def state(sandbox: Path) -> dict:
-    return json.loads((sandbox / "work" / "feat" / ".runs" / "state.json").read_text())
+    return json.loads((sandbox / "work" / "feat" / ".runs" / "state.json").read_text())[
+        "tasks"
+    ]
 
 
 FM = "---\ntype: tasks\nfeature: feat\nstatus: approved\n---\n\n# Tasks — feat\n"

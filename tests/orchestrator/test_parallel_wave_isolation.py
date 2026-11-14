@@ -71,7 +71,9 @@ def test_a_stopped_siblings_leftovers_are_not_a_scope_leak(sandbox: Path) -> Non
     )
     r = run_orch(sandbox)
     assert "scope leak" not in r.stdout, r.stdout
-    state = json.loads((sandbox / "work" / "feat" / ".runs" / "state.json").read_text())
+    state = json.loads(
+        (sandbox / "work" / "feat" / ".runs" / "state.json").read_text()
+    )["tasks"]
     assert state == {"T1": "done", "T2": "blocked"}
 
 
@@ -97,7 +99,9 @@ def test_a_wave_larger_than_max_parallel_neither_deadlocks_nor_misjudges(
     )
     r = run_orch(sandbox)
     assert r.returncode == 0, r.stdout + r.stderr
-    state = json.loads((sandbox / "work" / "feat" / ".runs" / "state.json").read_text())
+    state = json.loads(
+        (sandbox / "work" / "feat" / ".runs" / "state.json").read_text()
+    )["tasks"]
     assert state == {"T1": "done", "T2": "done", "T3": "done"}
     ids = [e["id"] for e in _events(sandbox) if e["event"] == "task_attempt"]
     assert sorted(ids) == ["T1", "T2", "T3"], r.stdout  # one attempt each, no LINT RED

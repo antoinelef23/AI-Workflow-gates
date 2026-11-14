@@ -18,7 +18,9 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 def state(sandbox: Path) -> dict:
-    return json.loads((sandbox / "work" / "feat" / ".runs" / "state.json").read_text())
+    return json.loads((sandbox / "work" / "feat" / ".runs" / "state.json").read_text())[
+        "tasks"
+    ]
 
 
 def _load(mod_name: str, rel: str):

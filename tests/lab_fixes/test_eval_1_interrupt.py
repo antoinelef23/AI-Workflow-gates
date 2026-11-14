@@ -127,7 +127,7 @@ def _events(sb: Path) -> list[dict]:
 
 
 def _state(sb: Path) -> dict:
-    return json.loads((_feat(sb) / ".runs" / "state.json").read_text())
+    return json.loads((_feat(sb) / ".runs" / "state.json").read_text())["tasks"]
 
 
 def _stray_shim() -> bool:

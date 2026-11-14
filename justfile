@@ -32,6 +32,14 @@ check-content feature:
     python3 lab/engine/content_guard.py --git "{{feature}}/spec.md"
     if [ -f "{{feature}}/design.md" ]; then python3 lab/engine/content_guard.py --git "{{feature}}/design.md"; fi
 
+# Exit gate of the spec phase (BHV-4):  just spec-lint work/my-feature
+spec-lint feature:
+    python3 lab/engine/speclint.py "{{feature}}"
+
+# Exit gate of the design phase (BHV-4):  just design-lint work/my-feature
+design-lint feature:
+    python3 lab/engine/designlint.py "{{feature}}"
+
 # Substance/form guardrail in CI: compares changed features to a base branch.
 check-content-ci base="origin/main":
     BASE="{{base}}" bash lab/engine/ci_checks.sh

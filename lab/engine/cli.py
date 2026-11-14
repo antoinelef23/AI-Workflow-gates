@@ -19,7 +19,7 @@ from kit import kit_version  # noqa: E402
 
 USAGE = (
     "usage: lab {version | init <project> --profile <solo|squad|regulated> [--dry-run]"
-    " | policy [--project p] | run <feature> [args…] | validate <feature> [args…]}"
+    " | policy [--project p] | next <feature> [--project p] [--dry-run] | spec-lint <feature> | design-lint <feature> | run <feature> [args…] | validate <feature> [args…]}"
 )
 
 
@@ -66,6 +66,31 @@ def _policy(args: list[str]) -> int:
     return 0
 
 
+def _next(args: list[str]) -> int:
+    import argparse
+
+    import next_step
+
+    ap = argparse.ArgumentParser(prog="lab next", add_help=True)
+    ap.add_argument("feature")
+    ap.add_argument("--project", default=".")
+    ap.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="only display the next step, never launch an agent step",
+    )
+    ns = ap.parse_args(args)
+    try:
+        step = next_step.compute(ns.feature, Path(ns.project).resolve())
+    except next_step.NextError as e:
+        print(f"lab next: {e}", file=sys.stderr)
+        return 1
+    print("\n".join(next_step.render(step)))
+    if step.launch and not ns.dry_run:
+        return _relay(step.launch)  # the existing engine, never a second one
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if not args or args[0] in ("-h", "--help"):
@@ -79,6 +104,16 @@ def main(argv: list[str] | None = None) -> int:
         return _init(rest)
     if cmd == "policy":
         return _policy(rest)
+    if cmd == "spec-lint":
+        import speclint
+
+        return speclint.main(rest)
+    if cmd == "design-lint":
+        import designlint
+
+        return designlint.main(rest)
+    if cmd == "next":
+        return _next(rest)
     if cmd == "run":
         return _relay(rest)
     if cmd == "validate":
