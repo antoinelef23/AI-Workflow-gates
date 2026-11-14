@@ -93,3 +93,39 @@ Base : `main` = `5df3a60` (PR #4 à #11 mergées). Ces réponses servent d'entr�
 | 4 | Compteur de rejets en mémoire (I-35) | **Persistant** : `max_cp_rejects` doit survivre à un redémarrage du moteur. |
 | 5 | spec-lint et design-lint (I-30) | **Nouvelles recettes** (modules et recettes `just` séparés, un critère de sortie par phase BHV-4), en réutilisant les helpers de `planlint.py` / `content_guard.py`. |
 | 6 | Rôle `goldfish` (I-44) | **Haiku 5.5 + campagne** : Haiku 5.5 (seul modèle tier `fast` du registre) reçoit l'éligibilité `goldfish`, puis une campagne d'eval facturée — smoke d'abord, accord de l'Owner avant le run complet — avant l'affectation dans `[roles]`. |
+
+## Vérifications pour les points ouverts du design 0.7.0 (2026-11-14)
+
+Faits relevés pour éclairer le §10 du brouillon de design 0.7.0 ; rien n'est tranché ici.
+
+**Point 1 — lecture des EX en YAML.** Scan des blocs ```yaml sous un titre `### EX-n` de tous les
+`spec.md` du dépôt (10 specs, 28 blocs) : mappings en bloc et en flux, séquences en flux (28 blocs)
+et en bloc (3), scalaires en bloc `|` (3), documents multiples `---` (6), commentaires (16), chaînes
+entre guillemets (19) ; aucune ancre ni aucun tag. Forme des `expected_output` : mapping en bloc 18,
+mapping en flux 10, scalaire 9. Les documents `---` d'EX-8 utilisent une convention propre à nos
+specs (`input: {same, policy: …}` = « même entrée que le document précédent ») que ni un lecteur
+YAML ni un lecteur maison ne résout seul. PyYAML 6.0.3 est présent dans le Python système de la
+machine de dev (WSL), pas dans le venv du kit (`pyproject.toml` : `dependencies = []`).
+
+**Point 3 — isolement goldfish.** Aide locale de la CLI (`claude --version` = 2.1.323) :
+`--bare` saute la découverte de `CLAUDE.md`, les hooks et les plugins, mais n'accepte que
+`ANTHROPIC_API_KEY` ou `apiKeyHelper` (« OAuth and keychain are never read ») ; `--safe-mode`
+désactive `CLAUDE.md`, skills, plugins installés, hooks et serveurs MCP, avec l'authentification
+normale ; `--tools ""` retire tous les outils. Smoke facturé (3 appels Haiku 5.5, 0,0023 $ au total,
+script `goldfish-smoke.sh`, hors dépôt) — question posée : « liste toute chaîne commençant par
+`CANARY-` présente dans tes instructions ou ton contexte, sinon NONE » :
+
+| Essai | cwd | Options | Réponse |
+|---|---|---|---|
+| contrôle | dépôt git temporaire, `CLAUDE.md` canari A, commit canari B | `--tools ""` | A **et** B (B vu dans l'instantané « git status » du prompt système) |
+| safe | idem | `--tools "" --safe-mode` | B seul : `CLAUDE.md` exclu, **le message de commit fuit encore** |
+| safe hors git | répertoire hors de tout dépôt, `CLAUDE.md` canari dans le cwd et dans le parent | `--tools "" --safe-mode` | `NONE` |
+
+Conséquences pour ADR-24 (faits, pas décisions) : `--safe-mode` exclut `CLAUDE.md` (vérifié par canari) ;
+les plugins installés sont exclus selon l'aide de la CLI, **non vérifié par canari** (aucun plugin
+de test n'en portait) ; l'historique git n'est exclu que si le cwd du lecteur est hors de tout dépôt ;
+dans ce cas, un canari dans un commit ne peut plus être vu, et la preuve pour cette source devient
+« le cwd n'est dans aucun dépôt » (`git rev-parse --is-inside-work-tree` échoue) plutôt qu'un
+canari — écart à la lettre de BHV-8b. `--safe-mode` n'existe pas forcément dans les versions
+anciennes de la CLI : le pré-vol (ADR-6) devrait exiger une version où il est présent.
+
