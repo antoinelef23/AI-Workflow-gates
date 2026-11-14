@@ -166,7 +166,7 @@ def test_eval_3_cli_lists_keys_with_origin(tmp_path):
     assert "max_parallel = 4  (override (free key))" in out
     assert "sandbox_required = true  (floor)" in out
     assert "goldfish_min_score = undeclared  (floor)" in out
-    assert "routes.R6 = human" in out and "applied from iteration 3" in out
+    assert "routes.R6 = human" in out and "applied from iteration 3" not in out
 
 
 def test_eval_3_cli_rc1_on_policy_error(tmp_path):

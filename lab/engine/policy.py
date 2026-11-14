@@ -2,7 +2,7 @@
 
 Les profils sont des données (``policy_profiles.toml``). Une instance choisit un plancher
 (``profile``) et peut le durcir, jamais l'assouplir (INV-2) ; les clés libres sont réglables.
-``[overrides.routes]`` valide R1..R7 (INV-3) mais n'est appliqué qu'à partir de l'itération 3.
+``[overrides.routes]`` valide R1..R7 (INV-3) et est appliqué par ``routes.route_mode`` (ADR-20).
 Aucune clé ne concerne le merge (INV-5).
 """
 
@@ -20,7 +20,6 @@ PROFILE_NAMES = ("solo", "squad", "regulated")
 ROUTES = ("R1", "R2", "R3", "R4", "R5", "R6", "R7")
 ROUTE_MODES = ("auto", "proposal", "human")
 NO_AUTO_ROUTES = ("R2", "R3", "R4", "R5")  # INV-3
-ROUTES_NOTE = "applied from iteration 3"
 
 FLOOR = "floor"
 OVERRIDE = "override"
@@ -100,7 +99,7 @@ def _looser(strict: str, value, floor) -> bool:
 def effective_policy(lab_toml: dict) -> dict[str, tuple[object, str]]:
     """``{key: (value, origin)}``, origin ∈ {floor, override, override (free key)}.
 
-    Overridden routes appear as ``routes.Rn`` (origin ``override``): validated, not applied yet.
+    Overridden routes appear as ``routes.Rn`` (origin ``override``): validated, applied by ``routes.route_mode``.
     """
     profiles = load_profiles()
     profile = lab_toml.get("profile")
@@ -155,6 +154,5 @@ def effective_policy(lab_toml: dict) -> dict[str, tuple[object, str]]:
 def format_policy(policy: dict[str, tuple[object, str]]) -> list[str]:
     lines = []
     for key, (value, origin) in policy.items():
-        note = f" [{ROUTES_NOTE}]" if key.startswith("routes.") else ""
-        lines.append(f"{key} = {show(value)}  ({origin}){note}")
+        lines.append(f"{key} = {show(value)}  ({origin})")
     return lines

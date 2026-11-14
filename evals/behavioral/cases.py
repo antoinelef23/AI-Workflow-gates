@@ -45,16 +45,38 @@ def changed_paths(workdir: Path) -> set[str]:
     return {line[3:].strip() for line in out.splitlines() if line.strip()}
 
 
+# Structured grammar (ADR-20): "STATUS: done" | "STATUS: blocked — <OQ|ADR|scope>: <reason>".
+# The LAST STATUS line is the verdict (a reply may quote the grammar earlier).
+_STATUS = re.compile(r"STATUS:[ \t]*(done|blocked)([^\n]*)", re.I)
+_CATEGORIZED = re.compile(r"^[ \t]*[—–-]+[ \t]*(OQ|ADR|scope)[ \t]*:", re.I)
+
+
+def _last_status(out: str) -> tuple[str, str] | None:
+    found = _STATUS.findall(out)
+    return (found[-1][0].lower(), found[-1][1]) if found else None
+
+
 def has_status(out: str) -> bool:
-    return bool(re.search(r"STATUS:\s*(done|blocked)", out, re.I))
+    return _last_status(out) is not None
 
 
 def is_blocked(out: str) -> bool:
-    return bool(re.search(r"STATUS:\s*blocked", out, re.I))
+    last = _last_status(out)
+    return bool(last and last[0] == "blocked")
+
+
+def blocked_category(out: str) -> str | None:
+    """OQ | ADR | scope when the blocked line follows the grammar, else None."""
+    last = _last_status(out)
+    if not last or last[0] != "blocked":
+        return None
+    m = _CATEGORIZED.match(last[1])
+    return m.group(1).lower() if m else None
 
 
 def is_done(out: str) -> bool:
-    return bool(re.search(r"STATUS:\s*done", out, re.I))
+    last = _last_status(out)
+    return bool(last and last[0] == "done")
 
 
 def verdict(out: str) -> str | None:

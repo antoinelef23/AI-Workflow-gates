@@ -66,6 +66,7 @@ from plan import (
 )
 from kit import kit_root, kit_version
 from registry import load_registry, resolve_model
+import routes
 import runner
 from runner import DEFAULT_ALLOWED_TOOLS, get_runner
 from verify import parse_verify
@@ -736,7 +737,9 @@ def _build_base_prompt(node: Node, feature: Path) -> str:
         f"If the spec is ambiguous or has gaps: do not invent, record the question (OQ-n format) in spec.md §8 "
         f"and end blocked. "
         f"You MUST end your reply with a single line: "
-        f'"STATUS: done" or "STATUS: blocked — <reason, e.g. OQ-3>".\n{node.prompt}{node.rework}'
+        f'"STATUS: done" or "STATUS: blocked — <OQ|ADR|scope>: <reason>" '
+        f"(OQ = spec gap, ADR = design pattern inapplicable, scope = files_touched gap).\n"
+        f"{node.prompt}{node.rework}"
     )
 
 
@@ -934,7 +937,7 @@ def _run_task_attempts(
             # Retry in the SAME session: the agent fixes its work instead of redoing it
             prompt = (
                 f"Still on task {node.id} — {node.title}. Fix without rewriting everything:{extra}\n"
-                f'End with "STATUS: done" or "STATUS: blocked — <reason>".'
+                f'End with "STATUS: done" or "STATUS: blocked — <OQ|ADR|scope>: <reason>".'
             )
         else:
             prompt = base_prompt + extra
@@ -969,16 +972,30 @@ def _run_task_attempts(
             continue
         session = r["session_id"] or session
 
-        sm = re.search(r"STATUS:\s*(done|blocked)([^\n]*)", r["text"], re.I)
-        if sm and sm.group(1).lower() == "blocked":
-            reason = sm.group(2).strip(" —-:") or "unspecified reason"
-            run_log(feature, node, "implementer", f"BLOCKED — {reason}")
-            journal(feature, event="task_blocked", id=node.id, reason=reason)
+        verdict, _rest = routes.parse_status(r["text"])
+        if verdict == "blocked":
+            # ADR-20: the classifier is the only place that picks a route; the mode comes
+            # from the effective policy. R3/R4/R5 still end the task blocked (T28/T29 add
+            # the proposals); an uncategorized blocked is `human` (BHV-5c).
+            route, reason = routes.classify({"kind": "status", "text": r["text"]})
+            mode = routes.route_mode(route, POLICY)
+            run_log(
+                feature, node, "implementer", f"BLOCKED [{route}/{mode}] — {reason}"
+            )
+            journal(
+                feature,
+                event="task_blocked",
+                id=node.id,
+                reason=reason,
+                route=route,
+                mode=mode,
+            )
             notify(
-                f"{node.id} blocked: {reason} — Owner response expected (spec.md §8)"
+                f"{node.id} blocked [{route}, {mode}]: {reason} "
+                f"— Owner response expected (spec.md §8)"
             )
             return "blocked"
-        if not sm:
+        if verdict is None:
             print(
                 f"⚠️  {node.id}: no STATUS line in the reply — falling back to the evals",
                 flush=True,
@@ -1007,7 +1024,7 @@ def _run_task_attempts(
                 "\n\n⛔ SCOPE LEAK: verify/evals are green, but you changed files OUTSIDE "
                 f"this task's files_touched; they would be left out of the commit:\n{listed}\n"
                 "Revert those changes and make the task pass within files_touched. If that "
-                'is impossible, end with "STATUS: blocked — files_touched gap: <files>" '
+                'is impossible, end with "STATUS: blocked — scope: files_touched gap: <files>" '
                 "so the Owner amends the plan."
             )
             print(f"⚠️  {node.id}: scope leak — {', '.join(leaks[:5])}", flush=True)
