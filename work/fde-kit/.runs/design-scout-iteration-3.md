@@ -1,6 +1,9 @@
 # Rapport design-scout — fde-kit, itération 3 (BHV-4, BHV-5, BHV-6, BHV-8)
 
-> **Statut : rapport, aucune décision.** Rôle `design-scout` (`lab/plugin/agents/design-scout.md`) :
+> **Statut : rapport, aucune décision** — les 6 questions ont été tranchées par l'Owner le
+> 2026-11-14 (QCM en session), voir la dernière section ; `design.md` reste à amender.
+>
+> Rôle `design-scout` (`lab/plugin/agents/design-scout.md`) :
 > « You decide nothing, you document proven patterns. […] You never write into design.md directly:
 > you hand your report to the Owner. » Rédigé en session 5 (2026-11-14, nuit, sans l'Owner) dans la
 > session Claude Code, **sans** appel d'agent facturé. Piste 2 : recherche web en lecture seule,
@@ -76,3 +79,17 @@ Non établi (cherché, pas confirmé sur une page primaire) :
 4. Compteur de rejets en mémoire (I-35) : persistant pour que `max_cp_rejects` survive à un redémarrage ?
 5. spec-lint et design-lint n'existent pas (I-30) : nouvelles recettes, ou extension de plan-lint ?
 6. Rôle `goldfish` (I-44) : quel modèle `fast` du registre, et faut-il une campagne avant ?
+
+## Décisions Owner (2026-11-14, QCM en session)
+
+Base : `main` = `5df3a60` (PR #4 à #11 mergées). Ces réponses servent d'entrée à l'amendement de
+`design.md` pour l'itération 3 ; elles ne le modifient pas.
+
+| # | Question | Décision Owner |
+|---|---|---|
+| 1 | État de run | **Les deux** : les commits git sont la source de vérité des tâches `done` (I-28, reproductible depuis un checkout frais) ; `.runs/state.json` garde l'état en cours (I-27, nommé par BHV-4). |
+| 2 | Catégorie de `STATUS: blocked` | **Forme structurée** : `STATUS: blocked — OQ\|ADR\|scope: <raison>` ; le moteur lit l'étiquette (R3/R4/R5), tout autre signal part à l'humain (BHV-5c). |
+| 3 | I-38, OQ écrites dans `spec.md` par le prompt implementer | **Dans l'itération 3**, en même temps que la route R3 (le moteur écrit `.runs/<Tn>-OQ.md`), pour qu'une OQ ait toujours une destination. |
+| 4 | Compteur de rejets en mémoire (I-35) | **Persistant** : `max_cp_rejects` doit survivre à un redémarrage du moteur. |
+| 5 | spec-lint et design-lint (I-30) | **Nouvelles recettes** (modules et recettes `just` séparés, un critère de sortie par phase BHV-4), en réutilisant les helpers de `planlint.py` / `content_guard.py`. |
+| 6 | Rôle `goldfish` (I-44) | **Haiku 5.5 + campagne** : Haiku 5.5 (seul modèle tier `fast` du registre) reçoit l'éligibilité `goldfish`, puis une campagne d'eval facturée — smoke d'abord, accord de l'Owner avant le run complet — avant l'affectation dans `[roles]`. |
