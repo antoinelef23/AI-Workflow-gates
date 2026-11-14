@@ -581,6 +581,33 @@ def _human_artifacts_changed(feature: Path) -> list[str]:
     return changed
 
 
+def _ignored_touched(node: Node) -> list[tuple[str, str]]:
+    """ADR-22 (4): changed/new files under `files_touched` that git ignores, each with
+    its rule (`git check-ignore -v`). The scoped commit would skip them in silence."""
+    if not node.files:
+        return []
+    st = subprocess.run(
+        ["git", "status", "--porcelain", "--ignored", "-uall", "--", *node.files],
+        cwd=PROJECT,
+        capture_output=True,
+        text=True,
+    ).stdout
+    found = []
+    for line in st.splitlines():
+        if not line.startswith("!! "):
+            continue
+        path = line[3:].strip()
+        v = subprocess.run(
+            ["git", "check-ignore", "-v", "--", path],
+            cwd=PROJECT,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        rule = v.split("\t")[0] if v else "ignored"
+        found.append((path, rule))
+    return found
+
+
 def _impacted(node: Node) -> list[str]:
     """The task itself, then its transitive dependents (tasks and checkpoints), plan order."""
     anc = ancestors(PLAN_NODES) if PLAN_NODES else {}
@@ -1106,6 +1133,24 @@ def _run_task_attempts(
                 journal(feature, event="inv10_violation", id=node.id, files=touched)
                 journal(feature, event="task_failed", id=node.id)
                 notify(f"{node.id}: touched {', '.join(touched)} (INV-10) — failed")
+                return "failed"
+            ignored = _ignored_touched(node)
+            if ignored:  # ADR-22 (4): the task fails, nothing is committed
+                detail = "; ".join(f"{p} (rule: {r})" for p, r in ignored)
+                print(
+                    f"⛔ {node.id}: files_touched path ignored by git — {detail}; "
+                    f"nothing committed",
+                    flush=True,
+                )
+                run_log(feature, node, "implementer", f"ignored path: {detail}")
+                journal(
+                    feature,
+                    event="ignored_path",
+                    id=node.id,
+                    files=[p for p, _ in ignored],
+                )
+                journal(feature, event="task_failed", id=node.id)
+                notify(f"{node.id}: ignored files_touched path(s) — {detail} — failed")
                 return "failed"
             run_log(feature, node, "implementer", f"done, evals green (t{attempt})")
             scoped_commit(node, feature, _commit_message(node, feature, real_ids))
