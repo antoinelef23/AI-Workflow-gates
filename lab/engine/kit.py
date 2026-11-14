@@ -29,7 +29,9 @@ def kit_root(here: Path | None = None, honor_env: bool = True) -> Path:
     the location of the kit CODE, ignoring ``LAB_ROOT`` (which may point at test data)."""
     env = os.environ.get("LAB_ROOT") if honor_env else None
     if env:
-        return Path(env)
+        # Resolved: callers compare it with resolved paths (orchestrate: PROJECT != LAB), so a
+        # relative LAB_ROOT made the kit's own folder look like an external project (lab-fix 11).
+        return Path(env).resolve()
     root = (here or Path(__file__)).resolve().parents[2]
     if (root / MARKER).is_file():
         return root
