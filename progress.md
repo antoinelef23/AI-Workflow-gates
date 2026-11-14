@@ -38,6 +38,10 @@
 - Lints sur les 6 features : constats réels (OQ-12 ouverte dans fde-kit, ADR sans `Anchored on:`
   dans les designs anciens) et cas de rigueur à revoir (BHV-1a retiré mais signalé non couvert ;
   OQ tranchées sans le mot « résolue »).
+- Trou du moteur vu en CI (PR #15) : la fixture `tests/fde_kit/fixtures/next/build/` de T26 était
+  ignorée par `.gitignore` (`build/`) ; le commit scopé l'a sautée sans rien dire et le gate local
+  passait grâce aux fichiers sur disque. À couvrir au re-planning : `scoped_commit` doit refuser un
+  chemin de `files_touched` ignoré par git.
 
 ## Décisions Owner en attente
 

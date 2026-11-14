@@ -10,6 +10,8 @@ __pycache__/
 .next/
 dist/
 build/
+# `lab next` fixture for the build phase (T26) — not a build output
+!tests/fde_kit/fixtures/next/build/
 .DS_Store
 *.log
 .pytest_cache/
