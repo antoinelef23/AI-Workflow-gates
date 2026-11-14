@@ -27,10 +27,11 @@
 | Item 3 (couverture EVAL suite entière) | ✅ PR #11 mergée le 2026-11-14 | `fix-eval-coverage-scope`, §10.7 |
 | Items 2, 6, 10, 23–26 | revus en session 5 : chacun demande une décision Owner (preuves et options écrites en §8) | §8 |
 | Dépôt `portable` (Claudo-portable) : retrait Windows + modèles 5.5 | ✅ branches `drop-windows` et `models-latest-only` poussées le 2026-11-14 sur demande de l'Owner (aucune PR ouverte, rien de mergé) | §10.7 |
-| fde-kit itération 3 | rapport design-scout fait, 6 questions tranchées par l'Owner le 2026-11-14 ; ✅ **design 0.8.0 validé** le 2026-11-14 (ADR-17..24 acceptés) + **spec 0.9.0** approuvée (BHV-4 : git ; BHV-8b : preuve par source), PR #13 ; prochaine étape : plan de l'itération 3 (planner) | `work/fde-kit/.runs/design-scout-iteration-3.md`, §11 |
+| fde-kit itération 3 | rapport design-scout fait, 6 questions tranchées par l'Owner le 2026-11-14 ; ✅ **design 0.8.0 validé** le 2026-11-14 (ADR-17..24 acceptés) + **spec 0.9.0** approuvée (BHV-4 : git ; BHV-8b : preuve par source), PR #13 mergée ; **plan de l'itération 3 approuvé** le 2026-11-14 (`tasks.md` 0.3.0, T23–T35, CP-8..CP-11, tous bloquants ; OQ-13 = `lab next` lance le goldfish, câblé en T33 ; OQ-14 = `lab goldfish` réel au CP-10), PR #14 ; exécution lancée sous WSL jusqu'à CP-8 | `work/fde-kit/.runs/design-scout-iteration-3.md`, §11 |
 
-**Prochaine action :** plan de l'itération 3 de fde-kit (`tasks.md`, rôle planner) depuis la spec
-0.9.0 et le design 0.8.0 validés ; le plan passe ensuite par plan-lint et l'approbation de l'Owner. Ensuite : plan de l'itération 3 (planner) ; re-mesure facturée des deux
+**Prochaine action :** exécution de l'itération 3 par l'orchestrateur sous WSL (T23 → CP-8) ; à
+CP-8, revue + signature de l'Owner (« approve CP-8 » / « reject CP-8: raison »), puis redémarrage
+obligatoire du moteur. Ensuite : plan de l'itération 3 (planner) ; re-mesure facturée des deux
 cas de la PR #8 (smoke d'abord).
 
 **Environnement depuis la session 4 : WSL Ubuntu uniquement** (décision Owner). Le moteur exige
@@ -397,7 +398,7 @@ Commande utilisée (depuis `_build`, jamais vers `origin`) : `cd D:\Projets\ai-w
 
 ## 11. Ensuite
 
-1. Décisions Owner : approuver le plan de l'itération 3 (à écrire) ; trancher les items 2, 6, 10, 15, 19, 20, 23–26, 33, 37, 38 (§8). Fait le 2026-11-14 : merge des PR #4 à #12 ; les 6 questions du rapport design-scout (itération 3) sont tranchées ; push des deux branches `portable`.
+1. Décisions Owner : signer CP-8 de l'itération 3 quand il est atteint ; trancher les items 2, 6, 10, 15, 19, 20, 23–26, 33, 37, 38 (§8). Fait le 2026-11-14 : merge des PR #4 à #12 ; les 6 questions du rapport design-scout (itération 3) sont tranchées ; push des deux branches `portable`.
 2. **fde-kit itération 3** — bloquée à l'étape **design** : la spec 0.8.0 (validée) couvre déjà BHV-4..6 et BHV-8, mais le design 0.6.0 dit que les itérations 3 et 4 « seront conçues à leur tour, par amendement de ce document » ; chaque amendement précédent est venu d'un rapport `design-scout` + décisions Owner par QCM. Prochaine étape : lancer `design-scout` sur BHV-4..6, BHV-8 (avec 37 et 38), puis QCM Owner. **Fait en session 5** : `work/fde-kit/.runs/design-scout-iteration-3.md` — 20 patterns internes I-26..I-45 avec fichier:ligne, anti-patterns (dont I-38 : le prompt implementer fait écrire les OQ dans `spec.md`, cause du lab-fix 34), 6 questions pour l’Owner, **tranchées le 2026-11-14** (section « Décisions Owner » du rapport) ; piste externe : E-18 Temporal, E-19 Airflow, E-20 BIG-bench vérifiées sur page primaire ; P6 (Dagster) et la comparaison YAML non établies. Contenu prévu : workflow de bout en bout, retours arrière R1–R7 (avec reset ciblé des
    dépendants), OQ d'agent écrites par le moteur dans `.runs/` (item 34), test goldfish à deux
    lecteurs (Haiku + modèle de l'implementer), interruption live sous Docker. Candidats à absorber :
