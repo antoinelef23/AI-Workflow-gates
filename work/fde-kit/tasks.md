@@ -1,12 +1,12 @@
 ---
 type: tasks
 feature: fde-kit
-version: 0.2.0
-status: approved         # proposed | approved | in_progress | done
-generated_by: planner (session 2026-11-12)
-approved_by: Owner — 2026-11-12 (QCM en session ; CP-1..CP-5 bloquants ; exécution dans la session cloud, checkpoints signés sur instruction de l'Owner ; delta 2026-11-12 approuvé (« Amender le plan ») : prompts T7 et T9 — `verify` exécuté par l'orchestrateur, l'agent vérifie avec `uv run pytest -m eval`, sans lancer `just` ; delta CP-3 (rejet → T9) : `tests/fde_kit/test_kit_root.py` ajouté aux files_touched de T9 — il asserte le `pythonpath` transitoire que T9 retire ; delta T11 bloqué : T11 scindé — T15 (agent: owner, chemins protégés) puis T11 (moteur + tests, + lab_init.py et test_eval_2_run_preflight.py)) ; itération 2 (T16–T22, CP-6, CP-7) approuvée par l'Owner le 2026-11-12 — tous les checkpoints signés par l'Owner lui-même ; delta CP-6 (rejet → T16, approuvé par l'Owner) : spec 0.7.0 BHV-3d + égal-au-plancher accepté ; delta CP-7 (rejet → T18 + T16, décidé par l'Owner) : garde INV-5 à l'exécution, budget fini (spec 0.8.0)
-spec: ./spec.md          # version : 0.8.0
-design: ./design.md      # version : 0.6.0
+version: 0.3.0
+status: proposed         # proposed | approved | in_progress | done
+generated_by: planner (session 2026-11-12) ; itération 3 : planner (session 2026-11-14)
+approved_by: Owner — 2026-11-12 (QCM en session ; CP-1..CP-5 bloquants ; exécution dans la session cloud, checkpoints signés sur instruction de l'Owner ; delta 2026-11-12 approuvé (« Amender le plan ») : prompts T7 et T9 — `verify` exécuté par l'orchestrateur, l'agent vérifie avec `uv run pytest -m eval`, sans lancer `just` ; delta CP-3 (rejet → T9) : `tests/fde_kit/test_kit_root.py` ajouté aux files_touched de T9 — il asserte le `pythonpath` transitoire que T9 retire ; delta T11 bloqué : T11 scindé — T15 (agent: owner, chemins protégés) puis T11 (moteur + tests, + lab_init.py et test_eval_2_run_preflight.py)) ; itération 2 (T16–T22, CP-6, CP-7) approuvée par l'Owner le 2026-11-12 — tous les checkpoints signés par l'Owner lui-même ; delta CP-6 (rejet → T16, approuvé par l'Owner) : spec 0.7.0 BHV-3d + égal-au-plancher accepté ; delta CP-7 (rejet → T18 + T16, décidé par l'Owner) : garde INV-5 à l'exécution, budget fini (spec 0.8.0) ; itération 3 (T23–T35, CP-8..CP-11) **proposée le 2026-11-14, en attente d'approbation de l'Owner** (modes des CP, OQ-13 et OQ-14)
+spec: ./spec.md          # version : 0.9.0
+design: ./design.md      # version : 0.8.0
 ---
 
 # Tasks — Portable FDE kit, iteration 1 ("kit portable")
@@ -127,6 +127,34 @@ ADR-7 T2 · ADR-8 T2 · ADR-9 T5–T10 · ADR-10 T4 · ADR-11 T13 + CP-4.
 
 ADRs: ADR-13 T16 · ADR-14 T18/T19 · ADR-15 T20 · ADR-16 T17/T18.
 
+## Coverage (iteration-3 scope — design 0.8.0)
+
+| Spec ID | Tasks | Eval |
+|---|---|---|
+| BHV-4 | T23 (spec-lint, design-lint), T24 (run state), T26 (`lab next`) | EVAL-4 |
+| BHV-5, BHV-5c | T27 (classifier, structured `STATUS:`, route modes applied) | EVAL-5 |
+| BHV-5a, INV-4 | T25 (budgets and rejection counter persisted), T29 (escalation) | EVAL-5 |
+| BHV-5b | T29 (signed proposal applied, resume on the amended graph) | EVAL-5 (EX-2) |
+| INV-3 (route part) | T28 (R3), T29 (R2, R4, R5) — no human artefact modified | EVAL-5 (EX-2, EX-3) |
+| BHV-6, BHV-6a, BHV-6b | T30 (R7 targeted reset, R6) | EVAL-6 (EX-7) |
+| INV-10 | T28 (task fails if spec/design touched; commit never stages them), T31 (agent file) | EVAL-9 |
+| BHV-8, BHV-8a, BHV-8d | T32 (EX reading, masking, comparison) | EVAL-10 (EX-8) |
+| BHV-8b, BHV-8c, BHV-8e, INV-12 | T33 (readers, isolation proof, threshold, merged readers) | EVAL-10 (EX-8) |
+
+ADRs: ADR-17 T26 · ADR-18 T24/T25 · ADR-19 T23 · ADR-20 T27/T31 · ADR-21 T29/T30 · ADR-22 T28/T31 ·
+ADR-23 T30 · ADR-24 T32/T33 + CP-10.
+
+## Plan-level open questions (iteration 3) — to answer at approval
+
+- **OQ-13** — At the spec phase, does `lab next` launch the billed goldfish test itself, or only
+  display `lab goldfish <feature>` as the next action? ADR-17 lists `lab goldfish` as the spec gate's
+  application point without saying who triggers it. *Planner's default:* display only — `lab next`
+  never spends money on its own (T26 is written that way; changing it is a one-line plan delta).
+- **OQ-14** — Owner decision 6 asks for a billed campaign before Haiku 5.5 gets the `goldfish` role
+  in `[roles]`; design 0.8.0 does not define its cases. *Planner's default:* CP-10 runs the real
+  `lab goldfish` on validated specs — smoke on one spec first, then the others with the Owner's
+  OK — and the Owner decides the assignment on that report; T35 applies it.
+
 ## Execution graph
 
 ```mermaid
@@ -164,6 +192,23 @@ flowchart TD
     T20 --> T21[T21 OWNER kit 0.2.0 + re-pin]
     T22 --> T21
     T21 --> CP7{{CP-7 merge + live Docker regulated run · blocking}}
+    CP7 --> T23[T23 spec-lint + design-lint]
+    T23 --> T24[T24 run state: git + state.json v2]
+    T24 --> T25[T25 engine reads and writes run state v2]
+    T25 --> T26[T26 lab next]
+    T26 --> CP8{{CP-8 lab next slice + mandatory restart · blocking}}
+    CP8 --> T27[T27 classifier + structured STATUS + route modes]
+    T27 --> T28[T28 R3 OQ by the engine + INV-10 guard]
+    T28 --> T29[T29 proposals R2 R4 R5 + signed application]
+    T29 --> T30[T30 R6 + R7 targeted reset]
+    T30 --> T31[T31 OWNER implementer.md grammar + OQ]
+    T31 --> CP9{{CP-9 routes slice + restart + billed re-measure · blocking}}
+    CP9 --> T32[T32 goldfish: EX reading, masking, comparison]
+    T32 --> T33[T33 goldfish readers, isolation proof, lab goldfish]
+    T33 --> T34[T34 docs: lab next, routes, goldfish]
+    T34 --> CP10{{CP-10 live goldfish campaign · blocking}}
+    CP10 --> T35[T35 OWNER kit 0.3.0 + goldfish role]
+    T35 --> CP11{{CP-11 iteration-3 merge · blocking}}
 ```
 
 Parallelism is deliberately narrow: every task's eval gate runs the kit-wide `just evals` on the
@@ -833,6 +878,355 @@ T21 is an Owner-lane task.*
 - **reviewers:** 3
 - **reviews:** full diff vs main; `just gate-ci` green; EVAL-3 green; `just check-content work/fde-kit`; `just check-trajectory work/fde-kit`; **a `regulated` external instance run for real in the Docker sandbox** (`LAB_RUNNER=sandbox lab run <f> --project <instance>`, one trivial task) — kit mounted read-only, guardrails active; tag `v0.2.0` decision.
 - **on_reject:** `lab/engine/reject.sh CP-7 work/fde-kit "reason" [Tn …]`.
+
+## Iteration 3 — end-to-end workflow, failure routes, goldfish test (design 0.8.0, ADR-17..24)
+
+*Planned 2026-11-14 (session, planner role) from spec 0.9.0 and design 0.8.0, both validated.
+Self-hosting: T25 changes how the engine stores its state (it still reads the old flat
+`state.json`), T27/T28 change the implementer prompt, the `STATUS:` grammar and the commit guard of
+the engine that runs this plan — CP-8 and CP-9 restart the engine. Parallelism: none — every task
+adds kit evals to the shared tree and several touch `orchestrate.py` (see the note under the graph).
+Owner lanes: T31 (`lab/plugin/agents/`, protected) and T35 (plugin manifest, protected).*
+
+### T23 — spec-lint and design-lint: two recipes, one exit gate per phase
+- **agent:** implementer
+- **depends_on:** [CP-7]
+- **parallel_group:** O
+- **implements:** [BHV-4, EVAL-4]
+- **anchored_on:** ADR-19, I-29, I-30, I-26
+- **files_touched:** `lab/engine/speclint.py`, `lab/engine/designlint.py`, `lab/engine/cli.py`, `justfile`, `tests/fde_kit/test_eval_4_lints.py`
+- **prompt:**
+  > Per spec BHV-4 (exit gates of the spec and design phases) and design ADR-19. Two separate
+  > modules, each a pure function plus a CLI (rc 0/1, one line per finding): `speclint.lint(text)`
+  > — IDs unique; every BHV and INV covered by at least one EVAL (the *Covers* column of §7);
+  > 0 open OQ (an OQ is closed when its line says « résolue »); frontmatter `status: validated`;
+  > `designlint.lint(text)` — every ADR whose status is not `superseded` has an `Anchored on:` line
+  > citing at least one I-n or E-n defined in §2, OR declares « sans référence — ADR délibéré ».
+  > Reuse `content_guard.extract_content` (ID extraction) and the frontmatter reader of
+  > `plan.parse_tasks_md` — do not copy them. Wire `lab spec-lint <feature>` / `lab design-lint
+  > <feature>` in `cli.py` and `spec-lint` / `design-lint` recipes in the justfile. Tests BEFORE code,
+  > `@pytest.mark.eval`, `test_eval_4_<case>`: one passing and one failing fixture per rule (fixture
+  > texts inline in the test). Do NOT change any existing spec or design to make a lint pass: report
+  > the findings on the repo's own features in your final answer (CP-8 reviews them).
+  > Check with `uv run pytest`; the orchestrator runs `verify`.
+- **done_when:** each spec-lint and design-lint rule has a passing and a failing case; `lab spec-lint` / `lab design-lint` and the just recipes exist; findings on the repo's features listed in the reply
+- **verify:** `uv run pytest -q -m eval tests/fde_kit/test_eval_4_lints.py`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### T24 — Run state: git for done tasks, `state.json` v2 for the rest
+- **agent:** implementer
+- **depends_on:** [T23]
+- **parallel_group:** P
+- **implements:** [BHV-4, INV-4, EVAL-4]
+- **anchored_on:** ADR-18, I-27, I-28
+- **files_touched:** `lab/engine/runstate.py`, `tests/fde_kit/test_eval_4_runstate.py`
+- **prompt:**
+  > Per spec BHV-4 (0.9.0: git history names the delivered tasks) and design ADR-18 + §5. New module
+  > `lab/engine/runstate.py`, pure except for one git read: `load(feature, project) -> RunState`
+  > and `save(path, state)`, atomic with the same tempfile + `os.replace` pattern as
+  > `orchestrate.atomic_write_json` (`orchestrate.py:221`) — do NOT import orchestrate: T25 makes
+  > orchestrate import this module. Format (§5): `{"schema_version": 2,
+  > "tasks": {...}, "reopened": [...], "rejections": {"CP-n": k}, "routes": {"Tn": {"Rn": k}}}`. A
+  > file without `schema_version` is the old flat `{id: status}` read as `tasks`; unreadable ⇒ git
+  > alone (not "everything pending"). A task is `done` if `planlint.committed_task_ids` has it and it
+  > is not in `reopened`, or if `tasks` says `done`. Checkpoints have no commit: their status comes
+  > from `tasks` only. Tests BEFORE code, `@pytest.mark.eval`, `test_eval_4_<case>`, on a temp git
+  > repo: old format read; v2 round-trip; truncated file ⇒ git fallback; committed + reopened ⇒ not
+  > done; counters preserved. Do not touch orchestrate.py (T25 wires it).
+  > Check with `uv run pytest`; the orchestrator runs `verify`.
+- **done_when:** `runstate.load`/`save` implement ADR-18 and §5; old format and truncated file handled; tests green
+- **verify:** `uv run pytest -q -m eval tests/fde_kit/test_eval_4_runstate.py`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### T25 — The engine reads and writes run state v2; counters survive a restart
+- **agent:** implementer
+- **depends_on:** [T24]
+- **parallel_group:** Q
+- **implements:** [BHV-5a, INV-4, EVAL-5]
+- **anchored_on:** ADR-18, ADR-21, I-27, I-35
+- **files_touched:** `lab/engine/orchestrate.py`, `tests/fde_kit/test_eval_5_state_resume.py`
+- **prompt:**
+  > Per spec INV-4, BHV-5a and design ADR-18 (Owner decisions 1 and 4). In `orchestrate.py`, replace
+  > the inline `state.json` read/write (resume block and `save()`) by `runstate.load`/`save`
+  > (T24). The CP rejection counter (`rejections`, today in memory) is read from and written to the
+  > run state, so `max_cp_rejects` survives an engine restart; a lost environment resets it, and the
+  > engine says so in one line at start. Nothing else changes in this task (no routes yet). Tests
+  > BEFORE code with the shim sandbox, `@pytest.mark.eval`, `test_eval_5_<case>`: a CP rejected
+  > once, engine restarted, rejected again up to the budget ⇒ the CP fails exactly at
+  > `max_cp_rejects + 1` across restarts; a done task with a commit stays done when `state.json` is
+  > deleted; an old flat `state.json` resumes.
+  > Check with `uv run pytest`; the orchestrator runs `verify`.
+- **done_when:** engine uses run state v2; rejection counter persists across restarts; resume from git when state.json is gone
+- **verify:** `uv run pytest -q tests/orchestrator tests/fde_kit tests/sdlc_rework`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### T26 — `lab next`: deduce the phase, run its exit gate, say who decides
+- **agent:** implementer
+- **depends_on:** [T25]
+- **parallel_group:** R
+- **implements:** [BHV-4, EVAL-4]
+- **anchored_on:** ADR-17, I-26, I-29, I-31, I-32
+- **files_touched:** `lab/engine/next_step.py`, `lab/engine/cli.py`, `tests/fde_kit/test_eval_4_next.py`, `tests/fde_kit/fixtures/next/`
+- **prompt:**
+  > Per spec BHV-4 and design ADR-17. `lab next <feature> [--project p]` (`next_step.py` + `cli.py`):
+  > read the `status:` of `spec.md`, `design.md`, `tasks.md` and the run state (T24); the current
+  > phase is the first whose exit gate is not green — spec (spec-lint, T23), design (design-lint +
+  > `validated`), plan (`planlint.validate` with the effective policy + `approved`), build (all tasks
+  > done), review (checkpoints signed), merge (always the Owner, INV-5). Output: phase, gate result,
+  > who decides, what, and the exact command. When the next step is an agent step it delegates to
+  > `lab run` (never a second engine). Per OQ-13's default, at the spec phase it DISPLAYS
+  > `lab goldfish <feature>` and never launches a billed call itself. It writes nothing when it
+  > launches nothing (idempotent). Tests BEFORE code, `@pytest.mark.eval`, `test_eval_4_<case>`:
+  > 6 fixture triplets under `tests/fde_kit/fixtures/next/` (one per phase) ⇒ right phase and right
+  > action; two calls ⇒ identical output and no file written (EVAL-4). Launching `lab run` is checked
+  > with the existing `claude` shim, no real agent.
+  > Check with `uv run pytest`; the orchestrator runs `verify`.
+- **done_when:** EVAL-4: the 6 fixtures give the right phase and action; idempotent; no billed call
+- **verify:** `uv run pytest -q -m eval tests/fde_kit/test_eval_4_next.py`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### CP-8 — CHECKPOINT: `lab next` slice + mandatory engine restart
+- **trigger:** automatic when [T23, T24, T25, T26] are done
+- **validator:** Owner
+- **mode:** blocking — *first slice of iteration 3, and the lint findings on the repo's own specs and designs are Owner decisions (fixing them is an amendment, never a relaxed rule).*
+- **reviews:** `lab next` on fde-kit, lab-fixes and the two examples (phase, decider, command); `lab spec-lint` / `lab design-lint` on every feature — expected findings include the open OQ-12 of the fde-kit spec and ADR-8's « sans référence — délibéré » wording, to be settled by the Owner; a restart with a rejected CP keeps its counter; `just gate-ci` green; EVAL-4 modules.
+- **self_hosting:** MANDATORY — stop the orchestrator and restart it before approving: T27 must run on the engine that persists its counters (T25).
+- **on_reject:** `lab/engine/reject.sh CP-8 work/fde-kit "reason" [Tn …]`.
+
+### T27 — One classifier, structured `STATUS:`, route modes applied
+- **agent:** implementer
+- **depends_on:** [CP-8]
+- **parallel_group:** S
+- **implements:** [BHV-5, BHV-5c, INV-3, EVAL-5]
+- **anchored_on:** ADR-20, I-33, I-34, I-39, E-18
+- **files_touched:** `lab/engine/routes.py`, `lab/engine/orchestrate.py`, `lab/engine/policy.py`, `evals/behavioral/cases.py`, `tests/fde_kit/test_eval_5_classify.py`, `tests/fde_kit/test_eval_3_policy.py`
+- **prompt:**
+  > Per spec BHV-5, BHV-5c and design ADR-20 (Owner decision 2). (1) `lab/engine/routes.py`:
+  > `classify(signal) -> (route, detail)`, a pure function and the ONLY place that picks a route,
+  > with the exact ADR-20 table (R1..R7, and `human` for a `STATUS: blocked` without a recognized
+  > category). Grammar: `STATUS: done` | `STATUS: blocked — <OQ|ADR|scope>: <reason>`. (2) In
+  > `orchestrate.py`, the implementer prompt states that grammar; the scope-leak message becomes
+  > `STATUS: blocked — scope: files_touched gap: <files>`; the blocked branch goes through
+  > `classify` and journals the route. Route modes come from the effective policy
+  > (`[overrides.routes]`), now APPLIED: remove the "applied from iteration 3" note in `policy.py`
+  > and update the test of `test_eval_3_policy.py` that asserts it (say so in your reply — it is a
+  > changed assertion, not a weakened one). In this task R3, R4, R5 still end the task `blocked`
+  > with the classified route in the notification (T28/T29 add the proposals). (3) `evals/
+  > behavioral/cases.py`: `is_blocked` and the checkers that read `STATUS:` accept the new grammar
+  > (the measuring instrument changes: CP-9 re-measures). Tests BEFORE code, `@pytest.mark.eval`,
+  > `test_eval_5_<case>`: every row of the ADR-20 table; an uncategorized `blocked` ⇒ `human`, never
+  > `auto`; a route override changes the applied mode.
+  > Check with `uv run pytest`; the orchestrator runs `verify`.
+- **done_when:** classify implements the ADR-20 table; engine prompt and scope-leak message use the grammar; route modes applied; behavioral cases accept the grammar
+- **verify:** `uv run pytest -q tests/orchestrator tests/fde_kit tests/sdlc_rework`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### T28 — R3: the engine writes the OQ; INV-10 checked before every commit
+- **agent:** implementer
+- **depends_on:** [T27]
+- **parallel_group:** T
+- **implements:** [BHV-5, INV-3, INV-10, EVAL-5, EVAL-9]
+- **anchored_on:** ADR-22, I-36, I-38, I-42
+- **files_touched:** `lab/engine/orchestrate.py`, `tests/fde_kit/test_eval_5_r3.py`, `tests/fde_kit/test_eval_9_inv10.py`
+- **prompt:**
+  > Per spec BHV-5 (R3), INV-3, INV-10, EX-3 and design ADR-22 (Owner decision 3). (1) The
+  > implementer prompt in `orchestrate.py` no longer says to record the OQ in spec.md §8: the agent
+  > states the question in its reply and ends with `STATUS: blocked — OQ: <question>`. (2) On R3 the
+  > ENGINE writes `.runs/<Tn>-OQ.md` (question, task, impacted tasks and checkpoints) and notifies
+  > exactly as EX-3 (`<Tn> blocked on an open question — Owner amendment expected; impacted: [...]`).
+  > (3) Before `scoped_commit`, compare `spec.md` and `design.md` of the feature to HEAD: any change ⇒
+  > the task fails, nothing is committed. Tests BEFORE code with the shim sandbox,
+  > `@pytest.mark.eval`: `test_eval_5_<case>` reproduces EX-3 (state, file created by the engine,
+  > `spec.md` byte-identical, notification); `test_eval_9_<case>`: a shim agent that edits `spec.md`
+  > or `design.md` ⇒ task failed, no commit; the commit never stages them (EVAL-9).
+  > Check with `uv run pytest`; the orchestrator runs `verify`.
+- **done_when:** EX-3 reproduced; EVAL-9 green; the prompt no longer points agents at spec.md
+- **verify:** `uv run pytest -q tests/orchestrator tests/fde_kit tests/sdlc_rework`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### T29 — R2, R4, R5: proposals written by the engine, applied after a signed decision
+- **agent:** implementer
+- **depends_on:** [T28]
+- **parallel_group:** U
+- **implements:** [BHV-5, BHV-5a, BHV-5b, INV-3, INV-4, EVAL-5]
+- **anchored_on:** ADR-21, I-36, I-37, I-40, E-18
+- **files_touched:** `lab/engine/proposals.py`, `lab/engine/orchestrate.py`, `tests/fde_kit/test_eval_5_proposals.py`
+- **prompt:**
+  > Per spec BHV-5 (R2, R4, R5), BHV-5a, BHV-5b, INV-3, INV-4, EX-2 and design ADR-21.
+  > `proposals.py`: write `.runs/<Tn>-<Rn>-<subject>.md` (trigger, agent reply excerpt, proposal,
+  > decision command `approve.sh <Tn>-<Rn> <feature>` / `reject.sh …`); for R2/R5 the proposal is a
+  > `tasks.md` diff limited to not-started nodes; for R4 it states that design-scout is to be run
+  > (no agent launched in this task). In `orchestrate.py`: R2 on the last failed attempt, R4/R5 on
+  > the classified `blocked`; the task goes `failed`/`blocked`, dependents `skipped`, other branches
+  > continue; route budgets (R2, R4, R5 = 1) consumed in the run state (T24), exhausted ⇒ human
+  > escalation. At start, an APPROVED proposal (signed token, `approvals.verify`) is applied by the
+  > engine to `tasks.md`, plan-lint re-validates the amended graph, and the run resumes without
+  > replaying done tasks outside the delta; a rejected one is archived. No human artefact is changed
+  > before the signature, whatever the profile. Tests BEFORE code with the shim sandbox,
+  > `@pytest.mark.eval`, `test_eval_5_<case>`: EX-2 exactly (solo profile, `tasks.md` unchanged,
+  > awaiting signed approval, other branches continue); approved delta applied and resumed; budget
+  > exhausted ⇒ human.
+  > Check with `uv run pytest`; the orchestrator runs `verify`.
+- **done_when:** EX-2 reproduced; signed proposals applied by the engine and resumed (BHV-5b); budgets enforced
+- **verify:** `uv run pytest -q tests/orchestrator tests/fde_kit tests/sdlc_rework`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### T30 — R6 rework on an auto CP, R7 targeted reset of the dependents
+- **agent:** implementer
+- **depends_on:** [T29]
+- **parallel_group:** V
+- **implements:** [BHV-5, BHV-6, BHV-6a, BHV-6b, EVAL-5, EVAL-6]
+- **anchored_on:** ADR-21, ADR-23, I-35, I-41, E-19
+- **files_touched:** `lab/engine/plan.py`, `lab/engine/orchestrate.py`, `tests/fde_kit/test_eval_6_reset.py`, `tests/fde_kit/test_eval_5_r6.py`
+- **prompt:**
+  > Per spec BHV-5 (R6, R7), BHV-6 (+6a, 6b), EX-7 and design ADR-21 / ADR-23. (1) `plan.py`:
+  > `targeted_reset(reopened, nodes) -> (reset_ids, untouched_ids)` — among the transitive `done`
+  > dependents (not checkpoints) of a reopened task, those whose `files_touched` overlap
+  > (`paths_overlap`) OR that share an `implements` ID go back to `pending` with the rework note
+  > « amont <Tn> modifié »; the others stay `done`. (2) `orchestrate.py`: R7 (signed rejection) calls
+  > it; the notification lists « <Tn> non relancé : aucun recoupement »; reopened tasks are recorded
+  > in the run state so they win over git. R6: an aggregated `BLOCK` on a `mode: auto` CP injects the
+  > panel report as rework of the CP's tasks once, then falls back to human. Tests BEFORE code,
+  > `@pytest.mark.eval`: `test_eval_6_<case>` — EX-7 exactly on the graph alone; the next CP's global
+  > eval runs (BHV-6b); `test_eval_5_<case>` — R6 once, then human.
+  > Check with `uv run pytest`; the orchestrator runs `verify`.
+- **done_when:** EX-7 reproduced; R6 budget 1 then human; next CP's global eval runs
+- **verify:** `uv run pytest -q tests/orchestrator tests/fde_kit tests/sdlc_rework`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### T31 — Owner lane: `implementer.md` speaks the new grammar and no longer writes OQs in the spec
+- **agent:** owner
+- **depends_on:** [T30]
+- **parallel_group:** W
+- **implements:** [INV-10]
+- **anchored_on:** ADR-20, ADR-22, I-38
+- **files_touched:** `lab/plugin/agents/implementer.md`
+- **prompt:**
+  > *Owner lane: `lab/plugin/agents/` is a protected path.* Per ADR-20 / ADR-22 (Owner decision 3):
+  > in `implementer.md` rule 7, the structured verdict becomes `STATUS: done` |
+  > `STATUS: blocked — <OQ|ADR|scope>: <reason>`, and "ambiguous spec → OQ-n noted in spec.md §8"
+  > becomes "ambiguous spec → state the question in your reply and end with `STATUS: blocked — OQ:
+  > <question>`; never edit spec.md or design.md". Bump the agent version and changelog per
+  > `lab/models/EVOLUTION.md` (the behavioral re-measure happens at CP-9). Commit by hand
+  > (`Run: owner`), then `lab/engine/approve.sh T31 work/fde-kit`.
+- **done_when:** `implementer.md` states the ADR-20 grammar and the ADR-22 OQ rule; version bumped
+- **verify:** `grep -q "never edit spec.md or design.md" lab/plugin/agents/implementer.md`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### CP-9 — CHECKPOINT: routes slice + mandatory restart + billed re-measure
+- **trigger:** automatic when [T27, T28, T29, T30, T31] are done
+- **validator:** Owner
+- **mode:** blocking — *the implementer prompt, its agent file and the behavioral cases changed: the measuring instrument is re-run live (billed), and the engine must restart to use the new classifier.*
+- **reviews:** EX-2, EX-3, EX-7 by hand on a temp instance (shim); `lab policy` no longer says "applied from iteration 3"; `.runs/` proposal and OQ files are tracked, `spec.md` untouched; **billed behavioral + chain re-measure** of the implementer role (`just eval-models behavioral 1 <models>`, smoke first, the Owner's OK before the full run); `just gate-ci` green.
+- **self_hosting:** MANDATORY — stop the orchestrator and restart it before approving: T32 must run on the engine with the classifier, R3 and the INV-10 guard.
+- **on_reject:** `lab/engine/reject.sh CP-9 work/fde-kit "reason" [Tn …]`.
+
+### T32 — Goldfish, pure part: read the EX, mask them, compare
+- **agent:** implementer
+- **depends_on:** [CP-9]
+- **parallel_group:** X
+- **implements:** [BHV-8, BHV-8a, BHV-8d, EVAL-10]
+- **anchored_on:** ADR-24, I-45, E-21
+- **files_touched:** `pyproject.toml`, `uv.lock`, `lab/engine/goldfish.py`, `tests/fde_kit/test_eval_10_compare.py`
+- **prompt:**
+  > Per spec BHV-8, BHV-8a, BHV-8d, EX-8 and design ADR-24 + §3. Add PyYAML as the package's only
+  > runtime dependency (`uv add pyyaml`, lock updated). `lab/engine/goldfish.py`, pure functions:
+  > `read_examples(spec_text)` — the ```yaml blocks under `### EX-n`, read with `yaml.safe_load_all`;
+  > a document whose `input` contains `same` takes the previous document's input overridden by its
+  > other keys, unresolvable ⇒ non testable; `mask(spec_text)` — every `expected_output` replaced by
+  > a neutral marker, and a check that refuses the copy if an expected value is still present;
+  > `compare(expected, predicted)` — mapping field by field, scalar alone, after normalization
+  > (case, spaces, numeric types: `37.2` = `37.20`), anything else « non testable »; `score` and
+  > `signal` (ambiguity / fragile / anomaly / clear) per EX. Tests BEFORE code, `@pytest.mark.eval`,
+  > `test_eval_10_<case>`: EX-8's first case exactly (two scores 0.33 / 0.67, signals, ambiguities,
+  > fragile, untestable EX-3); the masked copy holds no expected value; a spec with no testable EX
+  > ⇒ « 0 exemple testable » (BHV-8d). No agent call in this task.
+  > Check with `uv run pytest`; the orchestrator runs `verify`.
+- **done_when:** PyYAML locked; EX-8 scoring reproduced by pure functions; masking proven; BHV-8d handled
+- **verify:** `uv run pytest -q -m eval tests/fde_kit/test_eval_10_compare.py`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### T33 — Goldfish readers: isolation proof, threshold, `lab goldfish`
+- **agent:** implementer
+- **depends_on:** [T32]
+- **parallel_group:** Y
+- **implements:** [BHV-8, BHV-8b, BHV-8c, BHV-8e, INV-12, EVAL-10]
+- **anchored_on:** ADR-24, ADR-2, I-1, I-43, I-44, E-20
+- **files_touched:** `lab/engine/runner.py`, `lab/engine/goldfish.py`, `lab/engine/cli.py`, `lab/models/registry.toml`, `tests/fde_kit/test_eval_10_goldfish.py`
+- **prompt:**
+  > Per spec BHV-8 (+8b, 8c, 8e), INV-12 (0.9.0) and design ADR-24. (1) `runner.claude_argv` gains
+  > `safe_mode` and `tools`, `None` by default (every other argv unchanged — keep the existing argv
+  > tests green). (2) `goldfish.py`: each reader runs in its own `tempfile.mkdtemp` OUTSIDE any git
+  > repo, holding only the masked copy, via `claude_argv` without the kit options, plus
+  > `--safe-mode` and `--tools ""`, the masked spec in the prompt; before each call, `git rev-parse
+  > --is-inside-work-tree` must fail in that directory. Markers drawn per test: a decoy plugin
+  > (`--plugin-dir`) whose `SessionStart` hook prints the hard-rules marker, and a `CLAUDE.md` with the
+  > `CLAUDE.md` marker in the reader directory's parent. Any marker in a reply, or a directory inside
+  > a repo ⇒ rc 1, test invalid, no score. Readers: role `goldfish` (small) and `implementer`; same
+  > model or role absent ⇒ one call and « lecteurs confondus — signal fragile indisponible ».
+  > Threshold: `goldfish_min_score` declared and not reached by the implementer reader ⇒ rc 1; the
+  > small reader never blocks. `lab goldfish` refuses (rc 1) a `claude` CLI older than 2.1.323.
+  > (3) `lab/models/registry.toml`: Haiku 5.5 gains `goldfish` in its `roles` list (eligibility
+  > only — NOT in `[roles]`; T35 assigns after CP-10). (4) `lab goldfish <feature> [--project p]` in
+  > `cli.py`, read-only, report as BHV-8. Tests BEFORE code with the `claude` shim (no real call),
+  > `@pytest.mark.eval`, `test_eval_10_<case>`: EX-8's four inputs exactly; argv carries
+  > `--safe-mode`, `--tools ""`, no `--plugin-dir` of the kit, no `--append-system-prompt`; a reader
+  > directory inside a repo ⇒ rc 1 without score.
+  > Check with `uv run pytest`; the orchestrator runs `verify`.
+- **done_when:** EVAL-10 green (EX-8 four cases, isolation proof, threshold, merged readers); argv of every other call unchanged
+- **verify:** `uv run pytest -q tests/orchestrator tests/fde_kit tests/sdlc_rework`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### T34 — Docs: `lab next`, failure routes, goldfish test
+- **agent:** implementer
+- **depends_on:** [T33]
+- **parallel_group:** Z
+- **implements:** [BHV-4, BHV-5, BHV-8]
+- **anchored_on:** ADR-17, ADR-20, ADR-21, ADR-24
+- **files_touched:** `docs/reference/cli.md`, `docs/reference/failure-routes.md`, `docs/how-to/run-the-goldfish-test.md`, `docs/reference/policy-profiles.md`, `docs/README.md`
+- **prompt:**
+  > Per spec BHV-4, BHV-5, BHV-8 and design ADR-17..24, `diataxis` structure: `lab next`,
+  > `lab spec-lint`, `lab design-lint`, `lab goldfish` in `docs/reference/cli.md`; a reference page
+  > `docs/reference/failure-routes.md` (the R1..R7 table, the `STATUS:` grammar, where proposals and
+  > OQs are written, how to sign them); a how-to `docs/how-to/run-the-goldfish-test.md` (what it
+  > measures, isolation proof, cost: two billed calls, reading the report); in
+  > `docs/reference/policy-profiles.md` remove "applied from iteration 3" for routes; link the new
+  > pages from `docs/README.md`. No brand names. No code changes.
+- **done_when:** pages exist and are linked; doc-pointer test and brand guard green
+- **verify:** `uv run pytest -q tests/fde_kit/test_doc_pointers.py`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### CP-10 — CHECKPOINT: live goldfish campaign (human-run, billed)
+- **trigger:** automatic when [T32, T33, T34] are done
+- **validator:** Owner
+- **mode:** blocking — *billed live calls, and a model-role decision (Owner decision 6, OQ-14).*
+- **reviews:** smoke first: `lab goldfish` on ONE validated spec (two billed calls), isolation proven for both readers; with the Owner's OK, the other validated specs; the Owner decides on that report whether Haiku 5.5 takes the `goldfish` role in `[roles]`; `just gate-ci` green.
+- **on_reject:** `lab/engine/reject.sh CP-10 work/fde-kit "reason" [Tn …]`.
+
+### T35 — Owner lane: kit version 0.3.0, examples re-pinned, `goldfish` role per CP-10
+- **agent:** owner
+- **depends_on:** [CP-10]
+- **parallel_group:** AA
+- **implements:** [INV-7]
+- **anchored_on:** ADR-1, ADR-9, ADR-24, I-19
+- **files_touched:** `pyproject.toml`, `uv.lock`, `lab/plugin/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.lab/lab.toml`, `examples/devis/.lab/lab.toml`, `examples/booking/.lab/lab.toml`, `lab/models/registry.toml`
+- **prompt:**
+  > *Owner lane: the plugin manifest is a protected path.* Bump the kit to `0.3.0` everywhere the
+  > version lives (pyproject, plugin.json, marketplace entry; `uv lock`) and re-pin
+  > `kit_version = "0.3.0"` in the kit's and both examples' `.lab/lab.toml` (INV-7). If CP-10
+  > decided so, set `goldfish = "claude-haiku-5-5"` in `[roles]` with a comment citing the CP-10
+  > report. Commit by hand (`Run: owner`), then `lab/engine/approve.sh T35 work/fde-kit`.
+- **done_when:** one version everywhere (I-19 test green); every `.lab/lab.toml` pins 0.3.0; `[roles]` matches the CP-10 decision
+- **verify:** `uv run pytest -q tests/sdlc_rework/test_lockfile.py tests/fde_kit/test_eval_8_examples.py tests/fde_kit/test_kit_lab_toml.py`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### CP-11 — CHECKPOINT: iteration-3 merge (human, final)
+- **trigger:** automatic when [T23, T24, T25, T26, T27, T28, T29, T30, T31, T32, T33, T34, T35] are done
+- **validator:** Owner (PR review)
+- **mode:** blocking — *the merge is always human (INV-5).*
+- **reviewers:** 3
+- **reviews:** full diff vs main; `just gate-ci` green; EVAL-4, 5, 6, 9, 10 green; `just check-content work/fde-kit`; `just check-trajectory work/fde-kit`; `lab next` on every feature; tag `v0.3.0` decision.
+- **on_reject:** `lab/engine/reject.sh CP-11 work/fde-kit "reason" [Tn …]`.
 
 ## Trigger table — who triggers what
 
