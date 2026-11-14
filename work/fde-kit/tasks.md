@@ -2,9 +2,9 @@
 type: tasks
 feature: fde-kit
 version: 0.3.0
-status: proposed         # proposed | approved | in_progress | done
+status: approved         # proposed | approved | in_progress | done
 generated_by: planner (session 2026-11-12) ; itération 3 : planner (session 2026-11-14)
-approved_by: Owner — 2026-11-12 (QCM en session ; CP-1..CP-5 bloquants ; exécution dans la session cloud, checkpoints signés sur instruction de l'Owner ; delta 2026-11-12 approuvé (« Amender le plan ») : prompts T7 et T9 — `verify` exécuté par l'orchestrateur, l'agent vérifie avec `uv run pytest -m eval`, sans lancer `just` ; delta CP-3 (rejet → T9) : `tests/fde_kit/test_kit_root.py` ajouté aux files_touched de T9 — il asserte le `pythonpath` transitoire que T9 retire ; delta T11 bloqué : T11 scindé — T15 (agent: owner, chemins protégés) puis T11 (moteur + tests, + lab_init.py et test_eval_2_run_preflight.py)) ; itération 2 (T16–T22, CP-6, CP-7) approuvée par l'Owner le 2026-11-12 — tous les checkpoints signés par l'Owner lui-même ; delta CP-6 (rejet → T16, approuvé par l'Owner) : spec 0.7.0 BHV-3d + égal-au-plancher accepté ; delta CP-7 (rejet → T18 + T16, décidé par l'Owner) : garde INV-5 à l'exécution, budget fini (spec 0.8.0) ; itération 3 (T23–T35, CP-8..CP-11) **proposée le 2026-11-14, en attente d'approbation de l'Owner** (modes des CP, OQ-13 et OQ-14)
+approved_by: Owner — 2026-11-12 (QCM en session ; CP-1..CP-5 bloquants ; exécution dans la session cloud, checkpoints signés sur instruction de l'Owner ; delta 2026-11-12 approuvé (« Amender le plan ») : prompts T7 et T9 — `verify` exécuté par l'orchestrateur, l'agent vérifie avec `uv run pytest -m eval`, sans lancer `just` ; delta CP-3 (rejet → T9) : `tests/fde_kit/test_kit_root.py` ajouté aux files_touched de T9 — il asserte le `pythonpath` transitoire que T9 retire ; delta T11 bloqué : T11 scindé — T15 (agent: owner, chemins protégés) puis T11 (moteur + tests, + lab_init.py et test_eval_2_run_preflight.py)) ; itération 2 (T16–T22, CP-6, CP-7) approuvée par l'Owner le 2026-11-12 — tous les checkpoints signés par l'Owner lui-même ; delta CP-6 (rejet → T16, approuvé par l'Owner) : spec 0.7.0 BHV-3d + égal-au-plancher accepté ; delta CP-7 (rejet → T18 + T16, décidé par l'Owner) : garde INV-5 à l'exécution, budget fini (spec 0.8.0) ; itération 3 (T23–T35, CP-8..CP-11) approuvée par l'Owner le 2026-11-14 (QCM en session : plan tel que proposé, checkpoints tous bloquants ; OQ-13 = `lab next` lance le test goldfish, câblé en T33 ; OQ-14 = campagne `lab goldfish` réelle au CP-10)
 spec: ./spec.md          # version : 0.9.0
 design: ./design.md      # version : 0.8.0
 ---
@@ -144,16 +144,19 @@ ADRs: ADR-13 T16 · ADR-14 T18/T19 · ADR-15 T20 · ADR-16 T17/T18.
 ADRs: ADR-17 T26 · ADR-18 T24/T25 · ADR-19 T23 · ADR-20 T27/T31 · ADR-21 T29/T30 · ADR-22 T28/T31 ·
 ADR-23 T30 · ADR-24 T32/T33 + CP-10.
 
-## Plan-level open questions (iteration 3) — to answer at approval
+## Plan-level open questions (iteration 3) — resolved by the Owner at approval (2026-11-14)
 
 - **OQ-13** — At the spec phase, does `lab next` launch the billed goldfish test itself, or only
   display `lab goldfish <feature>` as the next action? ADR-17 lists `lab goldfish` as the spec gate's
-  application point without saying who triggers it. *Planner's default:* display only — `lab next`
-  never spends money on its own (T26 is written that way; changing it is a one-line plan delta).
+  application point without saying who triggers it. *Planner's default was* display only.
+  → *(resolved 2026-11-14, Owner: **launch it** — at the spec phase `lab next` runs the goldfish
+  test, two billed calls. `lab goldfish` exists only after T33, so T26 displays it and T33 wires
+  the launch into `lab next`.)*
 - **OQ-14** — Owner decision 6 asks for a billed campaign before Haiku 5.5 gets the `goldfish` role
   in `[roles]`; design 0.8.0 does not define its cases. *Planner's default:* CP-10 runs the real
   `lab goldfish` on validated specs — smoke on one spec first, then the others with the Owner's
   OK — and the Owner decides the assignment on that report; T35 applies it.
+  → *(resolved 2026-11-14, Owner: the default — live `lab goldfish` at CP-10.)*
 
 ## Execution graph
 
@@ -978,7 +981,9 @@ Owner lanes: T31 (`lab/plugin/agents/`, protected) and T35 (plugin manifest, pro
   > `lab goldfish <feature>` and never launches a billed call itself. It writes nothing when it
   > launches nothing (idempotent). Tests BEFORE code, `@pytest.mark.eval`, `test_eval_4_<case>`:
   > 6 fixture triplets under `tests/fde_kit/fixtures/next/` (one per phase) ⇒ right phase and right
-  > action; two calls ⇒ identical output and no file written (EVAL-4). Launching `lab run` is checked
+  > action; two calls ⇒ identical output and no file written (EVAL-4). *(OQ-13 resolved: the Owner
+  > wants `lab next` to LAUNCH the goldfish test at the spec phase; `lab goldfish` arrives in T33,
+  > which wires it — here, display it.)* Launching `lab run` is checked
   > with the existing `claude` shim, no real agent.
   > Check with `uv run pytest`; the orchestrator runs `verify`.
 - **done_when:** EVAL-4: the 6 fixtures give the right phase and action; idempotent; no billed call
@@ -1150,9 +1155,9 @@ Owner lanes: T31 (`lab/plugin/agents/`, protected) and T35 (plugin manifest, pro
 - **agent:** implementer
 - **depends_on:** [T32]
 - **parallel_group:** Y
-- **implements:** [BHV-8, BHV-8b, BHV-8c, BHV-8e, INV-12, EVAL-10]
-- **anchored_on:** ADR-24, ADR-2, I-1, I-43, I-44, E-20
-- **files_touched:** `lab/engine/runner.py`, `lab/engine/goldfish.py`, `lab/engine/cli.py`, `lab/models/registry.toml`, `tests/fde_kit/test_eval_10_goldfish.py`
+- **implements:** [BHV-4, BHV-8, BHV-8b, BHV-8c, BHV-8e, INV-12, EVAL-4, EVAL-10]
+- **anchored_on:** ADR-24, ADR-17, ADR-2, I-1, I-43, I-44, E-20
+- **files_touched:** `lab/engine/runner.py`, `lab/engine/goldfish.py`, `lab/engine/cli.py`, `lab/models/registry.toml`, `lab/engine/next_step.py`, `tests/fde_kit/test_eval_10_goldfish.py`, `tests/fde_kit/test_eval_4_next.py`
 - **prompt:**
   > Per spec BHV-8 (+8b, 8c, 8e), INV-12 (0.9.0) and design ADR-24. (1) `runner.claude_argv` gains
   > `safe_mode` and `tools`, `None` by default (every other argv unchanged — keep the existing argv
@@ -1168,7 +1173,10 @@ Owner lanes: T31 (`lab/plugin/agents/`, protected) and T35 (plugin manifest, pro
   > small reader never blocks. `lab goldfish` refuses (rc 1) a `claude` CLI older than 2.1.323.
   > (3) `lab/models/registry.toml`: Haiku 5.5 gains `goldfish` in its `roles` list (eligibility
   > only — NOT in `[roles]`; T35 assigns after CP-10). (4) `lab goldfish <feature> [--project p]` in
-  > `cli.py`, read-only, report as BHV-8. Tests BEFORE code with the `claude` shim (no real call),
+  > `cli.py`, read-only, report as BHV-8. (5) OQ-13 (Owner): at the spec phase, once spec-lint is
+  > green, `lab next` (`next_step.py`, T26) LAUNCHES the goldfish test and folds its rc into the spec
+  > gate (blocking only when `goldfish_min_score` is declared, BHV-8c); add the case to
+  > `test_eval_4_next.py` with the shim. Tests BEFORE code with the `claude` shim (no real call),
   > `@pytest.mark.eval`, `test_eval_10_<case>`: EX-8's four inputs exactly; argv carries
   > `--safe-mode`, `--tools ""`, no `--plugin-dir` of the kit, no `--append-system-prompt`; a reader
   > directory inside a repo ⇒ rc 1 without score.
