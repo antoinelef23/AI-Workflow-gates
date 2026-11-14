@@ -1,18 +1,18 @@
 ---
 type: design
 feature: fde-kit
-version: 0.7.1
-status: draft            # draft | validated | superseded
+version: 0.8.0
+status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by: FDE — 2026-11-12 (validé en session par QCM ; plugin sous lab/plugin/ confirmé) ; amendement 0.3.0 (OQ-9..11 du planner) approuvé le 2026-11-12 ; amendement 0.4.0 (spike promptfoo) approuvé le 2026-11-12 ; amendement 0.5.0 (itération 2 : profils, sandbox d'instance, kit-instance — 3 décisions Owner par QCM) approuvé le 2026-11-12 ; amendement 0.6.0 (INV-5 garanti aussi à l'exécution, revue CP-7) approuvé le 2026-11-13 ; amendements 0.7.0 et 0.7.1 (itération 3) : **brouillon, en attente de validation Owner**
+validated_by: FDE — 2026-11-12 (validé en session par QCM ; plugin sous lab/plugin/ confirmé) ; amendement 0.3.0 (OQ-9..11 du planner) approuvé le 2026-11-12 ; amendement 0.4.0 (spike promptfoo) approuvé le 2026-11-12 ; amendement 0.5.0 (itération 2 : profils, sandbox d'instance, kit-instance — 3 décisions Owner par QCM) approuvé le 2026-11-12 ; amendement 0.6.0 (INV-5 garanti aussi à l'exécution, revue CP-7) approuvé le 2026-11-13 ; amendements 0.7.0 et 0.7.1 (itération 3, 9 décisions Owner par QCM) validés le 2026-11-14 (0.8.0)
 spec: ./spec.md          # version : 0.9.0
 ---
 
 # Design — Kit FDE portable
 
 > **Périmètre de cette version : itérations 1 « kit portable » (livrée, `v0.1.0`), 2 « profils
-> d'organisation » (livrée, kit 0.2.0) et 3 « workflow de bout en bout » (amendement 0.7.0,
-> brouillon)** — itération 1 : BHV-1 (+1b..1e), BHV-2 (+2a, 2b), INV-1, INV-7, INV-8, INV-9,
+> d'organisation » (livrée, kit 0.2.0) et 3 « workflow de bout en bout » (amendements 0.7.0–0.8.0,
+> validé le 2026-11-14)** — itération 1 : BHV-1 (+1b..1e), BHV-2 (+2a, 2b), INV-1, INV-7, INV-8, INV-9,
 > EVAL-1, EVAL-2, EVAL-8 ; itération 2 : BHV-3 (+3a..3c), INV-2, INV-3 (volet profils), INV-5,
 > EX-1, EVAL-3 (ADR-13..16, ADR-10 remplacé par ADR-15) ; itération 3 : BHV-4, BHV-5 (+5a..5c),
 > BHV-6 (+6a, 6b), BHV-8 (+8a..8e), INV-3 (volet routes), INV-4, INV-10, INV-12, EX-2, EX-3, EX-7,
@@ -428,7 +428,7 @@ I-26..I-45 : rapport design-scout de l'itération 3 ; lignes revérifiées sur `
 - **Anchored on:** ADR-7 (le même fichier, écrit par `lab init`), ADR-9 (exemples = instances).
 
 ### ADR-17 — `lab next` : phase déduite, un critère de sortie par phase
-- **Status:** proposed (amendement 0.7.0)
+- **Status:** accepted (amendement 0.7.0)
 - **Context:** BHV-4 ; aujourd'hui seul le plan a un critère mécanique (plan-lint) et seul le build
   a une exécution (`orchestrate.py`).
 - **Decision:** `lab next <feature> [--project p]` lit, dans l'ordre : `status:` de `spec.md`,
@@ -454,7 +454,7 @@ I-26..I-45 : rapport design-scout de l'itération 3 ; lignes revérifiées sur `
 - **Consequences:** EVAL-4 = 6 triplets fixtures, un par phase, sous `tests/fde_kit/`.
 
 ### ADR-18 — État de run : git pour les tâches `done`, `state.json` pour le reste
-- **Status:** proposed (décision Owner 1 et 4, QCM du 2026-11-14)
+- **Status:** accepted (décision Owner 1 et 4, QCM du 2026-11-14)
 - **Context:** `state.json` est gitignoré et se perd avec l'environnement (I-27, lab-fix 38) ; git
   porte déjà les tâches livrées (I-28). Le compteur de rejets vit en mémoire (I-35).
 - **Decision:** une tâche est `done` si elle a un commit au sujet canonique dans l'historique git
@@ -474,7 +474,7 @@ I-26..I-45 : rapport design-scout de l'itération 3 ; lignes revérifiées sur `
   frontmatters et de `state.json`.
 
 ### ADR-19 — spec-lint et design-lint : deux recettes, un critère par phase
-- **Status:** proposed (décision Owner 5, QCM du 2026-11-14)
+- **Status:** accepted (décision Owner 5, QCM du 2026-11-14)
 - **Decision:** deux modules séparés, `lab/engine/speclint.py` et `lab/engine/designlint.py`,
   chacun fonction pure + CLI (rc 0/1, une ligne par écart), exposés comme `lab spec-lint <feature>`
   / `lab design-lint <feature>` et recettes `just spec-lint` / `just design-lint`. Ils réutilisent
@@ -492,7 +492,7 @@ I-26..I-45 : rapport design-scout de l'itération 3 ; lignes revérifiées sur `
   est corrigé par amendement, jamais en relâchant la règle.
 
 ### ADR-20 — Un seul classifieur de signaux, catégorie `STATUS:` structurée
-- **Status:** proposed (décision Owner 2, QCM du 2026-11-14)
+- **Status:** accepted (décision Owner 2, QCM du 2026-11-14)
 - **Context:** BHV-5, BHV-5c ; la raison d'un `STATUS: blocked` est aujourd'hui du texte libre lu
   en un seul endroit (I-33).
 - **Decision:** grammaire de fin de réponse : `STATUS: done` ou
@@ -523,7 +523,7 @@ I-26..I-45 : rapport design-scout de l'itération 3 ; lignes revérifiées sur `
   dans le même lot et le changement d'instrument est re-mesuré (campagne facturée, smoke d'abord).
 
 ### ADR-21 — Propositions écrites par le moteur, appliquées après décision signée
-- **Status:** proposed (amendement 0.7.0)
+- **Status:** accepted (amendement 0.7.0)
 - **Context:** INV-3, INV-4, BHV-5a, BHV-5b ; routes R2, R4, R5.
 - **Decision:** pour R2, R4 et R5, le moteur écrit `.runs/<Tn>-<Rn>-<sujet>.md` (ex. EX-2 :
   `.runs/T4-R2-plan-delta.md`) : signal déclencheur, extrait de la réponse de l'agent, proposition
@@ -545,7 +545,7 @@ I-26..I-45 : rapport design-scout de l'itération 3 ; lignes revérifiées sur `
   plan-lint revalide le graphe amendé avant la reprise.
 
 ### ADR-22 — R3 : l'OQ passe par le moteur ; INV-10 vérifié avant chaque commit
-- **Status:** proposed (décision Owner 3, QCM du 2026-11-14 : dans l'itération 3, avec R3)
+- **Status:** accepted (décision Owner 3, QCM du 2026-11-14 : dans l'itération 3, avec R3)
 - **Context:** le prompt de l'implementer (`orchestrate.py:735`) et `implementer.md:18` font écrire
   l'OQ dans `spec.md` §8 (I-38), contre INV-10 et R3 ; cause du lab-fix 34. INV-10 n'a que sa
   moitié « commit » (I-42).
@@ -561,7 +561,7 @@ I-26..I-45 : rapport design-scout de l'itération 3 ; lignes revérifiées sur `
   intègre l'OQ par amendement versionné.
 
 ### ADR-23 — Reset ciblé : recoupement de fichiers ou d'IDs
-- **Status:** proposed (amendement 0.7.0)
+- **Status:** accepted (amendement 0.7.0)
 - **Context:** BHV-6 ; aujourd'hui R7 remet en `pending` les tâches visées, sans regarder leurs
   dépendants (I-35).
 - **Decision:** quand R7 rouvre une tâche T, le moteur parcourt ses dépendants transitifs `done`
@@ -576,7 +576,7 @@ I-26..I-45 : rapport design-scout de l'itération 3 ; lignes revérifiées sur `
 - **Consequences:** EX-7 se teste sans agent, sur le graphe seul (EVAL-6).
 
 ### ADR-24 — Test goldfish : spec masquée, deux lecteurs isolés, canaris
-- **Status:** proposed (décision Owner 6, QCM du 2026-11-14) — volet comparaison : sans référence —
+- **Status:** accepted (décision Owner 6, QCM du 2026-11-14) — volet comparaison : sans référence —
   ADR délibéré (E-21)
 - **Context:** BHV-8, BHV-8a..8e, INV-12, EX-8.
 - **Decision:** `lab goldfish <feature> [--project p]`, en lecture seule :
@@ -704,6 +704,7 @@ Sans objet (outillage en ligne de commande, pas d'interface).
 | 0.6.0 | 2026-11-13 | Owner | INV-5 garanti aussi à l'exécution (ADR-14) : un CP final/merge n'est jamais auto-validé, même sous `--force` — trou relevé par la revue CP-7 et corrigé par T18 |
 | 0.7.0 | 2026-11-14 | Owner + design-scout (brouillon) | Itération 3 (workflow de bout en bout) : ADR-17 `lab next`, ADR-18 état de run git + `state.json`, ADR-19 spec-lint / design-lint, ADR-20 classifieur et `STATUS:` structuré, ADR-21 propositions signées, ADR-22 OQ par le moteur + INV-10 complet, ADR-23 reset ciblé, ADR-24 test goldfish ; patterns I-26..I-45, références E-18..E-21 ; 6 décisions Owner par QCM. **Brouillon : à valider** |
 | 0.7.1 | 2026-11-14 | Owner (QCM) | Points ouverts de 0.7.0 tranchés : PyYAML pour les EX (§3, ADR-24), BHV-4 amendé en spec 0.9.0 (ADR-18), isolement goldfish par `--safe-mode` + `--tools ""` + répertoire hors git, marqueurs par source (ADR-24, BHV-8b de la spec 0.9.0). **Brouillon : à valider** |
+| 0.8.0 | 2026-11-14 | Owner | Design de l'itération 3 validé (QCM « Validate and merge ») : ADR-17..24 acceptés ; aucun point ouvert |
 | 0.5.0 | 2026-11-12 | Owner | Itération 2 (profils) : ADR-13 politique effective (plancher monotone ⊕ overrides, profils en données), ADR-14 un point d'application par clé, ADR-15 sandbox d'instance externe (kit monté en lecture seule, remplace ADR-10), ADR-16 le kit est une instance de lui-même. 3 décisions Owner par QCM : routes réservées dès l'itération 2, sandbox externe livrée, `.lab/lab.toml` du kit explicite |
 
 ## 10. Points ouverts de l'amendement 0.7.0 — tranchés le 2026-11-14 (0.7.1)

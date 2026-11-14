@@ -4,7 +4,7 @@ feature: fde-kit
 version: 0.9.0
 status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by: Owner — 2026-11-12 (OQ-1..8 tranchées par QCM en session, spec 0.2.0 validée en l'état) ; amendement 0.3.0 (test goldfish) approuvé le 2026-11-12 ; amendement 0.4.0 (deux lecteurs goldfish) approuvé le 2026-11-12 ; amendement 0.5.0 (multi-outils) approuvé le 2026-11-12 ; amendement 0.6.0 (improver) approuvé le 2026-11-12 ; amendement 0.7.0 (bornes des clés libres, BHV-3d) approuvé le 2026-11-12 ; amendement 0.8.0 (BHV-3d : nombres finis) approuvé le 2026-11-13 ; amendement 0.9.0 (BHV-4 : historique git ; BHV-8b : preuve d'isolement par source) décidé par l'Owner par QCM le 2026-11-14, texte relu dans la PR #13
+validated_by: Owner — 2026-11-12 (OQ-1..8 tranchées par QCM en session, spec 0.2.0 validée en l'état) ; amendement 0.3.0 (test goldfish) approuvé le 2026-11-12 ; amendement 0.4.0 (deux lecteurs goldfish) approuvé le 2026-11-12 ; amendement 0.5.0 (multi-outils) approuvé le 2026-11-12 ; amendement 0.6.0 (improver) approuvé le 2026-11-12 ; amendement 0.7.0 (bornes des clés libres, BHV-3d) approuvé le 2026-11-12 ; amendement 0.8.0 (BHV-3d : nombres finis) approuvé le 2026-11-13 ; amendement 0.9.0 (BHV-4 : historique git ; BHV-8b : preuve d'isolement par source) décidé par l'Owner par QCM et approuvé le 2026-11-14 (PR #13)
 ---
 
 # Spec — Kit FDE portable : workflow agentique templatisé, profils d'organisation, retours arrière routés
