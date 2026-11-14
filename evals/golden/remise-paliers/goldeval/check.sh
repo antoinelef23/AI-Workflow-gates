@@ -44,7 +44,7 @@ def works(fn):
             for k, v in exp.items():
                 if not approx(r[k], v):
                     return False
-        # clamp INV-1 AND is_estimate MUST be True (finding M9)
+        # clamp INV-1 AND is_estimate MUST be True (INV-2 — finding M9)
         return float(fn(-100, -5)["total_eur"]) == 0.0 and fn(1500, 10).get("is_estimate") is True
     except Exception:
         return False

@@ -3,7 +3,7 @@ type: design
 feature: remise-paliers
 version: 1.0.0
 status: validated
-spec: ./spec.md          # version: 1.0.0
+spec: ./spec.md          # version: 1.1.0
 ---
 
 # Design — remise-paliers (golden task)
