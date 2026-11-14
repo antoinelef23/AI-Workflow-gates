@@ -28,6 +28,12 @@ from kit import kit_root, kit_version  # noqa: E402
 PROFILES = ("solo", "squad", "regulated")
 SCHEMA_VERSION = 1
 RECIPES = ("evals", "evals-collect")
+RUN_STATE_IGNORES = (
+    "**/.runs/state.json",
+    "**/.runs/journal.jsonl",
+    "**/.runs/orchestrator.lock",
+    "**/.approvals/",
+)
 LAB_TOML = Path(".lab") / "lab.toml"
 
 # work/<dest> ← lab/templates/<src> (never named spec.md / design.md / tasks.md — OQ-10)
@@ -150,6 +156,9 @@ class Item:
     path: Path | None = None  # file to create (whole-file items)
     content: str = ""
     recipe: str = ""  # justfile#recipe items: snippet to append
+    gitignore: bool = (
+        False  # append `content` to the existing file instead of writing it
+    )
     note: str = ""
 
 
@@ -176,7 +185,29 @@ def build_plan(project: Path, profile: str) -> list[Item]:
     for dest, src in WORK_TEMPLATES.items():
         items.append(_file_item(project, dest, _template(src)))
     items.extend(_justfile_items(project))
+    items.append(_gitignore_item(project))
     return items
+
+
+def _gitignore_item(project: Path) -> Item:
+    """Run-state entries missing from the instance `.gitignore` (spec 0.10.0, ADR-7)."""
+    path = project / ".gitignore"
+    try:
+        text = path.read_text(encoding="utf-8") if path.exists() else ""
+    except (OSError, UnicodeDecodeError) as e:
+        raise InitError(f"cannot read {path}: {e}") from None
+    have = {line.strip() for line in text.splitlines()}
+    missing = [e for e in RUN_STATE_IGNORES if e not in have]
+    if not missing:
+        return Item("identical", ".gitignore")
+    return Item(
+        "create",
+        ".gitignore",
+        path,
+        "\n".join(missing) + "\n",
+        gitignore=True,
+        note="run-state entries appended" if path.exists() else "run-state entries",
+    )
 
 
 def _justfile_items(project: Path) -> list[Item]:
@@ -246,6 +277,12 @@ def apply_plan(plan: list[Item]) -> None:
             continue
         if it.recipe:
             appends.append(it)
+        elif it.gitignore:
+            assert it.path is not None
+            prior = it.path.read_bytes() if it.path.exists() else b""
+            if prior and not prior.endswith(b"\n"):
+                prior += b"\n"
+            it.path.write_bytes(prior + it.content.encode("utf-8"))
         else:
             assert it.path is not None
             it.path.parent.mkdir(parents=True, exist_ok=True)

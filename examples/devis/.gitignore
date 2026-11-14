@@ -1,0 +1,4 @@
+**/.runs/state.json
+**/.runs/journal.jsonl
+**/.runs/orchestrator.lock
+**/.approvals/

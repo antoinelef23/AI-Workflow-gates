@@ -20,7 +20,15 @@ import kit  # noqa: E402
 
 pytestmark = pytest.mark.eval
 
+RUN_STATE_IGNORES = [
+    "**/.runs/state.json",
+    "**/.runs/journal.jsonl",
+    "**/.runs/orchestrator.lock",
+    "**/.approvals/",
+]
+
 EX4_FILES = {
+    ".gitignore",
     ".lab/lab.toml",
     "justfile",
     "work/README.md",
@@ -110,6 +118,54 @@ def test_eval_1_ex4_exact_file_set(tmp_path):
         "kit_version": kit.kit_version(),
         "profile": "squad",
     }
+
+
+def test_eval_1_ex4_gitignore_added_exact(tmp_path):
+    repo = _git_repo(tmp_path)
+    r = _init(repo, "--profile", "squad")
+    assert r.returncode == 0, r.stderr
+    assert (repo / ".gitignore").read_text().splitlines() == RUN_STATE_IGNORES
+    assert any(
+        line.startswith("create") and ".gitignore" in line
+        for line in r.stdout.splitlines()
+    )
+
+
+def test_eval_1_gitignore_existing_bytes_kept_above_added(tmp_path):
+    repo = _git_repo(tmp_path)
+    original = (
+        b"node_modules/\n**/.runs/state.json\n.env"  # partial, no trailing newline
+    )
+    (repo / ".gitignore").write_bytes(original)
+    r = _init(repo, "--profile", "squad")
+    assert r.returncode == 0, r.stderr
+    after = (repo / ".gitignore").read_bytes()
+    assert after.startswith(original)
+    added = [x for x in after[len(original) :].decode().split("\n") if x]
+    assert added == [e for e in RUN_STATE_IGNORES if e != "**/.runs/state.json"]
+    again = _init(repo, "--profile", "squad")
+    assert "0 changement" in again.stdout
+    assert (repo / ".gitignore").read_bytes() == after
+
+
+def test_eval_1_gitignore_complete_untouched(tmp_path):
+    repo = _git_repo(tmp_path)
+    before = b"x/\n" + ("\n".join(RUN_STATE_IGNORES) + "\n").encode()
+    (repo / ".gitignore").write_bytes(before)
+    assert _init(repo, "--profile", "squad").returncode == 0
+    assert (repo / ".gitignore").read_bytes() == before
+
+
+def test_eval_1_gitignore_dry_run_writes_nothing(tmp_path):
+    repo = _git_repo(tmp_path)
+    (repo / ".gitignore").write_bytes(b"x/\n")
+    r = _init(repo, "--profile", "squad", "--dry-run")
+    assert r.returncode == 0
+    assert any(
+        line.startswith("create") and ".gitignore" in line
+        for line in r.stdout.splitlines()
+    )
+    assert _tree(repo) == {".gitignore": b"x/\n"}
 
 
 def test_eval_1_never_creates_agent_tooling(tmp_path):
