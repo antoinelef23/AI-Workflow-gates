@@ -27,6 +27,7 @@ class Model:
 class Registry:
     models: list[Model] = field(default_factory=list)
     role_defaults: dict[str, str] = field(default_factory=dict)
+    review_panel: list[str] = field(default_factory=list)
     root: Path | None = None
 
     def by_id(self, mid: str) -> Model | None:
@@ -60,7 +61,12 @@ def load_registry(root: Path | str) -> Registry:
         Model(**{k: v for k, v in entry.items() if k in keys})
         for entry in data.get("model", [])
     ]
-    return Registry(models=models, role_defaults=dict(data.get("roles", {})), root=root)
+    return Registry(
+        models=models,
+        role_defaults=dict(data.get("roles", {})),
+        review_panel=list(data.get("review", {}).get("panel", [])),
+        root=root,
+    )
 
 
 def resolve_model(role: str, task_model: str | None, registry: Registry) -> str | None:

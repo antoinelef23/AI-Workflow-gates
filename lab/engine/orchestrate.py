@@ -1042,6 +1042,12 @@ def pick_reviewer_models(cp: Node, n: int) -> list[str | None]:
     DIFFERENT from the implementer (a model must not validate its own work alone)."""
     impl = resolve_model("implementer", "", REGISTRY)
     base = resolve_model("reviewer", cp.model, REGISTRY)
+    # An explicit panel in the registry ([review] panel) wins when every seat is
+    # reviewer-eligible and no checkpoint forces its own model.
+    eligible_ids = {m.id for m in REGISTRY.eligible("reviewer")}
+    panel = REGISTRY.review_panel
+    if panel and not cp.model and all(m in eligible_ids for m in panel):
+        return [panel[i % len(panel)] for i in range(n)]
     pool = [m.id for m in REGISTRY.eligible("reviewer")] or ([base] if base else [None])
     # priority to models != implementer, then the rest
     ordered = [m for m in pool if m != impl] + [m for m in pool if m == impl]

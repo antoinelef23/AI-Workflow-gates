@@ -22,7 +22,7 @@ Run the campaign when:
 
 - A `claude` CLI on the `PATH`, authenticated (the harness calls `claude -p …
   --output-format json` per trial).
-- The model id known to `claude --model` (e.g. `claude-opus-4-8`).
+- The model id known to `claude --model` (e.g. `claude-opus-5-5`).
 - `just` available (the recipe wraps `lab/engine/eval_models.py`).
 - Awareness that `--live` calls the real models and **bills**. Without `--live`
   the harness refuses to run unless `LAB_MODEL_SHIM=1` is set (test path with a
@@ -38,8 +38,8 @@ harness reads the registry.
 
 ```toml
 [[model]]
-id = "claude-opus-4-8"          # passed as-is to `claude --model`
-label = "Opus 4.8"
+id = "claude-opus-5-5"          # passed as-is to `claude --model`
+label = "Opus 5.5"
 family = "claude"
 tier = "frontier"               # frontier | balanced | fast (descriptive)
 released = ""
@@ -67,7 +67,7 @@ Narrow the run while iterating:
 
 ```bash
 # one layer, two named models
-just eval-models chain 1 claude-opus-4-8,claude-haiku-4-5-20251001
+just eval-models chain 1 claude-opus-5-5,claude-haiku-5-5
 ```
 
 `layer` accepts `behavioral`, `chain`, `scorecard`, or `all` (default). Under the

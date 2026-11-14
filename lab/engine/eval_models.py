@@ -25,7 +25,7 @@ COST SAFETY: --live required to call the real models (billed campaign).
 
 Usage:
   python3 lab/engine/eval_models.py --layer all --live
-  python3 lab/engine/eval_models.py --layer behavioral --models claude-opus-4-8,claude-haiku-4-5-20251001 --live
+  python3 lab/engine/eval_models.py --layer behavioral --models claude-opus-5-5,claude-haiku-5-5 --live
   LAB_MODEL_SHIM=1 python3 lab/engine/eval_models.py --layer behavioral --models m-good,m-bad   # test
 """
 

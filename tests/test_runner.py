@@ -40,7 +40,7 @@ def test_get_runner_unknown_raises(monkeypatch):
 def test_claude_argv_shape():
     cmd = rn.claude_argv(
         "do X",
-        model="claude-opus-4-8",
+        model="claude-opus-5-5",
         resume="sess-1",
         allowed_tools=["Bash(uv:*)"],
         max_turns=42,
@@ -48,7 +48,7 @@ def test_claude_argv_shape():
     )
     assert cmd[:3] == ["claude", "-p", "do X"]
     assert "--output-format" in cmd and cmd[cmd.index("--output-format") + 1] == "json"
-    assert cmd[cmd.index("--model") + 1] == "claude-opus-4-8"
+    assert cmd[cmd.index("--model") + 1] == "claude-opus-5-5"
     assert cmd[cmd.index("--resume") + 1] == "sess-1"
     assert cmd[cmd.index("--max-turns") + 1] == "42"
     assert cmd[cmd.index("--allowedTools") + 1] == "Bash(uv:*)"

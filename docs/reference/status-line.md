@@ -11,9 +11,9 @@ Claude Code pipes session JSON on stdin; the script reads it and scans
 `lab/engine/orchestrate.py`), picking the most-recently-modified feature.
 
 ```
-Opus 4.8  🔬 devis-pose · ▶ T3 running · 4/9
-Opus 4.8  🔬 devis-pose · ⏸ T5 blocked · 4/9     ← a blocker/failure is surfaced first
-Opus 4.8  🔬 devis-pose · ✓ all done
+Opus 5.5  🔬 devis-pose · ▶ T3 running · 4/9
+Opus 5.5  🔬 devis-pose · ⏸ T5 blocked · 4/9     ← a blocker/failure is surfaced first
+Opus 5.5  🔬 devis-pose · ✓ all done
 ```
 
 - The **spotlight** node is the most urgent: `failed` → `blocked` → `running` (in that
@@ -37,6 +37,6 @@ A plugin cannot define the main status line, so the FDE wires it once in their *
 disable. Test it manually by feeding it the session JSON:
 
 ```bash
-echo '{"model":{"display_name":"Opus 4.8"},"workspace":{"project_dir":"'"$PWD"'"}}' \
+echo '{"model":{"display_name":"Opus 5.5"},"workspace":{"project_dir":"'"$PWD"'"}}' \
   | python3 lab/plugin/statusline.py
 ```
