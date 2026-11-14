@@ -1,10 +1,10 @@
 ---
 type: spec
 feature: fde-kit
-version: 0.9.0
+version: 0.10.0
 status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by: Owner — 2026-11-12 (OQ-1..8 tranchées par QCM en session, spec 0.2.0 validée en l'état) ; amendement 0.3.0 (test goldfish) approuvé le 2026-11-12 ; amendement 0.4.0 (deux lecteurs goldfish) approuvé le 2026-11-12 ; amendement 0.5.0 (multi-outils) approuvé le 2026-11-12 ; amendement 0.6.0 (improver) approuvé le 2026-11-12 ; amendement 0.7.0 (bornes des clés libres, BHV-3d) approuvé le 2026-11-12 ; amendement 0.8.0 (BHV-3d : nombres finis) approuvé le 2026-11-13 ; amendement 0.9.0 (BHV-4 : historique git ; BHV-8b : preuve d'isolement par source) décidé par l'Owner par QCM et approuvé le 2026-11-14 (PR #13)
+validated_by: Owner — 2026-11-12 (OQ-1..8 tranchées par QCM en session, spec 0.2.0 validée en l'état) ; amendement 0.3.0 (test goldfish) approuvé le 2026-11-12 ; amendement 0.4.0 (deux lecteurs goldfish) approuvé le 2026-11-12 ; amendement 0.5.0 (multi-outils) approuvé le 2026-11-12 ; amendement 0.6.0 (improver) approuvé le 2026-11-12 ; amendement 0.7.0 (bornes des clés libres, BHV-3d) approuvé le 2026-11-12 ; amendement 0.8.0 (BHV-3d : nombres finis) approuvé le 2026-11-13 ; amendement 0.9.0 (BHV-4 : historique git ; BHV-8b : preuve d'isolement par source) décidé par l'Owner par QCM et approuvé le 2026-11-14 (PR #13) ; amendement 0.10.0 (BHV-1, INV-8, EX-4 : `lab init` ignore l'état de run dans l'instance) décidé sous délégation de l'Owner le 2026-11-14 (cas réel, constat K2)
 ---
 
 # Spec — Kit FDE portable : workflow agentique templatisé, profils d'organisation, retours arrière routés
@@ -97,7 +97,8 @@ référence**, et GitHub Copilot, opencode et Codex CLI le reçoivent d'abord en
   un commit explicite de l'instance, jamais une dérive silencieuse.
 - **INV-8** — `lab init` MUST NOT écrire d'outillage agent dans l'instance (rien sous `.claude/`, ni
   agents, ni skills, ni hooks, ni règles dures, ni `CLAUDE.md`/`AGENTS.md`) : l'instance ne reçoit
-  que des données projet (`.lab/lab.toml`, `work/`, recettes d'evals du justfile).
+  que des données projet (`.lab/lab.toml`, `work/`, recettes d'evals du justfile, entrées d'état de
+  run dans `.gitignore`).
 - **INV-9** — Le kit ne package que le moteur : le code produit de démonstration (`devis`,
   `booking`) et ses triplets/tests vivent sous `examples/`.
 - **INV-10** — Pendant un run, aucun agent ne modifie `spec.md` ni `design.md` : une tâche dont le
@@ -130,8 +131,10 @@ référence**, et GitHub Copilot, opencode et Codex CLI le reçoivent d'abord en
 - **Given** un repo git sans le kit, et le plugin FDE installé chez le FDE
 - **When** le FDE lance `lab init <project> --profile squad`
 - **Then** sont créés : `.lab/lab.toml` (profil, version du kit épinglée), `work/` avec les
-  templates du triplet, et les recettes `evals` / `evals-collect` du justfile si elles sont
-  absentes. Rien d'autre (INV-8). La commande liste chaque fichier créé ou modifié.
+  templates du triplet, les recettes `evals` / `evals-collect` du justfile si elles sont
+  absentes, et dans `.gitignore` les entrées d'état de run absentes (`**/.runs/state.json`, `**/.runs/journal.jsonl`, `**/.runs/orchestrator.lock`, `**/.approvals/`),
+  ajoutées en fin de fichier, sans rien modifier d'autre. Rien d'autre (INV-8). La commande liste
+  chaque fichier créé ou modifié.
 - **Edge cases :**
   - **BHV-1a** — *(retiré en 0.2.0 — plus de `.claude/settings.json` écrit dans l'instance, OQ-1)*
   - **BHV-1b** — Projet non-Python sans evals : la recette `evals` générée échoue fermée
@@ -380,6 +383,7 @@ covers: [BHV-5, INV-3, INV-10]
 input: {project: empty git repo, command: "lab init . --profile squad"}
 expected_output:
   first_run_created: [.lab/lab.toml, work/, justfile]
+  first_run_gitignore_added: ['**/.runs/state.json', '**/.runs/journal.jsonl', '**/.runs/orchestrator.lock', '**/.approvals/']
   never_created: [.claude/, CLAUDE.md, AGENTS.md]
   second_run: "0 changement"
 covers: [BHV-1, BHV-1c, INV-7, INV-8]
@@ -594,5 +598,6 @@ covers: [BHV-12, BHV-12a, INV-16]
 | 0.5.0 | 2026-11-12 | Owner | Multi-outils (QCM) : Claude Code reste l'outil de référence ; GitHub Copilot, opencode et Codex CLI supportés, interactif d'abord puis runs orchestrés, dans une nouvelle itération (l'itération 1 reprend telle quelle). Garanties déclarées par outil et vérifiées (matrice de capacités, refus ou sandbox), formats générés depuis une source unique, gouvernance par couple outil × modèle ; un outil qui ne lit ses règles que depuis le repo attend le mode instance (INV-8 inchangé). Ajouts INV-13..15, BHV-9..11, EX-9/10, EVAL-11..13, NG-8, OQ-12 ; NG-4 levé |
 | 0.8.0 | 2026-11-13 | Owner | Revue CP-7 : `budget_usd = nan` passait la borne (`nan < 0` est faux) et `inf` équivalait en silence à « sans plafond ». BHV-3d exige un nombre fini |
 | 0.9.0 | 2026-11-14 | Owner | Conception de l'itération 3 (QCM) : BHV-4 nomme aussi l'historique git comme source des tâches livrées (`state.json` est gitignoré et se perd avec l'environnement) ; BHV-8b prouve l'isolement source par source — canaris dans les règles dures et `CLAUDE.md`, lecteur lancé hors de tout dépôt git, car un smoke a montré qu'un message de commit récent atteint le contexte via l'instantané git de la CLI ; INV-12, EVAL-10 et le glossaire alignés |
+| 0.10.0 | 2026-11-14 | Owner (délégation) | Cas réel (`work/fde-kit/.runs/real-case-2026-11-14.md`, K2) : une instance activée n'ignorait pas son état de run — un `git add -A` aurait commité `state.json`, le journal et les jetons d'approbation. `lab init` ajoute ces entrées au `.gitignore` (BHV-1, INV-8, EX-4) |
 | 0.7.0 | 2026-11-12 | Owner | Trou relevé au CP-6 (revue) : aucune borne pour les clés libres — `max_parallel = 0` faisait planter le moteur, `max_task_attempts = 0` ne tentait aucune tâche, un budget négatif passait. Ajout BHV-3d (bornes, refus rc 1) ; EVAL-3 précise aussi « égal au plancher accepté » pour chaque clé de sécurité (bug du même CP) |
 | 0.6.0 | 2026-11-12 | Owner | Rôle `improver` (itération 4) : l'expérience des runs devient des propositions d'amélioration du scaffolding, déclenchées par seuils, évaluées (incident → nouveau cas d'abord, aucune régression) puis validées par signature ; ne touche jamais à ce qui le juge. Ajouts BHV-12, INV-16, EX-11, EVAL-14 ; NG-5 précisé |

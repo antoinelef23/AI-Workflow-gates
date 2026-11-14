@@ -38,15 +38,16 @@ Sous un objectif « finir le produit », le travail avance **sans interaction av
   scores sont rapportés, non jugés.
 - **Merges** : autorisés quand la CI est verte.
 
-## Prochaines étapes (décidées par l'Owner le 2026-11-14)
+## Prochaines étapes (mandat autonome)
 
-1. **Cas réel** (mené par Claude, mandat ci-dessus) : `lab init` d'une instance neuve (profil
-   `squad`), une petite feature, spec → design → plan → run, checkpoint signé selon les critères
-   du mandat. But : éprouver les gates comme un FDE et mesurer ce qui ralentit.
-2. **Re-planner T27–T35** avec moins d'arrêts : T28 (OQ écrite par le moteur, plus jamais dans
-   `spec.md`) en premier ; CP-9 et CP-10 fusionnés ; les tâches voie Owner regroupées ; un seul
-   redémarrage du moteur au plus.
-3. Re-mesure facturée des deux cas modifiés par la PR #8.
+1. ✅ **Cas réel** fait le 2026-11-14 (`tempconv`, instance neuve) : spec → checkpoint final en ≈ 7 min
+   de run et 1,86 $, deux arrêts justifiés (contradiction de spec, vrai bug trouvé par le panel).
+   Rapport et constats K1–K6 : `work/fde-kit/.runs/real-case-2026-11-14.md`.
+2. ✅ **Re-planification** (`tasks.md` 0.4.0, spec 0.10.0, design 0.9.0, sous délégation) : T36
+   (`lab init` ignore l'état de run, K2) et T37 (commit scopé refuse un chemin ignoré, K3) dans la
+   tranche 2 ; CP-9 sans campagne ; CP-10 regroupe re-mesure facturée et campagne goldfish.
+3. **Exécution** de T27 → T35 (tranches 2 à 4), checkpoints signés selon le mandat ; version 0.3.0
+   et tags.
 4. Itération 4 (retro, improver) puis itération multi-outils : design-scout, décisions sous
    délégation, plan, run ; version et tag par itération.
 

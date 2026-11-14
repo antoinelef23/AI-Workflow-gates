@@ -1,11 +1,11 @@
 ---
 type: design
 feature: fde-kit
-version: 0.8.0
+version: 0.9.0
 status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by: FDE — 2026-11-12 (validé en session par QCM ; plugin sous lab/plugin/ confirmé) ; amendement 0.3.0 (OQ-9..11 du planner) approuvé le 2026-11-12 ; amendement 0.4.0 (spike promptfoo) approuvé le 2026-11-12 ; amendement 0.5.0 (itération 2 : profils, sandbox d'instance, kit-instance — 3 décisions Owner par QCM) approuvé le 2026-11-12 ; amendement 0.6.0 (INV-5 garanti aussi à l'exécution, revue CP-7) approuvé le 2026-11-13 ; amendements 0.7.0 et 0.7.1 (itération 3, 9 décisions Owner par QCM) validés le 2026-11-14 (0.8.0)
-spec: ./spec.md          # version : 0.9.0
+validated_by: FDE — 2026-11-12 (validé en session par QCM ; plugin sous lab/plugin/ confirmé) ; amendement 0.3.0 (OQ-9..11 du planner) approuvé le 2026-11-12 ; amendement 0.4.0 (spike promptfoo) approuvé le 2026-11-12 ; amendement 0.5.0 (itération 2 : profils, sandbox d'instance, kit-instance — 3 décisions Owner par QCM) approuvé le 2026-11-12 ; amendement 0.6.0 (INV-5 garanti aussi à l'exécution, revue CP-7) approuvé le 2026-11-13 ; amendements 0.7.0 et 0.7.1 (itération 3, 9 décisions Owner par QCM) validés le 2026-11-14 (0.8.0) ; amendement 0.9.0 (ADR-7 : `.gitignore` d'instance ; ADR-22 : chemin ignoré refusé) décidé sous délégation de l'Owner le 2026-11-14 (cas réel)
+spec: ./spec.md          # version : 0.10.0
 ---
 
 # Design — Kit FDE portable
@@ -283,7 +283,10 @@ I-26..I-45 : rapport design-scout de l'itération 3 ; lignes revérifiées sur `
   (`schema_version = 1`, `kit_version`, `profile`), `work/README.md` et `work/_templates/{spec,design,tasks}.template.md` (jamais nommés
   `spec.md`/`design.md`/`tasks.md` : le pre-commit et `ci_checks.sh` prendraient `work/` pour une
   feature et plan-lint rejette le modèle brut — OQ-10), et
-  les recettes du justfile (ADR-8). Rien sous `.claude/`, pas de `CLAUDE.md`/`AGENTS.md`, pas
+  les recettes du justfile (ADR-8), et (spec 0.10.0) les entrées d'état de run absentes du
+  `.gitignore` de l'instance (`**/.runs/state.json`, `**/.runs/journal.jsonl`, `**/.runs/orchestrator.lock`, `**/.approvals/`), ajoutées en fin de fichier comme
+  une recette du justfile (même pattern qu'ADR-8 : jamais de réécriture, fichier créé s'il manque).
+  Rien sous `.claude/`, pas de `CLAUDE.md`/`AGENTS.md`, pas
   de workflow CI (INV-8). Second lancement : tout est `identical` ⇒ « 0 changement ».
   Profils acceptés en itération 1 : `solo`, `squad`, `regulated` (valeur seulement enregistrée ;
   son effet arrive avec l'itération 2).
@@ -553,7 +556,9 @@ I-26..I-45 : rapport design-scout de l'itération 3 ; lignes revérifiées sur `
   dans la réponse et de finir par `STATUS: blocked — OQ: <question>` ; le changement d'agent suit
   la boucle `lab/models/EVOLUTION.md` ; (2) sur R3, le moteur écrit `.runs/<Tn>-OQ.md` et notifie
   la tâche et ses dépendants impactés (EX-3) ; (3) avant `scoped_commit`, le moteur compare
-  `spec.md` et `design.md` au HEAD : tout écart ⇒ la tâche échoue, rien n'est commité (EVAL-9).
+  `spec.md` et `design.md` au HEAD : tout écart ⇒ la tâche échoue, rien n'est commité (EVAL-9) ;
+  (4) (0.9.0, cas réel K3) un chemin de `files_touched` ignoré par git ferait sauter le fichier en
+  silence au commit scopé : la tâche échoue en le nommant, rien n'est commité.
 - **Anchored on:** I-36, I-38, I-42.
 - **Alternatives considered:** corriger le prompt seul, tout de suite (rejeté par l'Owner : une OQ
   n'aurait plus de destination avant R3).
@@ -704,6 +709,7 @@ Sans objet (outillage en ligne de commande, pas d'interface).
 | 0.6.0 | 2026-11-13 | Owner | INV-5 garanti aussi à l'exécution (ADR-14) : un CP final/merge n'est jamais auto-validé, même sous `--force` — trou relevé par la revue CP-7 et corrigé par T18 |
 | 0.7.0 | 2026-11-14 | Owner + design-scout (brouillon) | Itération 3 (workflow de bout en bout) : ADR-17 `lab next`, ADR-18 état de run git + `state.json`, ADR-19 spec-lint / design-lint, ADR-20 classifieur et `STATUS:` structuré, ADR-21 propositions signées, ADR-22 OQ par le moteur + INV-10 complet, ADR-23 reset ciblé, ADR-24 test goldfish ; patterns I-26..I-45, références E-18..E-21 ; 6 décisions Owner par QCM. **Brouillon : à valider** |
 | 0.7.1 | 2026-11-14 | Owner (QCM) | Points ouverts de 0.7.0 tranchés : PyYAML pour les EX (§3, ADR-24), BHV-4 amendé en spec 0.9.0 (ADR-18), isolement goldfish par `--safe-mode` + `--tools ""` + répertoire hors git, marqueurs par source (ADR-24, BHV-8b de la spec 0.9.0). **Brouillon : à valider** |
+| 0.9.0 | 2026-11-14 | Owner (délégation) | Cas réel (`work/fde-kit/.runs/real-case-2026-11-14.md`) : ADR-7 ajoute les entrées d'état de run au `.gitignore` de l'instance (spec 0.10.0, K2) ; ADR-22 (4) refuse un chemin de `files_touched` ignoré par git (K3, vu en CI sur la PR #15) |
 | 0.8.0 | 2026-11-14 | Owner | Design de l'itération 3 validé (QCM « Validate and merge ») : ADR-17..24 acceptés ; aucun point ouvert |
 | 0.5.0 | 2026-11-12 | Owner | Itération 2 (profils) : ADR-13 politique effective (plancher monotone ⊕ overrides, profils en données), ADR-14 un point d'application par clé, ADR-15 sandbox d'instance externe (kit monté en lecture seule, remplace ADR-10), ADR-16 le kit est une instance de lui-même. 3 décisions Owner par QCM : routes réservées dès l'itération 2, sandbox externe livrée, `.lab/lab.toml` du kit explicite |
 
