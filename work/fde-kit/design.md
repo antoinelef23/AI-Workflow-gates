@@ -1,11 +1,11 @@
 ---
 type: design
 feature: fde-kit
-version: 0.7.0
+version: 0.7.1
 status: draft            # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by: FDE — 2026-11-12 (validé en session par QCM ; plugin sous lab/plugin/ confirmé) ; amendement 0.3.0 (OQ-9..11 du planner) approuvé le 2026-11-12 ; amendement 0.4.0 (spike promptfoo) approuvé le 2026-11-12 ; amendement 0.5.0 (itération 2 : profils, sandbox d'instance, kit-instance — 3 décisions Owner par QCM) approuvé le 2026-11-12 ; amendement 0.6.0 (INV-5 garanti aussi à l'exécution, revue CP-7) approuvé le 2026-11-13 ; amendement 0.7.0 (itération 3) : **brouillon, en attente de validation Owner**
-spec: ./spec.md          # version : 0.8.0
+validated_by: FDE — 2026-11-12 (validé en session par QCM ; plugin sous lab/plugin/ confirmé) ; amendement 0.3.0 (OQ-9..11 du planner) approuvé le 2026-11-12 ; amendement 0.4.0 (spike promptfoo) approuvé le 2026-11-12 ; amendement 0.5.0 (itération 2 : profils, sandbox d'instance, kit-instance — 3 décisions Owner par QCM) approuvé le 2026-11-12 ; amendement 0.6.0 (INV-5 garanti aussi à l'exécution, revue CP-7) approuvé le 2026-11-13 ; amendements 0.7.0 et 0.7.1 (itération 3) : **brouillon, en attente de validation Owner**
+spec: ./spec.md          # version : 0.9.0
 ---
 
 # Design — Kit FDE portable
@@ -23,8 +23,9 @@ spec: ./spec.md          # version : 0.8.0
 > le code source de Copier/Black et des essais locaux) + 4 décisions Owner prises par QCM.
 > Amendement 0.7.0 : rapport `work/fde-kit/.runs/design-scout-iteration-3.md` (patterns I-26..I-45,
 > références E-18..E-20 vérifiées sur page primaire le 2026-11-14) + 6 décisions Owner prises par
-> QCM le 2026-11-14 (section « Décisions Owner » du rapport). Les points que ces décisions ne
-> tranchent pas sont listés en §10 ; ils restent ouverts jusqu'à la validation.
+> QCM le 2026-11-14 (section « Décisions Owner » du rapport). Amendement 0.7.1 : les 3 points
+> restés ouverts (§10) tranchés par l'Owner par QCM le 2026-11-14, sur pièces (section
+> « Vérifications » du rapport : scan des blocs EX, smokes d'isolement).
 
 ## 1. Architecture overview
 
@@ -167,12 +168,12 @@ I-26..I-45 : rapport design-scout de l'itération 3 ; lignes revérifiées sur `
 
 | Layer | Choice | Justified by (ref §2) |
 |---|---|---|
-| Runtime | Python 3.12, stdlib seule (`tomllib`, `importlib.metadata`, `json`, `subprocess`) | NG-2 spec ; patterns I-6, I-14 |
+| Runtime | Python 3.12, stdlib (`tomllib`, `importlib.metadata`, `json`, `subprocess`) ; une seule dépendance d'exécution, PyYAML, pour lire les EX (ADR-24) | NG-2 spec ; patterns I-6, I-14 |
 | Packaging | hatchling, `packages = ["lab"]`, paquet `fde-kit`, CLI `lab` | I-18, E-11 |
 | Agent | Claude Code CLI ≥ 2.1.295 (`onFailure`), plugin `fde-kit` | E-1, E-3, E-6 |
 | Scaffolding | stdlib, pattern Copier | E-13 |
 | Tests | pytest + shim `claude` existant | I-10, I-11, I-13 |
-| Lecture des EX (itération 3) | **à trancher** : le stack est stdlib seule et la stdlib ne lit pas le YAML (voir §10, point 1) | ADR-24 |
+| Lecture des EX (itération 3) | PyYAML (`yaml.safe_load`), épinglé dans `uv.lock` — décision Owner (QCM 2026-11-14) : les blocs EX utilisent presque tout le YAML courant (§10, point 1) | ADR-24 |
 
 ## 4. ADRs — Architecture Decision Records
 
@@ -469,8 +470,8 @@ I-26..I-45 : rapport design-scout de l'itération 3 ; lignes revérifiées sur `
   git seul (rejeté par l'Owner : ne porte ni l'en-cours, ni les compteurs).
 - **Consequences:** le compteur de rejets et les budgets de route survivent à un redémarrage du
   moteur, pas à la perte de l'environnement (`state.json` reste gitignoré) ; dans ce cas ils
-  repartent de zéro, ce que le moteur affiche. BHV-4 nomme les frontmatters et `state.json` comme
-  sources : lire aussi git est un point de validation (§10, point 2).
+  repartent de zéro, ce que le moteur affiche. BHV-4 (spec 0.9.0) nomme l'historique git à côté des
+  frontmatters et de `state.json`.
 
 ### ADR-19 — spec-lint et design-lint : deux recettes, un critère par phase
 - **Status:** proposed (décision Owner 5, QCM du 2026-11-14)
@@ -582,14 +583,22 @@ I-26..I-45 : rapport design-scout de l'itération 3 ; lignes revérifiées sur `
   1. **Masquage** : copie de `spec.md` où chaque `expected_output` des EX est remplacé par un
      marqueur neutre ; un contrôle refuse la copie si une valeur attendue y subsiste.
   2. **Lecteurs** : le petit lecteur (rôle `goldfish` du registre) et le lecteur implementer (rôle
-     `implementer`), chacun dans son propre `tempfile.mkdtemp` ne contenant que la copie masquée
-     (I-43), appelés via `claude_argv` **sans** plugin, settings ni règles (options du kit à
-     `None`). Même modèle pour les deux rôles, ou rôle absent ⇒ un seul appel et la note « lecteurs
-     confondus — signal `fragile` indisponible » (BHV-8e).
-  3. **Canaris** : un marqueur distinct, tiré à chaque test, par source interdite (règles dures,
-     `CLAUDE.md`, message de commit récent) ; un marqueur présent dans la réponse d'un lecteur ⇒
-     rc 1, test invalide, aucun score (INV-12, BHV-8b).
-  4. **Comparaison** (BHV-8a) : mapping comparé champ par champ, scalaire comparé seul, après
+     `implementer`), chacun dans son propre `tempfile.mkdtemp` **hors de tout dépôt git** ne
+     contenant que la copie masquée (I-43). Appel via `claude_argv` sans les options du kit, plus
+     `--safe-mode` (ni `CLAUDE.md`, ni plugins installés, ni hooks, avec l'authentification normale)
+     et `--tools ""` (aucun outil) ; la copie masquée est passée dans le prompt. `--bare` est
+     écarté : il n'accepte pas l'authentification OAuth. Même modèle pour les deux rôles, ou rôle
+     absent ⇒ un seul appel et la note « lecteurs confondus — signal `fragile` indisponible »
+     (BHV-8e).
+  3. **Preuve d'isolement** (BHV-8b, spec 0.9.0), un marqueur distinct tiré à chaque test par source :
+     règles dures — un plugin leurre passé par `--plugin-dir`, dont le hook `SessionStart` (le canal
+     des règles en session) émet le marqueur ; `CLAUDE.md` — un fichier portant le marqueur dans le
+     parent du répertoire du lecteur ; git — `git rev-parse --is-inside-work-tree` doit échouer dans
+     le répertoire du lecteur, vérifié avant l'appel. Marqueur présent dans une réponse, ou
+     répertoire dans un dépôt ⇒ rc 1, test invalide, aucun score (INV-12).
+  4. **Comparaison** (BHV-8a) : blocs EX lus par `yaml.safe_load` ; un document `---` dont l'`input`
+     contient `same` reprend l'`input` du document précédent, surchargé par ses autres clés (forme
+     d'EX-8) ; non résoluble ⇒ « non testable ». Mapping comparé champ par champ, scalaire comparé seul, après
      normalisation (casse, espaces, types numériques : `37.2` = `37.20`) ; toute autre forme =
      « non testable », affichée et exclue du score. Fonction pure, forme « checker → (ok, détail) »
      (I-45).
@@ -601,8 +610,10 @@ I-26..I-45 : rapport design-scout de l'itération 3 ; lignes revérifiées sur `
 - **Anchored on:** I-43, I-44, I-45, E-20 ; comparaison : sans référence — ADR délibéré (E-21).
 - **Alternatives considered:** rôle `goldfish` affecté sans campagne (rejeté par l'Owner : un rôle
   ne change que sur preuve mesurée) ; rôle reporté (rejeté par l'Owner).
-- **Consequences:** la façon de placer les canaris et de prouver l'absence des sources de niveau
-  utilisateur (plugin installé, `CLAUDE.md` utilisateur) reste à valider (§10, point 3).
+- **Consequences:** `claude_argv` (I-1) gagne deux options, `safe_mode` et `tools`, à `None` par
+  défaut (argv inchangé pour tous les autres appels). `--safe-mode` est présent dans l'aide de la
+  CLI 2.1.323, où les smokes ont été faits : `lab goldfish` refuse (rc 1) une CLI plus ancienne,
+  même forme que le pré-vol (ADR-6). PyYAML devient la seule dépendance d'exécution du paquet.
 
 ## 5. Contracts & data
 
@@ -678,7 +689,8 @@ Sans objet (outillage en ligne de commande, pas d'interface).
 | La nouvelle grammaire `STATUS:` n'est pas suivie par un modèle : tout blocage part en `human` | M | M | BHV-5c rend l'erreur sûre (jamais `auto`) ; campagne de re-mesure avant le tag (ADR-20) |
 | Perte de l'environnement : compteurs de rejets et budgets de route remis à zéro | M | M | Tâches `done` reconstruites depuis git (ADR-18) ; remise à zéro affichée par le moteur |
 | Le reset ciblé laisse `done` un dépendant réellement cassé | M | M | Filet BHV-6b : eval globale au checkpoint suivant, puis R6/R7 |
-| Isolement goldfish incomplet (plugin ou `CLAUDE.md` de niveau utilisateur) | M | H | Canaris (BHV-8b) : test invalide plutôt qu'un score faux ; mécanisme à valider (§10, point 3) |
+| Isolement goldfish incomplet (plugin ou `CLAUDE.md` de niveau utilisateur) | L | H | `--safe-mode` + `--tools ""` + répertoire hors git, vérifiés par smokes (rapport design-scout) ; marqueurs par source à chaque test : test invalide plutôt qu'un score faux (BHV-8b) |
+| Une version de la CLI change le comportement de `--safe-mode` | M | H | Les marqueurs sont tirés à chaque test : une fuite rend le test invalide (rc 1), jamais un score |
 | Le design-lint rejette des designs existants | H | L | Passage sur les designs existants avant l'activation ; correction par amendement (ADR-19) |
 
 ## 9. Changelog
@@ -691,20 +703,18 @@ Sans objet (outillage en ligne de commande, pas d'interface).
 | 0.4.0 | 2026-11-12 | FDE | ADR-12 (proposed) : spike promptfoo pour le banc d'évaluation, à mener dans l'itération multi-outils ; pointeur spec 0.6.0 |
 | 0.6.0 | 2026-11-13 | Owner | INV-5 garanti aussi à l'exécution (ADR-14) : un CP final/merge n'est jamais auto-validé, même sous `--force` — trou relevé par la revue CP-7 et corrigé par T18 |
 | 0.7.0 | 2026-11-14 | Owner + design-scout (brouillon) | Itération 3 (workflow de bout en bout) : ADR-17 `lab next`, ADR-18 état de run git + `state.json`, ADR-19 spec-lint / design-lint, ADR-20 classifieur et `STATUS:` structuré, ADR-21 propositions signées, ADR-22 OQ par le moteur + INV-10 complet, ADR-23 reset ciblé, ADR-24 test goldfish ; patterns I-26..I-45, références E-18..E-21 ; 6 décisions Owner par QCM. **Brouillon : à valider** |
+| 0.7.1 | 2026-11-14 | Owner (QCM) | Points ouverts de 0.7.0 tranchés : PyYAML pour les EX (§3, ADR-24), BHV-4 amendé en spec 0.9.0 (ADR-18), isolement goldfish par `--safe-mode` + `--tools ""` + répertoire hors git, marqueurs par source (ADR-24, BHV-8b de la spec 0.9.0). **Brouillon : à valider** |
 | 0.5.0 | 2026-11-12 | Owner | Itération 2 (profils) : ADR-13 politique effective (plancher monotone ⊕ overrides, profils en données), ADR-14 un point d'application par clé, ADR-15 sandbox d'instance externe (kit monté en lecture seule, remplace ADR-10), ADR-16 le kit est une instance de lui-même. 3 décisions Owner par QCM : routes réservées dès l'itération 2, sandbox externe livrée, `.lab/lab.toml` du kit explicite |
 
-## 10. Points ouverts de l'amendement 0.7.0 (à trancher à la validation)
+## 10. Points ouverts de l'amendement 0.7.0 — tranchés le 2026-11-14 (0.7.1)
 
-Ces points ne sont tranchés ni par la spec 0.8.0, ni par les 6 décisions Owner du 2026-11-14 ;
-le brouillon ne les décide pas.
+Tranchés par l'Owner par QCM, sur les faits de la section « Vérifications » du rapport
+`work/fde-kit/.runs/design-scout-iteration-3.md`.
 
-1. **Lecture des EX en YAML** (ADR-24, BHV-8a) : le stack est stdlib seule (§3) et la stdlib ne lit
-   pas le YAML. Options : une dépendance d'exécution (PyYAML), ou un lecteur limité au sous-ensemble
-   utilisé par les blocs EX (mappings en flux et scalaires), écrit et testé dans le kit.
-2. **BHV-4 et git** (ADR-18) : BHV-4 nomme les frontmatters et `.runs/state.json` comme sources de
-   la phase. Lire aussi l'historique git (décision Owner 1) est-il une précision du design, ou faut-il
-   un amendement de spec (0.9.0) ?
-3. **Isolement goldfish** (ADR-24, BHV-8b) : le moteur contrôle les sources du kit et le répertoire
-   du lecteur, pas le plugin ni le `CLAUDE.md` installés au niveau utilisateur, que `claude -p` peut
-   charger. Comment y placer un canari, ou comment les exclure de l'appel, est à vérifier sur la
-   doc de la CLI avant de figer l'ADR.
+1. **Lecture des EX en YAML** → PyYAML, seule dépendance d'exécution (§3, ADR-24). Faits : 28 blocs EX
+   dans 10 specs utilisent mappings et séquences en bloc et en flux, scalaires `|`, documents `---`,
+   commentaires, guillemets.
+2. **BHV-4 et git** → amendement de spec 0.9.0 : BHV-4 nomme l'historique git (ADR-18).
+3. **Isolement goldfish** → `--safe-mode` + `--tools ""` + répertoire hors de tout dépôt, marqueurs
+   pour les règles dures (hook d'un plugin leurre) et `CLAUDE.md`, vérification « hors dépôt » pour
+   git (ADR-24) ; BHV-8b amendé en spec 0.9.0. Faits : smokes facturés (5 appels Haiku 5.5, 0,0032 $).

@@ -111,8 +111,8 @@ machine de dev (WSL), pas dans le venv du kit (`pyproject.toml` : `dependencies 
 `--bare` saute la découverte de `CLAUDE.md`, les hooks et les plugins, mais n'accepte que
 `ANTHROPIC_API_KEY` ou `apiKeyHelper` (« OAuth and keychain are never read ») ; `--safe-mode`
 désactive `CLAUDE.md`, skills, plugins installés, hooks et serveurs MCP, avec l'authentification
-normale ; `--tools ""` retire tous les outils. Smoke facturé (3 appels Haiku 5.5, 0,0023 $ au total,
-script `goldfish-smoke.sh`, hors dépôt) — question posée : « liste toute chaîne commençant par
+normale ; `--tools ""` retire tous les outils. Smokes facturés (5 appels Haiku 5.5, 0,0032 $ au
+total, scripts `goldfish-smoke*.sh`, hors dépôt) — question posée : « liste toute chaîne commençant par
 `CANARY-` présente dans tes instructions ou ton contexte, sinon NONE » :
 
 | Essai | cwd | Options | Réponse |
@@ -120,10 +120,12 @@ script `goldfish-smoke.sh`, hors dépôt) — question posée : « liste toute c
 | contrôle | dépôt git temporaire, `CLAUDE.md` canari A, commit canari B | `--tools ""` | A **et** B (B vu dans l'instantané « git status » du prompt système) |
 | safe | idem | `--tools "" --safe-mode` | B seul : `CLAUDE.md` exclu, **le message de commit fuit encore** |
 | safe hors git | répertoire hors de tout dépôt, `CLAUDE.md` canari dans le cwd et dans le parent | `--tools "" --safe-mode` | `NONE` |
+| plugin leurre, contrôle | hors dépôt ; plugin passé par `--plugin-dir`, hook `SessionStart` qui émet le canari R | `--tools ""` | R |
+| plugin leurre, safe | idem | `--tools "" --safe-mode` | `NONE` |
 
 Conséquences pour ADR-24 (faits, pas décisions) : `--safe-mode` exclut `CLAUDE.md` (vérifié par canari) ;
-les plugins installés sont exclus selon l'aide de la CLI, **non vérifié par canari** (aucun plugin
-de test n'en portait) ; l'historique git n'est exclu que si le cwd du lecteur est hors de tout dépôt ;
+le canal des hooks de plugin (celui qui injecte les règles dures en session) est coupé, vérifié par
+canari sur un plugin leurre passé par `--plugin-dir` ; l'historique git n'est exclu que si le cwd du lecteur est hors de tout dépôt ;
 dans ce cas, un canari dans un commit ne peut plus être vu, et la preuve pour cette source devient
 « le cwd n'est dans aucun dépôt » (`git rev-parse --is-inside-work-tree` échoue) plutôt qu'un
 canari — écart à la lettre de BHV-8b. `--safe-mode` n'existe pas forcément dans les versions

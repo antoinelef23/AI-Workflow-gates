@@ -1,10 +1,10 @@
 ---
 type: spec
 feature: fde-kit
-version: 0.8.0
+version: 0.9.0
 status: validated        # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by: Owner — 2026-11-12 (OQ-1..8 tranchées par QCM en session, spec 0.2.0 validée en l'état) ; amendement 0.3.0 (test goldfish) approuvé le 2026-11-12 ; amendement 0.4.0 (deux lecteurs goldfish) approuvé le 2026-11-12 ; amendement 0.5.0 (multi-outils) approuvé le 2026-11-12 ; amendement 0.6.0 (improver) approuvé le 2026-11-12 ; amendement 0.7.0 (bornes des clés libres, BHV-3d) approuvé le 2026-11-12 ; amendement 0.8.0 (BHV-3d : nombres finis) approuvé le 2026-11-13
+validated_by: Owner — 2026-11-12 (OQ-1..8 tranchées par QCM en session, spec 0.2.0 validée en l'état) ; amendement 0.3.0 (test goldfish) approuvé le 2026-11-12 ; amendement 0.4.0 (deux lecteurs goldfish) approuvé le 2026-11-12 ; amendement 0.5.0 (multi-outils) approuvé le 2026-11-12 ; amendement 0.6.0 (improver) approuvé le 2026-11-12 ; amendement 0.7.0 (bornes des clés libres, BHV-3d) approuvé le 2026-11-12 ; amendement 0.8.0 (BHV-3d : nombres finis) approuvé le 2026-11-13 ; amendement 0.9.0 (BHV-4 : historique git ; BHV-8b : preuve d'isolement par source) décidé par l'Owner par QCM le 2026-11-14, texte relu dans la PR #13
 ---
 
 # Spec — Kit FDE portable : workflow agentique templatisé, profils d'organisation, retours arrière routés
@@ -66,7 +66,7 @@ référence**, et GitHub Copilot, opencode et Codex CLI le reçoivent d'abord en
 | Lecteur goldfish | `goldfish_reader` | Un des deux agents goldfish lancés sur la même spec masquée : le **petit lecteur** (`small`, modèle du rôle `goldfish` du registre, tier `fast`) et le **lecteur implementer** (`implementer`, modèle du rôle `implementer`) |
 | Score goldfish | `goldfish_score` | Pour un lecteur : part des EX-n testables dont la sortie prédite égale la sortie attendue |
 | Signal croisé | `goldfish_signal` | Par EX testable, croisement des deux lecteurs : `ambiguity` (les deux se trompent), `fragile` (seul le petit lecteur se trompe), `anomaly` (seul le lecteur implementer se trompe), `clear` (aucun ne se trompe) |
-| Canari | `canary_marker` | Marqueur placé dans chaque source de contexte interdite au goldfish, pour prouver son isolement |
+| Canari | `canary_marker` | Marqueur placé dans une source de contexte interdite au goldfish (règles dures, `CLAUDE.md`), pour prouver son isolement |
 | Outil agent | `agent_tool` | Environnement qui exécute un agent : `claude-code` (outil de référence), `copilot`, `opencode`, `codex` |
 | Adaptateur | `tool_adapter` | Forme propre à un outil (règles, rôles, skills) **générée** depuis la source unique du kit |
 | Matrice de capacités | `capability_matrix` | Déclaration, par outil, des garde-fous qu'il fournit nativement (exécution headless, injection des règles, interdiction d'écrire des chemins, hook de fin de session, rapport de coût, reprise de session, instructions au niveau utilisateur), chacune couverte par un test de conformité |
@@ -105,7 +105,7 @@ référence**, et GitHub Copilot, opencode et Codex CLI le reçoivent d'abord en
 - **INV-11** — Un `retro_record` n'est jamais écrit dans un repo (ni l'instance, ni le kit) : il vit
   dans le stockage local du FDE.
 - **INV-12** — Un agent goldfish ne reçoit que la spec masquée ; un `goldfish_score` n'est compté
-  que si l'isolement est **prouvé** par le canari (BHV-8b) pour **chacun** des deux lecteurs.
+  que si l'isolement est **prouvé** (BHV-8b) pour **chacun** des deux lecteurs.
   Isolement non prouvé pour l'un d'eux ⇒ test invalide, jamais un score. Le test est en lecture seule : il ne modifie aucun artefact.
 - **INV-13** — Les règles dures, les rôles et les skills sont écrits **une seule fois** dans le kit ;
   chaque adaptateur en est généré, jamais modifié à la main : régénérer un adaptateur produit
@@ -183,8 +183,9 @@ référence**, et GitHub Copilot, opencode et Codex CLI le reçoivent d'abord en
 ### BHV-4 — Workflow de bout en bout (`lab next <feature>`)
 - **Given** un triplet dans n'importe quel état
 - **When** le FDE lance `lab next <feature>`
-- **Then** le moteur déduit la phase courante des `status:` du frontmatter et de
-  `.runs/state.json`, évalue son critère de sortie, puis soit lance l'étape agent suivante,
+- **Then** le moteur déduit la phase courante des `status:` du frontmatter, de
+  l'historique git (tâches livrées : commit au sujet canonique) et de `.runs/state.json` (état en
+  cours, tâches rouvertes, compteurs), évalue son critère de sortie, puis soit lance l'étape agent suivante,
   soit affiche la décision humaine attendue (qui, quoi, commande à lancer). Idempotent.
 - Critères de sortie par phase :
 
@@ -275,10 +276,13 @@ référence**, et GitHub Copilot, opencode et Codex CLI le reçoivent d'abord en
   - **BHV-8a** — Comparaison déterministe : un `expected_output` en mapping YAML est comparé champ
     par champ après normalisation (casse, espaces, types numériques) ; un scalaire est comparé
     après normalisation ; tout autre forme est comptée « non testable » (affichée, exclue du score).
-  - **BHV-8b** — Preuve d'isolement : un `canary_marker` distinct est placé dans chaque source de
-    contexte interdite (règles dures, `CLAUDE.md`, message de commit récent) ; si la réponse de
-    l'un des deux lecteurs contient un marqueur, le test est invalide, rc 1, quels que soient les
-    scores (INV-12).
+  - **BHV-8b** — Preuve d'isolement, pour chaque lecteur et chaque source interdite : un
+    `canary_marker` distinct, tiré à chaque test, est placé dans les règles dures (par le canal qui
+    les injecte en session) et dans un `CLAUDE.md` que la CLI découvrirait depuis le répertoire du
+    lecteur ; l'historique git est exclu en lançant le lecteur hors de tout dépôt, ce que le moteur
+    vérifie avant l'appel (le répertoire n'est dans aucun working tree git). Un marqueur présent dans
+    la réponse d'un des deux lecteurs, ou un répertoire de lecteur situé dans un dépôt : le test est
+    invalide, rc 1, quels que soient les scores (INV-12).
   - **BHV-8c** — Sans `goldfish_min_score` déclaré dans la politique effective : rc 0 et rapport
     (mesure seule). Déclaré et non atteint **par le lecteur implementer** : rc 1, le critère de
     sortie de la phase spec échoue ; la correction reste une décision humaine (INV-3). Le score du
@@ -549,7 +553,7 @@ covers: [BHV-12, BHV-12a, INV-16]
 | EVAL-7 | deterministic | `retro export` écrit hors de tout repo, sans champ interdit, passe `brand_guard` ; `retro report` agrège EX-6 exactement, KPI inclus | BHV-7, INV-6, INV-11 | 100% |
 | EVAL-8 | deterministic | le package du kit n'embarque que le moteur ; `devis` et `booking` (code, triplets, tests) sous `examples/` ; `just gate-ci` vert après migration | INV-9 | 100% |
 | EVAL-9 | deterministic | une tâche (shim) qui modifie `spec.md` ou `design.md` échoue ; le commit scopé ne stage jamais spec/design | INV-10 | 100% |
-| EVAL-10 | deterministic | shim goldfish : la spec masquée ne contient aucun `expected_output` ; chaque lecteur a son répertoire ne contenant qu'elle ; EX-8 reproduit exactement (deux scores, signaux croisés, écarts, non testables, rc) ; canari vu par un lecteur ⇒ rc 1 sans score ; seuil appliqué au seul lecteur implementer ; lecteurs confondus ⇒ un seul appel | BHV-8, BHV-8a, BHV-8b, BHV-8c, BHV-8d, BHV-8e, INV-12 | 100% |
+| EVAL-10 | deterministic | shim goldfish : la spec masquée ne contient aucun `expected_output` ; chaque lecteur a son répertoire ne contenant qu'elle ; EX-8 reproduit exactement (deux scores, signaux croisés, écarts, non testables, rc) ; canari vu par un lecteur, ou répertoire de lecteur dans un dépôt git ⇒ rc 1 sans score ; seuil appliqué au seul lecteur implementer ; lecteurs confondus ⇒ un seul appel | BHV-8, BHV-8a, BHV-8b, BHV-8c, BHV-8d, BHV-8e, INV-12 | 100% |
 | EVAL-11 | deterministic | `lab adapters build` déterministe (2 générations identiques) ; adaptateur commité = régénéré ; `install` n'écrit rien dans l'instance ; outil sans instructions utilisateur ⇒ rc 1 (EX-10) ; avertissement des garde-fous absents | BHV-9, BHV-9a, BHV-9b, BHV-9c, INV-8, INV-13 | 100% |
 | EVAL-12 | deterministic | shim par outil : EX-9 exact ; même boucle, même verdict `STATUS:`, mêmes commits qu'avec l'outil de référence ; coût inconnu journalisé « inconnu » ; nouvel essai sans reprise de session ; outil hors matrice ⇒ rc 1 | BHV-10, BHV-10a, BHV-10b, BHV-10c, BHV-10d, INV-14 | 100% |
 | EVAL-13 | deterministic | campagne (shim) `--tool` : résultats et recommandations par `tool_model_pair` ; échec chain d'un couple ⇒ couple disqualifié, le même modèle reste éligible via un autre outil s'il y passe | BHV-11, INV-15 | 100% |
@@ -589,5 +593,6 @@ covers: [BHV-12, BHV-12a, INV-16]
 | 0.4.0 | 2026-11-12 | Owner | Deux lecteurs goldfish (petit modèle + modèle de l'implementer) au lieu d'un : « goldfish » = sans mémoire, pas moins capable ; un petit modèle seul confondrait erreur de raisonnement et ambiguïté. Le croisement distingue `ambiguity` (signal fort) de `fragile` (spec implicite). Seuil éventuel sur le seul lecteur implementer ; choix final du signal par corrélation R3/R4. Rôle `goldfish` au registre. Ajouts BHV-8e, signal croisé ; BHV-7, BHV-8, INV-12, EX-8, EVAL-10 amendés |
 | 0.5.0 | 2026-11-12 | Owner | Multi-outils (QCM) : Claude Code reste l'outil de référence ; GitHub Copilot, opencode et Codex CLI supportés, interactif d'abord puis runs orchestrés, dans une nouvelle itération (l'itération 1 reprend telle quelle). Garanties déclarées par outil et vérifiées (matrice de capacités, refus ou sandbox), formats générés depuis une source unique, gouvernance par couple outil × modèle ; un outil qui ne lit ses règles que depuis le repo attend le mode instance (INV-8 inchangé). Ajouts INV-13..15, BHV-9..11, EX-9/10, EVAL-11..13, NG-8, OQ-12 ; NG-4 levé |
 | 0.8.0 | 2026-11-13 | Owner | Revue CP-7 : `budget_usd = nan` passait la borne (`nan < 0` est faux) et `inf` équivalait en silence à « sans plafond ». BHV-3d exige un nombre fini |
+| 0.9.0 | 2026-11-14 | Owner | Conception de l'itération 3 (QCM) : BHV-4 nomme aussi l'historique git comme source des tâches livrées (`state.json` est gitignoré et se perd avec l'environnement) ; BHV-8b prouve l'isolement source par source — canaris dans les règles dures et `CLAUDE.md`, lecteur lancé hors de tout dépôt git, car un smoke a montré qu'un message de commit récent atteint le contexte via l'instantané git de la CLI ; INV-12, EVAL-10 et le glossaire alignés |
 | 0.7.0 | 2026-11-12 | Owner | Trou relevé au CP-6 (revue) : aucune borne pour les clés libres — `max_parallel = 0` faisait planter le moteur, `max_task_attempts = 0` ne tentait aucune tâche, un budget négatif passait. Ajout BHV-3d (bornes, refus rc 1) ; EVAL-3 précise aussi « égal au plancher accepté » pour chaque clé de sécurité (bug du même CP) |
 | 0.6.0 | 2026-11-12 | Owner | Rôle `improver` (itération 4) : l'expérience des runs devient des propositions d'amélioration du scaffolding, déclenchées par seuils, évaluées (incident → nouveau cas d'abord, aucune régression) puis validées par signature ; ne touche jamais à ce qui le juge. Ajouts BHV-12, INV-16, EX-11, EVAL-14 ; NG-5 précisé |
