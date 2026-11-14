@@ -308,7 +308,7 @@ def test_eval_coverage_per_id(sandbox: Path) -> None:
 ### T1 — Claims to cover EVAL-1
 - **depends_on :** —
 - **implements :** [EVAL-1]
-- **files_touched :** `t1.txt`
+- **files_touched :** `t1.txt`, `tests/x.py`
 - **done_when :** ok
 - **verify :** `true`
 """,
@@ -402,7 +402,7 @@ def test_eval_id_matching_rejects_substring_collisions(sandbox: Path) -> None:
 ### T1 — Implements EVAL-1, evals named EVAL-10 / misleading path
 - **depends_on :** —
 - **implements :** [EVAL-1]
-- **files_touched :** `t1.txt`
+- **files_touched :** `t1.txt`, `tests/`
 - **done_when :** ok
 - **verify :** `true`
 """,
@@ -441,7 +441,7 @@ def test_evals_collect_recipe_used_when_present(sandbox: Path) -> None:
 ### T1 — JS feature implementing EVAL-1
 - **depends_on :** —
 - **implements :** [EVAL-1]
-- **files_touched :** `front/Button.tsx`
+- **files_touched :** `front/Button.tsx`, `front/eval_1.test.ts`
 - **done_when :** ok
 - **verify :** `true`
 """,
@@ -572,3 +572,34 @@ def test_concurrent_orchestrate_fails_fast(sandbox: Path) -> None:
         if orchestrate._ORCH_LOCK_FD is not None:
             os.close(orchestrate._ORCH_LOCK_FD)
             orchestrate._ORCH_LOCK_FD = None
+
+
+def test_eval_coverage_ignores_another_features_eval(sandbox: Path) -> None:
+    # lab-fix 3: every feature numbers its evals from EVAL-1. Another feature's
+    # test_eval_1_… (outside this task's files_touched) must not cover this EVAL-1.
+    collected = sandbox / "collected.txt"
+    collected.write_text("tests/other_feature/test_e.py::test_eval_1_nominal\n")
+    write_tasks(
+        sandbox,
+        """
+### T1 — Implements EVAL-1, its own eval file is not written
+- **depends_on :** —
+- **implements :** [EVAL-1]
+- **files_touched :** `t1.txt`, `tests/feat/test_eval_1.py`
+- **done_when :** ok
+- **verify :** `true`
+""",
+    )
+    env = {"LAB_EVALS_COLLECTED_FILE": str(collected)}
+    r = run_orch(sandbox, env_extra=env)
+    assert r.returncode == 1
+    assert state(sandbox)["T1"] == "failed"
+
+    collected.write_text(
+        "tests/other_feature/test_e.py::test_eval_1_nominal\n"
+        "tests/feat/test_eval_1.py::test_eval_1_nominal\n"
+    )
+    (sandbox / "work" / "feat" / ".runs" / "state.json").unlink()
+    r2 = run_orch(sandbox, env_extra=env)
+    assert r2.returncode == 0, r2.stdout + r2.stderr
+    assert state(sandbox)["T1"] == "done"
