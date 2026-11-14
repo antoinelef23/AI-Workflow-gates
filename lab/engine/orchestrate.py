@@ -60,6 +60,7 @@ from planlint import validate
 from plan import (
     SPEC_ID,
     Node,
+    ancestors,
     parse_tasks_md,
     paths_overlap,
     skip_dependents,
@@ -133,6 +134,8 @@ RUNNING_LOCK = threading.Lock()
 # that stopped without committing (blocked/failed) leaves files that are its own, not a
 # scope leak of another task (fde-kit iteration 2: T22's docs charged to T20).
 RUNNING_FILES: dict[str, list[str]] = {}
+# The plan's nodes (set by main): R3 names the tasks and checkpoints a blocked task impacts.
+PLAN_NODES: list[Node] = []
 # Tasks of the wave whose agent is mid-turn. A task is judged (verify, gate, scope leak)
 # only once no sibling is mid-turn, so it never sees a sibling's half-done edits in the
 # shared tree (T22's lint gate went red on T20's unformatted work in progress).
@@ -560,6 +563,47 @@ def evals_collected() -> str:
 # agent may change them during a run and the scoped commit never stages them (fde-kit
 # spec INV-10) — a change to them is left uncommitted and reported below.
 FEATURE_ARTIFACTS = ("tasks.md",)
+# Human artefacts (INV-10): no agent modifies them during a run.
+HUMAN_ARTIFACTS = ("spec.md", "design.md")
+
+
+def _human_artifacts_changed(feature: Path) -> list[str]:
+    """spec.md / design.md of the feature that differ from HEAD (INV-10), repo-relative."""
+    rel = feature.relative_to(PROJECT)
+    changed = []
+    for name in HUMAN_ARTIFACTS:
+        p = str(rel / name)
+        diff = subprocess.run(
+            ["git", "diff", "--quiet", "HEAD", "--", p], cwd=PROJECT
+        ).returncode
+        if diff != 0:
+            changed.append(p)
+    return changed
+
+
+def _impacted(node: Node) -> list[str]:
+    """The task itself, then its transitive dependents (tasks and checkpoints), plan order."""
+    anc = ancestors(PLAN_NODES) if PLAN_NODES else {}
+    return [node.id] + [
+        n.id for n in PLAN_NODES if n.id != node.id and node.id in anc.get(n.id, set())
+    ]
+
+
+def write_oq(node: Node, feature: Path, question: str) -> list[str]:
+    """R3 (ADR-22): the ENGINE writes `.runs/<Tn>-OQ.md`; the agent never touches spec.md."""
+    impacted = _impacted(node)
+    path = feature / ".runs" / f"{node.id}-OQ.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"# Open question — {node.id} — {node.title}\n\n"
+        f"**Question (raised by the agent):** {question}\n\n"
+        f"**Task:** {node.id}\n\n"
+        f"**Impacted (tasks and checkpoints):** {', '.join(impacted)}\n\n"
+        "The Owner integrates the answer by a versioned amendment of spec.md "
+        "(INV-3, INV-10); the engine never edits it.\n",
+        encoding="utf-8",
+    )
+    return impacted
 
 
 def scoped_commit(node: Node, feature: Path, message: str) -> None:
@@ -583,6 +627,13 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
         paths = [*node.files, *artifacts]
         for p in paths:
             subprocess.run(["git", "add", "--", p], cwd=PROJECT, capture_output=True)
+        # INV-10: spec.md / design.md are never staged, even if a files_touched covers them.
+        for name in HUMAN_ARTIFACTS:
+            subprocess.run(
+                ["git", "reset", "-q", "HEAD", "--", str(rel / name)],
+                cwd=PROJECT,
+                capture_output=True,
+            )
         # Oracle guardrail: a golden is committed only if it is explicitly in
         # files_touched. Otherwise we un-stage it (finding H3, scorecard anti-tamper).
         staged = subprocess.run(
@@ -734,8 +785,9 @@ def _build_base_prompt(node: Node, feature: Path) -> str:
         f"then {project_ref(feature)}/tasks.md. "
         f"Execute ONLY task {node.id} — {node.title}. "
         f"Respect its files_touched scope and its done_when. "
-        f"If the spec is ambiguous or has gaps: do not invent, record the question (OQ-n format) in spec.md §8 "
-        f"and end blocked. "
+        f"If the spec is ambiguous or has gaps: do not invent and do not edit spec.md or design.md; "
+        f"state the question in your reply and end blocked "
+        f'("STATUS: blocked — OQ: <question>"). '
         f"You MUST end your reply with a single line: "
         f'"STATUS: done" or "STATUS: blocked — <OQ|ADR|scope>: <reason>" '
         f"(OQ = spec gap, ADR = design pattern inapplicable, scope = files_touched gap).\n"
@@ -990,10 +1042,17 @@ def _run_task_attempts(
                 route=route,
                 mode=mode,
             )
-            notify(
-                f"{node.id} blocked [{route}, {mode}]: {reason} "
-                f"— Owner response expected (spec.md §8)"
-            )
+            if route == "R3":
+                impacted = write_oq(node, feature, reason)
+                notify(
+                    f"{node.id} blocked on an open question — Owner amendment expected; "
+                    f"impacted: [{', '.join(impacted)}]"
+                )
+            else:
+                notify(
+                    f"{node.id} blocked [{route}, {mode}]: {reason} "
+                    f"— Owner response expected"
+                )
             return "blocked"
         if verdict is None:
             print(
@@ -1036,6 +1095,18 @@ def _run_task_attempts(
         if ok:
             if STOP.is_set():  # last check before the commit (INV-1)
                 return "interrupted"
+            touched = _human_artifacts_changed(feature)
+            if touched:  # INV-10: the task fails, nothing is committed
+                print(
+                    f"⛔ {node.id}: modified {', '.join(touched)} — human artefacts "
+                    f"(INV-10); nothing committed",
+                    flush=True,
+                )
+                run_log(feature, node, "implementer", f"INV-10 violation: {touched}")
+                journal(feature, event="inv10_violation", id=node.id, files=touched)
+                journal(feature, event="task_failed", id=node.id)
+                notify(f"{node.id}: touched {', '.join(touched)} (INV-10) — failed")
+                return "failed"
             run_log(feature, node, "implementer", f"done, evals green (t{attempt})")
             scoped_commit(node, feature, _commit_message(node, feature, real_ids))
             journal(feature, event="task_done", id=node.id, attempts=attempt)
@@ -1321,6 +1392,7 @@ def main() -> int:
     DRY_RUN = bool(args.dry_run)
     feature = (PROJECT / args.feature).resolve()
     fm, nodes = parse_tasks_md(feature / "tasks.md")
+    PLAN_NODES[:] = nodes
 
     # nodes already done in a previous run: capability lint no longer applies
     done_ids = {

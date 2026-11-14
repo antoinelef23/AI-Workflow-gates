@@ -1388,3 +1388,5 @@ Owner lanes: T31 (`lab/plugin/agents/`, protected) and T35 (plugin manifest, pro
 | 2026-11-14 09:20 | — | owner | run stopped by the Owner (SIGINT, nothing in flight) — too many stops; gates to be tried on a real case first | |
 | 2026-11-14 09:25 | CP-8 | owner | checkpoint validated by Owner decision (QCM: merge T23–T26 as iteration 3 slice 1) — no reviewer panel run; review = `just gate-ci` rc 0 + `lab next` / `spec-lint` / `design-lint` on all 6 features (findings listed in the PR, left to the re-plan) | |
 | 2026-11-14 09:24 | T27 | implementer | done, evals green (t1) | |
+| 2026-11-14 09:29 | T28 | implementer | BLOCKED — OQ: <question>`. | |
+| 2026-11-14 09:32 | T28 | implementer | done, evals green (t1) | |
