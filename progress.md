@@ -12,19 +12,43 @@
 | fde-kit itérations 1 et 2 (kit portable, profils) | ✅ mergées (PR #1, #2) |
 | Lot lab-fixes + correctifs PR #4 à #12 | ✅ mergés le 2026-11-14 |
 | fde-kit itération 3 — conception | ✅ spec 0.9.0 + design 0.8.0 validés (PR #13), plan `tasks.md` 0.3.0 approuvé (PR #14) |
-| fde-kit itération 3 — **tranche 1** (T23–T26 : `spec-lint`, `design-lint`, état de run v2 avec compteurs persistés, `lab next`) | ✅ CP-8 validé par décision Owner ; branche `fde-kit-iter3` |
+| fde-kit itération 3 — **tranche 1** (T23–T26 : `spec-lint`, `design-lint`, état de run v2 avec compteurs persistés, `lab next`) | ✅ CP-8 validé par décision Owner ; mergée (PR #15) |
 | fde-kit itération 3 — reste (T27–T35 : routes R1..R7, OQ par le moteur, goldfish, version 0.3.0) | ⏸ run arrêté par l'Owner (trop d'arrêts) ; **à re-planner** après le cas réel |
 | Dépôt `portable` (Claudo-portable) | branches `drop-windows`, `models-latest-only` poussées, sans PR |
 
+## Mandat autonome (décidé par l'Owner par QCM le 2026-11-14)
+
+Sous un objectif « finir le produit », le travail avance **sans interaction avec l'Owner** :
+
+- **Périmètre** : toute la spec fde-kit — reste de l'itération 3 (T27–T35), itération 4 (retro,
+  improver), itération multi-outils (Copilot, opencode, Codex CLI).
+- **Checkpoints** signés par Claude : approuvé si `just gate-ci` est vert dans un **clone propre** ET
+  si le panel de revue n'est pas BLOCK ; sinon rejet avec ses constats (2 au plus), puis correction
+  en voie Owner. Chaque décision est consignée dans `tasks.md`.
+- **Budget** : pas de plafond pour le travail d'agent facturé, pas de confirmation avant un run complet.
+- **Cas réel** : Claude le mène seul, sur une instance neuve (`lab init`).
+- **Multi-outils** : conformité testée par shims seulement ; chaque outil reste « live non vérifié »
+  jusqu'à la connexion de l'Owner (INV-14 refuse alors un run orchestré avec cet outil).
+- **Conception des itérations 4 et multi-outils** : option recommandée par design-scout, consignée
+  « décidé sous délégation de l'Owner » dans le changelog du design et ici.
+- **Versions** : 0.3.0, 0.4.0, 0.5.0, une par itération ; tags poussés (plus `v0.1.0` / `v0.2.0`), ou
+  commandes listées ici si le push est refusé.
+- **Rôle goldfish** : Haiku 5.5 l'obtient si, sur chaque spec de la campagne, l'isolement est prouvé
+  pour les deux lecteurs et si Haiku rend une prédiction lisible pour chaque EX testable ; les
+  scores sont rapportés, non jugés.
+- **Merges** : autorisés quand la CI est verte.
+
 ## Prochaines étapes (décidées par l'Owner le 2026-11-14)
 
-1. **Cas réel** : `lab init` d'une instance neuve (profil `squad`), une petite feature, spec →
-   design → plan → run, checkpoints signés par l'Owner. But : éprouver les gates comme un FDE et
-   mesurer ce qui ralentit.
+1. **Cas réel** (mené par Claude, mandat ci-dessus) : `lab init` d'une instance neuve (profil
+   `squad`), une petite feature, spec → design → plan → run, checkpoint signé selon les critères
+   du mandat. But : éprouver les gates comme un FDE et mesurer ce qui ralentit.
 2. **Re-planner T27–T35** avec moins d'arrêts : T28 (OQ écrite par le moteur, plus jamais dans
    `spec.md`) en premier ; CP-9 et CP-10 fusionnés ; les tâches voie Owner regroupées ; un seul
    redémarrage du moteur au plus.
-3. Re-mesure facturée des deux cas modifiés par la PR #8 (smoke d'abord, accord de l'Owner).
+3. Re-mesure facturée des deux cas modifiés par la PR #8.
+4. Itération 4 (retro, improver) puis itération multi-outils : design-scout, décisions sous
+   délégation, plan, run ; version et tag par itération.
 
 ## Constats du run du 2026-11-14 (à reprendre au re-planning)
 
