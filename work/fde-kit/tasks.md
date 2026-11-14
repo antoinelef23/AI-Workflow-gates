@@ -1,12 +1,12 @@
 ---
 type: tasks
 feature: fde-kit
-version: 0.3.0
+version: 0.4.0
 status: approved         # proposed | approved | in_progress | done
 generated_by: planner (session 2026-11-12) ; itération 3 : planner (session 2026-11-14)
-approved_by: Owner — 2026-11-12 (QCM en session ; CP-1..CP-5 bloquants ; exécution dans la session cloud, checkpoints signés sur instruction de l'Owner ; delta 2026-11-12 approuvé (« Amender le plan ») : prompts T7 et T9 — `verify` exécuté par l'orchestrateur, l'agent vérifie avec `uv run pytest -m eval`, sans lancer `just` ; delta CP-3 (rejet → T9) : `tests/fde_kit/test_kit_root.py` ajouté aux files_touched de T9 — il asserte le `pythonpath` transitoire que T9 retire ; delta T11 bloqué : T11 scindé — T15 (agent: owner, chemins protégés) puis T11 (moteur + tests, + lab_init.py et test_eval_2_run_preflight.py)) ; itération 2 (T16–T22, CP-6, CP-7) approuvée par l'Owner le 2026-11-12 — tous les checkpoints signés par l'Owner lui-même ; delta CP-6 (rejet → T16, approuvé par l'Owner) : spec 0.7.0 BHV-3d + égal-au-plancher accepté ; delta CP-7 (rejet → T18 + T16, décidé par l'Owner) : garde INV-5 à l'exécution, budget fini (spec 0.8.0) ; itération 3 (T23–T35, CP-8..CP-11) approuvée par l'Owner le 2026-11-14 (QCM en session : plan tel que proposé, checkpoints tous bloquants ; OQ-13 = `lab next` lance le test goldfish, câblé en T33 ; OQ-14 = campagne `lab goldfish` réelle au CP-10)
-spec: ./spec.md          # version : 0.9.0
-design: ./design.md      # version : 0.8.0
+approved_by: Owner — 2026-11-12 (QCM en session ; CP-1..CP-5 bloquants ; exécution dans la session cloud, checkpoints signés sur instruction de l'Owner ; delta 2026-11-12 approuvé (« Amender le plan ») : prompts T7 et T9 — `verify` exécuté par l'orchestrateur, l'agent vérifie avec `uv run pytest -m eval`, sans lancer `just` ; delta CP-3 (rejet → T9) : `tests/fde_kit/test_kit_root.py` ajouté aux files_touched de T9 — il asserte le `pythonpath` transitoire que T9 retire ; delta T11 bloqué : T11 scindé — T15 (agent: owner, chemins protégés) puis T11 (moteur + tests, + lab_init.py et test_eval_2_run_preflight.py)) ; itération 2 (T16–T22, CP-6, CP-7) approuvée par l'Owner le 2026-11-12 — tous les checkpoints signés par l'Owner lui-même ; delta CP-6 (rejet → T16, approuvé par l'Owner) : spec 0.7.0 BHV-3d + égal-au-plancher accepté ; delta CP-7 (rejet → T18 + T16, décidé par l'Owner) : garde INV-5 à l'exécution, budget fini (spec 0.8.0) ; itération 3 (T23–T35, CP-8..CP-11) approuvée par l'Owner le 2026-11-14 (QCM en session : plan tel que proposé, checkpoints tous bloquants ; OQ-13 = `lab next` lance le test goldfish, câblé en T33 ; OQ-14 = campagne `lab goldfish` réelle au CP-10) ; re-planification 0.4.0 après le cas réel (T36, T37 ajoutées ; CP-9 sans campagne ; CP-10 regroupe re-mesure et campagne goldfish ; checkpoints signés par Claude selon le mandat autonome) décidée sous délégation de l'Owner le 2026-11-14
+spec: ./spec.md          # version : 0.10.0
+design: ./design.md      # version : 0.9.0
 ---
 
 # Tasks — Portable FDE kit, iteration 1 ("kit portable")
@@ -137,7 +137,8 @@ ADRs: ADR-13 T16 · ADR-14 T18/T19 · ADR-15 T20 · ADR-16 T17/T18.
 | BHV-5b | T29 (signed proposal applied, resume on the amended graph) | EVAL-5 (EX-2) |
 | INV-3 (route part) | T28 (R3), T29 (R2, R4, R5) — no human artefact modified | EVAL-5 (EX-2, EX-3) |
 | BHV-6, BHV-6a, BHV-6b | T30 (R7 targeted reset, R6) | EVAL-6 (EX-7) |
-| INV-10 | T28 (task fails if spec/design touched; commit never stages them), T31 (agent file) | EVAL-9 |
+| INV-10 | T28 (task fails if spec/design touched; commit never stages them), T37 (ignored path refused), T31 (agent file) | EVAL-9 |
+| BHV-1, INV-8 (0.10.0: run state ignored in the instance) | T36 | EVAL-1 (EX-4) |
 | BHV-8, BHV-8a, BHV-8d | T32 (EX reading, masking, comparison) | EVAL-10 (EX-8) |
 | BHV-8b, BHV-8c, BHV-8e, INV-12 | T33 (readers, isolation proof, threshold, merged readers) | EVAL-10 (EX-8) |
 
@@ -207,15 +208,17 @@ flowchart TD
     T26 --> CP8{{CP-8 lab next slice + mandatory restart · blocking}}
     CP8 --> T27[T27 classifier + structured STATUS + route modes]
     T27 --> T28[T28 R3 OQ by the engine + INV-10 guard]
-    T28 --> T29[T29 proposals R2 R4 R5 + signed application]
+    T28 --> T36[T36 lab init ignores the run state]
+    T36 --> T37[T37 scoped commit refuses an ignored path]
+    T37 --> CP9{{CP-9 classifier, R3, hygiene + restart · blocking}}
+    CP9 --> T29[T29 proposals R2 R4 R5 + signed application]
     T29 --> T30[T30 R6 + R7 targeted reset]
     T30 --> T31[T31 OWNER implementer.md grammar + OQ]
-    T31 --> CP9{{CP-9 routes slice + restart + billed re-measure · blocking}}
-    CP9 --> T32[T32 goldfish: EX reading, masking, comparison]
+    T31 --> T32[T32 goldfish: EX reading, masking, comparison]
     T32 --> T33[T33 goldfish readers, isolation proof, lab goldfish]
-    T33 --> T34[T34 docs: lab next, routes, goldfish]
-    T34 --> CP10{{CP-10 live goldfish campaign · blocking}}
-    CP10 --> T35[T35 OWNER kit 0.3.0 + goldfish role]
+    T33 --> CP10{{CP-10 re-measure + goldfish campaign · blocking}}
+    CP10 --> T34[T34 docs: lab next, routes, goldfish]
+    T34 --> T35[T35 OWNER kit 0.3.0 + goldfish role]
     T35 --> CP11{{CP-11 iteration-3 merge · blocking}}
 ```
 
@@ -1062,9 +1065,52 @@ Owner lanes: T31 (`lab/plugin/agents/`, protected) and T35 (plugin manifest, pro
 - **verify:** `uv run pytest -q tests/orchestrator tests/fde_kit tests/sdlc_rework`
 - **status:** ☐ pending → ☐ running → ☐ done
 
-### T29 — R2, R4, R5: proposals written by the engine, applied after a signed decision
+### T36 — `lab init` ignores the run state in the instance
 - **agent:** implementer
 - **depends_on:** [T28]
+- **parallel_group:** T2
+- **implements:** [BHV-1, BHV-1c, INV-8, EVAL-1]
+- **anchored_on:** ADR-7, ADR-8, E-13
+- **files_touched:** `lab/engine/lab_init.py`, `tests/fde_kit/test_eval_1_init.py`, `examples/devis/.gitignore`, `examples/booking/.gitignore`
+- **prompt:**
+  > Per spec 0.10.0 BHV-1, INV-8, EX-4 and design ADR-7 (real case, finding K2). `lab init` adds to the
+  > instance's `.gitignore` the run-state entries that are missing — exactly `**/.runs/state.json`,
+  > `**/.runs/journal.jsonl`, `**/.runs/orchestrator.lock`, `**/.approvals/` — appended at the end
+  > (file created if absent), nothing else changed, listed in the plan like the justfile recipes;
+  > `--dry-run` writes nothing; second run `identical` ⇒ « 0 changement ». Add the same entries to
+  > `examples/devis/.gitignore` and `examples/booking/.gitignore` so `lab init` stays idempotent on
+  > them. The kit's own `.gitignore` already has them: do not touch it. Tests BEFORE code,
+  > `@pytest.mark.eval`, `test_eval_1_<case>` in `tests/fde_kit/test_eval_1_init.py`: EX-4's new
+  > field exactly; existing `.gitignore` kept byte for byte above the added lines; second run 0
+  > change; dry run writes nothing. Check with `uv run pytest`; the orchestrator runs `verify`.
+- **done_when:** EX-4 (0.10.0) exact; idempotent; examples unchanged by a second `lab init`
+- **verify:** `uv run pytest -q -m eval tests/fde_kit/test_eval_1_init.py tests/fde_kit/test_eval_8_examples.py`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### T37 — The scoped commit refuses a `files_touched` path ignored by git
+- **agent:** implementer
+- **depends_on:** [T36]
+- **parallel_group:** T3
+- **implements:** [INV-10, EVAL-9]
+- **anchored_on:** ADR-22, I-42
+- **files_touched:** `lab/engine/orchestrate.py`, `tests/fde_kit/test_eval_9_ignored_path.py`
+- **prompt:**
+  > Per design ADR-22 (4) (0.9.0, real case finding K3: T26's fixture under a `build/` directory was
+  > ignored by `.gitignore`, skipped in silence by the scoped commit, so CI failed on a clean
+  > checkout). Before `scoped_commit`, list the task's changed or new files under `files_touched`
+  > that git ignores (`git check-ignore`); any ⇒ the task fails with a message naming each path and
+  > the ignore rule (`git check-ignore -v`), nothing is committed. Tests BEFORE code with the shim
+  > sandbox, `@pytest.mark.eval`, `test_eval_9_<case>` in `tests/fde_kit/test_eval_9_ignored_path.py`:
+  > a task writing `tests/fixtures/build/x.txt` under an ignored `build/` ⇒ failed, no commit,
+  > message names the path; the same task without the ignore rule ⇒ done and committed.
+  > Check with `uv run pytest`; the orchestrator runs `verify`.
+- **done_when:** an ignored `files_touched` path fails the task, named, nothing committed
+- **verify:** `uv run pytest -q tests/orchestrator tests/fde_kit tests/sdlc_rework tests/lab_fixes`
+- **status:** ☐ pending → ☐ running → ☐ done
+
+### T29 — R2, R4, R5: proposals written by the engine, applied after a signed decision
+- **agent:** implementer
+- **depends_on:** [CP-9]
 - **parallel_group:** U
 - **implements:** [BHV-5, BHV-5a, BHV-5b, INV-3, INV-4, EVAL-5]
 - **anchored_on:** ADR-21, I-36, I-37, I-40, E-18
@@ -1131,17 +1177,17 @@ Owner lanes: T31 (`lab/plugin/agents/`, protected) and T35 (plugin manifest, pro
 - **verify:** `grep -q "never edit spec.md or design.md" lab/plugin/agents/implementer.md`
 - **status:** ☐ pending → ☐ running → ☐ done
 
-### CP-9 — CHECKPOINT: routes slice + mandatory restart + billed re-measure
-- **trigger:** automatic when [T27, T28, T29, T30, T31] are done
-- **validator:** Owner
-- **mode:** blocking — *the implementer prompt, its agent file and the behavioral cases changed: the measuring instrument is re-run live (billed), and the engine must restart to use the new classifier.*
-- **reviews:** EX-2, EX-3, EX-7 by hand on a temp instance (shim); `lab policy` no longer says "applied from iteration 3"; `.runs/` proposal and OQ files are tracked, `spec.md` untouched; **billed behavioral + chain re-measure** of the implementer role (`just eval-models behavioral 1 <models>`, smoke first, the Owner's OK before the full run); `just gate-ci` green.
-- **self_hosting:** MANDATORY — stop the orchestrator and restart it before approving: T32 must run on the engine with the classifier, R3 and the INV-10 guard.
+### CP-9 — CHECKPOINT: classifier, R3, instance hygiene + mandatory restart
+- **trigger:** automatic when [T27, T28, T36, T37] are done
+- **validator:** Owner — delegated to Claude by the autonomy mandate (clean-clone gate green AND panel not BLOCK)
+- **mode:** blocking — *the engine changed (classifier, R3, INV-10 guard, ignored-path refusal): it must restart.*
+- **reviews:** EX-3 by hand on a temp instance (shim); `lab policy` no longer says "applied from iteration 3"; `lab init` on a fresh repo adds the run-state ignore entries, second run 0 change; a `files_touched` path ignored by git fails its task; `just gate-ci` green in a clean clone.
+- **self_hosting:** MANDATORY — stop the orchestrator and restart it before approving: T29 must run on the engine with the classifier, R3 and the INV-10 guard.
 - **on_reject:** `lab/engine/reject.sh CP-9 work/fde-kit "reason" [Tn …]`.
 
 ### T32 — Goldfish, pure part: read the EX, mask them, compare
 - **agent:** implementer
-- **depends_on:** [CP-9]
+- **depends_on:** [T31]
 - **parallel_group:** X
 - **implements:** [BHV-8, BHV-8a, BHV-8d, EVAL-10]
 - **anchored_on:** ADR-24, I-45, E-21
@@ -1200,7 +1246,7 @@ Owner lanes: T31 (`lab/plugin/agents/`, protected) and T35 (plugin manifest, pro
 
 ### T34 — Docs: `lab next`, failure routes, goldfish test
 - **agent:** implementer
-- **depends_on:** [T33]
+- **depends_on:** [CP-10]
 - **parallel_group:** Z
 - **implements:** [BHV-4, BHV-5, BHV-8]
 - **anchored_on:** ADR-17, ADR-20, ADR-21, ADR-24
@@ -1217,16 +1263,16 @@ Owner lanes: T31 (`lab/plugin/agents/`, protected) and T35 (plugin manifest, pro
 - **verify:** `uv run pytest -q tests/fde_kit/test_doc_pointers.py`
 - **status:** ☐ pending → ☐ running → ☐ done
 
-### CP-10 — CHECKPOINT: live goldfish campaign (human-run, billed)
-- **trigger:** automatic when [T32, T33, T34] are done
-- **validator:** Owner
-- **mode:** blocking — *billed live calls, and a model-role decision (Owner decision 6, OQ-14).*
-- **reviews:** smoke first: `lab goldfish` on ONE validated spec (two billed calls), isolation proven for both readers; with the Owner's OK, the other validated specs; the Owner decides on that report whether Haiku 5.5 takes the `goldfish` role in `[roles]`; `just gate-ci` green.
+### CP-10 — CHECKPOINT: routes + goldfish slice, billed re-measure and goldfish campaign
+- **trigger:** automatic when [T29, T30, T31, T32, T33] are done
+- **validator:** Owner — delegated to Claude by the autonomy mandate (clean-clone gate green AND panel not BLOCK; campaigns run without a cap)
+- **mode:** blocking — *billed live calls and a model-role decision (Owner decision 6, OQ-14).*
+- **reviews:** EX-2, EX-7 by hand (shim); **billed behavioral + chain re-measure** of the implementer role — its prompt (T27, T28), agent file (T31) and cases (T27) changed; **live goldfish campaign**: `lab goldfish` on one validated spec, then the others; Haiku 5.5 takes the `goldfish` role if isolation is proven for both readers on every spec and Haiku parses every testable EX (mandate); `just gate-ci` green in a clean clone.
 - **on_reject:** `lab/engine/reject.sh CP-10 work/fde-kit "reason" [Tn …]`.
 
 ### T35 — Owner lane: kit version 0.3.0, examples re-pinned, `goldfish` role per CP-10
 - **agent:** owner
-- **depends_on:** [CP-10]
+- **depends_on:** [T34]
 - **parallel_group:** AA
 - **implements:** [INV-7]
 - **anchored_on:** ADR-1, ADR-9, ADR-24, I-19
@@ -1242,7 +1288,7 @@ Owner lanes: T31 (`lab/plugin/agents/`, protected) and T35 (plugin manifest, pro
 - **status:** ☐ pending → ☐ running → ☐ done
 
 ### CP-11 — CHECKPOINT: iteration-3 merge (human, final)
-- **trigger:** automatic when [T23, T24, T25, T26, T27, T28, T29, T30, T31, T32, T33, T34, T35] are done
+- **trigger:** automatic when [T23, T24, T25, T26, T27, T28, T36, T37, T29, T30, T31, T32, T33, T34, T35] are done
 - **validator:** Owner (PR review)
 - **mode:** blocking — *the merge is always human (INV-5).*
 - **reviewers:** 3
