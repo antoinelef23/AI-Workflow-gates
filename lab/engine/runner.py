@@ -46,6 +46,11 @@ DEFAULT_ALLOWED_TOOLS = [
 # client's group.
 _TRACKED: set[subprocess.Popen] = set()
 _TRACKED_LOCK = threading.Lock()
+# Set (under _TRACKED_LOCK) by the first terminate_all / kill_all_now: the engine is shutting
+# down. A process registered after that snapshot was taken would escape it, so run_tracked
+# checks this flag in the same locked block as its registration and kills its own group
+# (INV-1: no agent turn runs after an interrupt).
+_STOPPING = False
 
 
 def _killpg(p: subprocess.Popen, sig: int) -> None:
@@ -73,6 +78,9 @@ def run_tracked(
     )
     with _TRACKED_LOCK:
         _TRACKED.add(p)
+        stopping = _STOPPING
+    if stopping:  # launched after the shutdown snapshot: it must not run
+        _killpg(p, signal.SIGKILL)
     try:
         try:
             out, err = p.communicate(timeout=timeout)
@@ -89,8 +97,10 @@ def run_tracked(
 def terminate_all(grace_s: float = 5) -> int:
     """SIGTERM every registered group, wait up to `grace_s`, SIGKILL the survivors.
 
-    Returns the number of groups signalled."""
+    Returns the number of groups signalled. From then on, any new launch kills itself."""
+    global _STOPPING
     with _TRACKED_LOCK:
+        _STOPPING = True
         procs = list(_TRACKED)
     for p in procs:
         _killpg(p, signal.SIGTERM)
@@ -107,8 +117,10 @@ def terminate_all(grace_s: float = 5) -> int:
 
 def kill_all_now() -> int:
     """SIGKILL every registered group at once, no grace (second signal). Returns the
-    number of groups signalled."""
+    number of groups signalled. From then on, any new launch kills itself."""
+    global _STOPPING
     with _TRACKED_LOCK:
+        _STOPPING = True
         procs = list(_TRACKED)
     for p in procs:
         _killpg(p, signal.SIGKILL)

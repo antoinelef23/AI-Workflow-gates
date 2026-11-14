@@ -14,6 +14,16 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lab" / "engine"))
 import runner  # noqa: E402
 
+
+@pytest.fixture(autouse=True)
+def _not_stopping():
+    """terminate_all / kill_all_now latch runner._STOPPING for the process lifetime (the engine
+    exits right after): reset it so one test's shutdown does not kill the next test's launch."""
+    runner._STOPPING = False
+    yield
+    runner._STOPPING = False
+
+
 # Spawns a child (prints both pids), then sleeps.
 PARENT = (
     "import subprocess, sys, os, time\n"
@@ -123,3 +133,28 @@ def test_cli_runner_normal_run(tmp_path):
     env = _fake_claude(tmp_path, 'print(\'{"result": "hi", "session_id": "s"}\')')
     r = runner.ClaudeCliRunner().run("p", cwd=tmp_path, timeout=30, env=env)
     assert r.ok and r.text == "hi" and r.session_id == "s"
+
+
+@pytest.mark.parametrize("shutdown", ["terminate_all", "kill_all_now"])
+def test_launch_after_shutdown_snapshot_kills_itself(tmp_path, shutdown):
+    """Item 40 (CP-2 review): a launch that registers after terminate_all / kill_all_now took
+    its snapshot must not run to the end — it kills its own group at once (INV-1)."""
+    getattr(runner, shutdown)(
+        **({"grace_s": 0.1} if shutdown == "terminate_all" else {})
+    )
+    t0 = time.monotonic()
+    rc, out, _ = runner.run_tracked([sys.executable, "-c", PARENT], tmp_path, None, 30)
+    assert time.monotonic() - t0 < 10  # not the 60 s sleep, not the 30 s timeout
+    assert rc == -9
+    assert not runner._TRACKED
+    for pid in (
+        int(x) for x in out.split()
+    ):  # the child it may have spawned is gone too
+        assert not _alive(pid)
+
+
+def test_launch_before_shutdown_runs_normally(tmp_path):
+    rc, out, _ = runner.run_tracked(
+        [sys.executable, "-c", "print('ok')"], tmp_path, None, 30
+    )
+    assert (rc, out.strip()) == (0, "ok")
