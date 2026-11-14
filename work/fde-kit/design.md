@@ -1,24 +1,30 @@
 ---
 type: design
 feature: fde-kit
-version: 0.6.0
-status: validated        # draft | validated | superseded
+version: 0.7.0
+status: draft            # draft | validated | superseded
 owner: Antoine (Owner)
-validated_by: FDE — 2026-11-12 (validé en session par QCM ; plugin sous lab/plugin/ confirmé) ; amendement 0.3.0 (OQ-9..11 du planner) approuvé le 2026-11-12 ; amendement 0.4.0 (spike promptfoo) approuvé le 2026-11-12 ; amendement 0.5.0 (itération 2 : profils, sandbox d'instance, kit-instance — 3 décisions Owner par QCM) approuvé le 2026-11-12 ; amendement 0.6.0 (INV-5 garanti aussi à l'exécution, revue CP-7) approuvé le 2026-11-13
+validated_by: FDE — 2026-11-12 (validé en session par QCM ; plugin sous lab/plugin/ confirmé) ; amendement 0.3.0 (OQ-9..11 du planner) approuvé le 2026-11-12 ; amendement 0.4.0 (spike promptfoo) approuvé le 2026-11-12 ; amendement 0.5.0 (itération 2 : profils, sandbox d'instance, kit-instance — 3 décisions Owner par QCM) approuvé le 2026-11-12 ; amendement 0.6.0 (INV-5 garanti aussi à l'exécution, revue CP-7) approuvé le 2026-11-13 ; amendement 0.7.0 (itération 3) : **brouillon, en attente de validation Owner**
 spec: ./spec.md          # version : 0.8.0
 ---
 
 # Design — Kit FDE portable
 
-> **Périmètre de cette version : itérations 1 « kit portable » (livrée, `v0.1.0`) et 2 « profils
-> d'organisation »** — itération 1 : BHV-1 (+1b..1e), BHV-2 (+2a, 2b), INV-1, INV-7, INV-8, INV-9,
+> **Périmètre de cette version : itérations 1 « kit portable » (livrée, `v0.1.0`), 2 « profils
+> d'organisation » (livrée, kit 0.2.0) et 3 « workflow de bout en bout » (amendement 0.7.0,
+> brouillon)** — itération 1 : BHV-1 (+1b..1e), BHV-2 (+2a, 2b), INV-1, INV-7, INV-8, INV-9,
 > EVAL-1, EVAL-2, EVAL-8 ; itération 2 : BHV-3 (+3a..3c), INV-2, INV-3 (volet profils), INV-5,
-> EX-1, EVAL-3 (ADR-13..16, ADR-10 remplacé par ADR-15). Les itérations 3 (workflow de bout en
-> bout, retours arrière, test goldfish : BHV-4..6, BHV-8) et 4 (retro, improver : BHV-7, BHV-12)
-> seront conçues à leur tour, par amendement de ce document.
+> EX-1, EVAL-3 (ADR-13..16, ADR-10 remplacé par ADR-15) ; itération 3 : BHV-4, BHV-5 (+5a..5c),
+> BHV-6 (+6a, 6b), BHV-8 (+8a..8e), INV-3 (volet routes), INV-4, INV-10, INV-12, EX-2, EX-3, EX-7,
+> EX-8, EVAL-4, EVAL-5, EVAL-6, EVAL-9, EVAL-10 (ADR-17..24). L'itération 4 (retro, improver :
+> BHV-7, BHV-12) sera conçue à son tour, par amendement de ce document.
 >
 > Source : rapport `design-scout` du 2026-11-12 (références vérifiées dans la doc officielle,
 > le code source de Copier/Black et des essais locaux) + 4 décisions Owner prises par QCM.
+> Amendement 0.7.0 : rapport `work/fde-kit/.runs/design-scout-iteration-3.md` (patterns I-26..I-45,
+> références E-18..E-20 vérifiées sur page primaire le 2026-11-14) + 6 décisions Owner prises par
+> QCM le 2026-11-14 (section « Décisions Owner » du rapport). Les points que ces décisions ne
+> tranchent pas sont listés en §10 ; ils restent ouverts jusqu'à la validation.
 
 ## 1. Architecture overview
 
@@ -51,13 +57,35 @@ Flux d'un run : pré-vol (racine du kit, version CLI, version épinglée, combin
 runner/instance) → verrou → boucle DAG existante, inchangée → chaque appel agent passe par
 l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
 
+**Itération 3 (amendement 0.7.0).** `lab next <feature>` lit l'état de run (ADR-18), déduit la
+phase courante, évalue son critère de sortie et, selon le cas, lance l'étape agent suivante ou
+affiche la décision humaine attendue (ADR-17). En phase build, la boucle DAG reste le cœur ; chaque
+signal d'échec passe par **un seul classifieur** (ADR-20), qui choisit une route R1..R7 de la
+politique effective. Les routes `proposal` et `human` n'écrivent que dans `.runs/` — le moteur,
+jamais l'agent — et attendent une décision signée (ADR-21, ADR-22) ; R7 rouvre des tâches avec un
+reset ciblé (ADR-23). Le test goldfish (ADR-24) est une commande en lecture seule, branchée dans le
+critère de sortie de la phase spec.
+
+```mermaid
+flowchart TD
+    SIG["signal d'échec<br/>verify/eval rouge · STATUS: blocked<br/>verdict BLOCK · rejet de CP"] --> CL{"classifieur unique<br/>(ADR-20)"}
+    CL -- "R1 : tentative &lt; max" --> RETRY["même tâche, même session"]
+    CL -- "R2 / R4 / R5" --> PROP[".runs/&lt;id&gt;-&lt;route&gt;.md<br/>écrit par le moteur"]
+    CL -- "R3" --> OQ[".runs/&lt;Tn&gt;-OQ.md<br/>écrit par le moteur"]
+    CL -- "R6 : BLOCK sur CP auto" --> RW["rework des tâches du CP"]
+    CL -- "R7 : rejet signé" --> RESET["reset ciblé (ADR-23)"]
+    CL -- "non classable · budget épuisé" --> HUM["escalade humaine<br/>sous-arbre skipped"]
+    PROP --> SIGN{"décision signée<br/>approve.sh / reject.sh"}
+    SIGN -- "approuvée" --> APPLY["appliquée par le moteur,<br/>reprise sur le graphe amendé"]
+```
+
 ## 2. Reference repositories — the foundation
 
 ### 2.1 Internal reference repos
 
 | Repo | Team / contact | Access on day 1? | What we reuse | What we drop |
 |---|---|---|---|---|
-| ce repo (le kit lui-même) | FDE / Owner | ☑ | patterns I-1..I-19 ci-dessous | anti-patterns de la colonne « à ne pas reproduire » |
+| ce repo (le kit lui-même) | FDE / Owner | ☑ | patterns I-1..I-45 ci-dessous | anti-patterns de la colonne « à ne pas reproduire » |
 
 | # | Problème | Pattern interne (fichier:ligne) | Réutilisation | À ne pas reproduire |
 |---|---|---|---|---|
@@ -86,6 +114,29 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
 | I-23 | `--force` | `orchestrate.py:986-989`, `:1035` (ignore statut `approved` + erreurs de lint) | C'est cette porte que `allow_force = false` ferme | — |
 | I-24 | Montage sandbox | `sandbox_runner.py:112-115` (`-v <ws>:/workspace:rw`), `:161-164` (`add_dirs` non transmis) | Ajout d'un second montage, kit en lecture seule (ADR-15) | Transmettre des chemins hôte à l'intérieur du conteneur |
 | I-25 | Paramètres d'un TOML d'instance | `lab_init.py` (écrit `.lab/lab.toml`), I-6 | `[overrides]` et `[overrides.routes]` lus avec `tomllib` (ADR-13) | Une clé inconnue ignorée en silence (I-6 `registry.py:55-56`) |
+| I-26 | Phase : frontmatter | `lab/engine/plan.py:37` `parse_tasks_md` (frontmatter + nœuds) ; `orchestrate.py:1341` refuse un plan non `approved` | Même lecteur de frontmatter pour `spec.md` / `design.md` (`status: validated`) | — |
+| I-27 | Phase : état de run | `orchestrate.py:1384-1422` : `state.json` relu au démarrage, tolérant à un fichier tronqué (L9), écrit par `atomic_write_json` (`:221`) | Statuts en cours d'un run | `state.json` est gitignoré : perdu avec l'environnement (lab-fix 38) ; format plat `{id: status}` sans version |
+| I-28 | État dérivé de git | `planlint.py:74` `committed_task_ids` : tâches « done » lues dans `git log` (sujet canonique), « reproductible depuis un checkout frais » | Source de vérité des tâches `done` (décision Owner 1) | — |
+| I-29 | Critère plan | `planlint.py:175` `validate` (DAG, IDs, recoupements, politique) | Critère de sortie « plan » tel quel | — |
+| I-30 | Critères spec / design | `content_guard.py:60` `extract_content` (substance par ID) ; plan-lint vérifie déjà les IDs de spec cités par le plan | Base de spec-lint et design-lint | **Aucun spec-lint ni design-lint n'existe** |
+| I-31 | Critère build | `orchestrate.py:919` `_run_task_attempts` → verify → `_eval_gate` (anti-empty-gate, couverture) → `scoped_commit` | Critère « build » existant | — |
+| I-32 | Critère review | `orchestrate.py:1067` `run_review` (panel, rapport `.runs/CP-n-review.md` `:1071`), `:1137` `wait_checkpoint` | Critère « review » existant | — |
+| I-33 | Signal `STATUS:` | `orchestrate.py:971` `re.search(r"STATUS:\s*(done\|blocked)([^\n]*)")` ; raison libre | Point unique où classer R3/R4/R5 | Raison en texte libre : aucune catégorie lisible par le moteur (BHV-5c) |
+| I-34 | Route R1 | `orchestrate.py:929` `for attempt in range(1, MAX_EVAL_RETRIES + 1)` ; valeur lue de la politique `:399` | R1 existe déjà | — |
+| I-35 | Route R7 | `orchestrate.py:1120` `parse_rejection` ; compteur `rejections` `:1383`, `:1525-1531` ; rework « OWNER REVIEW FEEDBACK » injecté | R7 existe déjà, sans reset des dépendants | Compteur en mémoire : remis à zéro à chaque redémarrage du moteur |
+| I-36 | Fichier écrit par le moteur | `orchestrate.py:1071` : rapport de revue écrit dans `.runs/` ; `.gitignore` garde `.runs/*.md` versionnés « pour l'audit » | Même forme pour les propositions et les OQ | — |
+| I-37 | Décision signée | `approvals.py:55` `sign`, `:79` `verify` (HMAC, identifiant libre) ; `approve.sh` / `reject.sh` | Signature d'une proposition, même jeton que les CP | — |
+| I-38 | OQ d'agent | `orchestrate.py:735` (prompt de l'implementer) et `lab/plugin/agents/implementer.md:18` : « OQ-n noted in spec.md §8 » | — | **Contredit INV-10 et R3** ; cause directe du lab-fix 34 |
+| I-39 | Modes de route | `policy.py:5` : `[overrides.routes]` validé R1..R7 mais appliqué à partir de l'itération 3 ; validation `:113-151` | Lecture des modes déjà en place | — |
+| I-40 | Containment | `plan.py:145` `skip_dependents` | Escalade = sous-arbre `skipped`, les autres branches continuent (BHV-5a) | — |
+| I-41 | Recoupement | `plan.py:140` `paths_overlap` ; `plan.py:120` `ancestors` ; `Node.implements` | Dépendants à rouvrir (fichiers **ou** IDs) | — |
+| I-42 | Commit scopé | `orchestrate.py:563` `scoped_commit`, `:560` `FEATURE_ARTIFACTS = ("tasks.md",)` | Moitié « commit » d'INV-10 | La moitié « la tâche échoue si le working tree touche spec/design » n'existe pas |
+| I-43 | Essai isolé | `eval_models.py:102` `call_model` (cwd dédié), `:148` `tempfile.mkdtemp(prefix="labeval-")` ; `runner.py:150` `claude_argv` (options du kit à `None` ⇒ argv sans plugin, settings ni règles) | Répertoire temporaire par lecteur | Lab-fix 19 : en essai de modèle, `--plugin-dir` / `--settings` restent des chemins du kit |
+| I-44 | Lecteurs | `lab/models/registry.toml` `[roles]` ; `registry.py` `role_default` | Lecteur implementer = rôle `implementer` | **Aucun rôle `goldfish`** au registre (BHV-8e prévoit son absence) |
+| I-45 | Comparaison | `evals/behavioral/cases.py:60` `verdict`, checkers `:89-162` ; `eval_models.py:276` `check_api_contract`, `:294` `check_logic` | Forme « checker → (ok, détail) » | Aucun comparateur YAML champ par champ (BHV-8a) |
+
+I-26..I-45 : rapport design-scout de l'itération 3 ; lignes revérifiées sur `main` = `1994915`
+(après les PR #4 à #12).
 
 ### 2.2 Open source / external references
 
@@ -106,6 +157,10 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
 | E-15 | Garde-fou plancher qu'un niveau inférieur ne peut qu'affiner | AWS Organizations — service control policies | Une SCP ne donne aucun droit : elle borne ; les droits effectifs d'un compte sont l'intersection de ce que permettent toutes les couches ⇒ une couche basse ne peut que **resserrer** (pour nous : plancher ⊕ override = valeur la plus stricte, clé par clé) | docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_scps.html |
 | E-16 | Trois niveaux nommés et cumulatifs | Kubernetes — Pod Security Standards | `privileged` / `baseline` / `restricted` : niveaux nommés, chacun plus strict que le précédent, choisis explicitement par namespace (pour nous : `solo` / `squad` / `regulated`, choix explicite à `lab init`) | kubernetes.io/docs/concepts/security/pod-security-standards/ |
 | E-17 | Monter un répertoire en lecture seule dans un conteneur | Docker — bind mounts | `-v <src>:<dst>:ro` (ou `--mount type=bind,src=…,dst=…,readonly`) : le conteneur lit, n'écrit pas | docs.docker.com/engine/storage/bind-mounts/ |
+| E-18 | Budget par route, échecs non rejouables | Temporal — Retry Policies | Une politique de retry porte un nombre maximal de tentatives et une liste de types d'erreur **non rejouables**, comparés au champ `type` de l'erreur. Pour nous : R1 = retry borné ; une étiquette `OQ` / `ADR` / `scope` = type non rejouable qui sort de la boucle R1. **Écart assumé** : le défaut Temporal est « illimité », INV-4 impose un budget fini partout | docs.temporal.io/encyclopedia/retry-policies (relevé le 2026-11-14) |
+| E-19 | Reset des dépendants | Apache Airflow — Dag Runs, « Re-run Tasks » | Effacer une instance de tâche remet son état à `None` et la relance ; l'option **Downstream** étend l'effacement aux tâches aval. Pour nous : BHV-6 filtre plus finement (seuls les dépendants qui recoupent fichiers ou IDs) | airflow.apache.org/docs/apache-airflow/stable/core-concepts/dag-run.html (3.4.0, relevé le 2026-11-14) |
+| E-20 | Preuve d'isolement par canari | BIG-bench (Google) — tâche `training_on_test_set` | Une chaîne GUID unique placée dans des fichiers permet de détecter qu'un modèle les a vus. Pour nous : un marqueur distinct par source interdite (BHV-8b) | github.com/google/BIG-bench/tree/main/bigbench/benchmark_tasks/training_on_test_set (relevé le 2026-11-14) |
+| E-21 | Comparaison normalisée de sorties YAML (BHV-8a) | **aucune référence** | Cherchée sans résultat concluant (rapport design-scout itération 3) ⇒ ADR-24 délibéré pour ce volet | — |
 | E-14 | Ajouter une recette à un justfile existant | **aucune référence** | `import` d'un `lab.just` redéfinissant `evals` casse le justfile entier (vérifié, just 1.59.0) ⇒ ADR-8 délibéré | — |
 
 ## 3. Stack
@@ -117,6 +172,7 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
 | Agent | Claude Code CLI ≥ 2.1.295 (`onFailure`), plugin `fde-kit` | E-1, E-3, E-6 |
 | Scaffolding | stdlib, pattern Copier | E-13 |
 | Tests | pytest + shim `claude` existant | I-10, I-11, I-13 |
+| Lecture des EX (itération 3) | **à trancher** : le stack est stdlib seule et la stdlib ne lit pas le YAML (voir §10, point 1) | ADR-24 |
 
 ## 4. ADRs — Architecture Decision Records
 
@@ -370,6 +426,184 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
   OQ-11) — y compris en mode kit. Les bacs à sable de test écrivent leur `.lab/lab.toml`.
 - **Anchored on:** ADR-7 (le même fichier, écrit par `lab init`), ADR-9 (exemples = instances).
 
+### ADR-17 — `lab next` : phase déduite, un critère de sortie par phase
+- **Status:** proposed (amendement 0.7.0)
+- **Context:** BHV-4 ; aujourd'hui seul le plan a un critère mécanique (plan-lint) et seul le build
+  a une exécution (`orchestrate.py`).
+- **Decision:** `lab next <feature> [--project p]` lit, dans l'ordre : `status:` de `spec.md`,
+  de `design.md` et de `tasks.md` (même lecteur de frontmatter, I-26), puis l'état de run (ADR-18).
+  La phase courante est la première dont le critère de sortie n'est pas vert :
+
+  | Phase | Critère de sortie (mécanique) | Point d'application | Si vert / si rouge |
+  |---|---|---|---|
+  | spec | spec-lint (ADR-19) ; test goldfish (ADR-24), bloquant seulement si `goldfish_min_score` est déclaré | `lab spec-lint`, `lab goldfish` | rouge : affiche la décision Métier attendue |
+  | design | design-lint (ADR-19) + `status: validated` | `lab design-lint` | rouge : affiche la décision FDE attendue |
+  | plan | plan-lint vert avec la politique effective + `status: approved` | `planlint.validate` (I-29) | rouge : affiche la décision Owner attendue |
+  | build | toutes les tâches `done` (ADR-18) | boucle existante (I-31) | lance `lab run` |
+  | review | checkpoints signés | `wait_checkpoint` (I-32) | affiche `approve.sh` / `reject.sh` |
+  | merge | — | — | affiche « merge : décision Owner » (INV-5) |
+
+  `lab next` n'écrit rien quand il ne lance rien : deux appels successifs sans changement donnent la
+  même sortie (idempotence, EVAL-4). Quand il lance une étape agent, il délègue à la commande
+  existante (`lab run`), jamais à un second moteur. La sortie nomme toujours qui décide, quoi, et
+  la commande à lancer.
+- **Anchored on:** I-26, I-29, I-31, I-32.
+- **Alternatives considered:** un fichier d'état de phase séparé (rejeté : une seconde source de
+  vérité à côté des frontmatters et de `state.json`).
+- **Consequences:** EVAL-4 = 6 triplets fixtures, un par phase, sous `tests/fde_kit/`.
+
+### ADR-18 — État de run : git pour les tâches `done`, `state.json` pour le reste
+- **Status:** proposed (décision Owner 1 et 4, QCM du 2026-11-14)
+- **Context:** `state.json` est gitignoré et se perd avec l'environnement (I-27, lab-fix 38) ; git
+  porte déjà les tâches livrées (I-28). Le compteur de rejets vit en mémoire (I-35).
+- **Decision:** une tâche est `done` si elle a un commit au sujet canonique dans l'historique git
+  (`committed_task_ids`, I-28) **et** n'est pas rouverte dans `state.json`, ou si `state.json` la
+  dit `done`. `state.json` passe à un format versionné qui porte ce que git ne voit pas :
+  statuts en cours, tâches rouvertes (R7, ADR-23), compteur de rejets par CP (décision Owner 4),
+  budget consommé par route (INV-4, même raison que le compteur). Un `state.json` à l'ancien format
+  plat `{id: status}` est relu comme `tasks` ; illisible ⇒ repli sur git seul (au lieu de « tout
+  `pending` » aujourd'hui, I-27). Un checkpoint n'a pas de commit : son état reste celui de
+  `state.json` et des jetons `.approvals/`.
+- **Anchored on:** I-27, I-28.
+- **Alternatives considered:** `state.json` seul (rejeté par l'Owner : perdu avec l'environnement) ;
+  git seul (rejeté par l'Owner : ne porte ni l'en-cours, ni les compteurs).
+- **Consequences:** le compteur de rejets et les budgets de route survivent à un redémarrage du
+  moteur, pas à la perte de l'environnement (`state.json` reste gitignoré) ; dans ce cas ils
+  repartent de zéro, ce que le moteur affiche. BHV-4 nomme les frontmatters et `state.json` comme
+  sources : lire aussi git est un point de validation (§10, point 2).
+
+### ADR-19 — spec-lint et design-lint : deux recettes, un critère par phase
+- **Status:** proposed (décision Owner 5, QCM du 2026-11-14)
+- **Decision:** deux modules séparés, `lab/engine/speclint.py` et `lab/engine/designlint.py`,
+  chacun fonction pure + CLI (rc 0/1, une ligne par écart), exposés comme `lab spec-lint <feature>`
+  / `lab design-lint <feature>` et recettes `just spec-lint` / `just design-lint`. Ils réutilisent
+  l'extraction par ID de `content_guard` (I-30) et le lecteur de frontmatter (I-26).
+  - **spec-lint** (BHV-4) : IDs uniques ; chaque BHV et INV couvert par au moins un EVAL (colonne
+    *Covers* du §7) ; 0 OQ ouverte (une OQ est fermée quand sa ligne porte « résolue ») ;
+    `status: validated`.
+  - **design-lint** (BHV-4) : chaque ADR non `superseded` porte une ligne `Anchored on:` citant au
+    moins un ID I-n ou E-n défini en §2, **ou** se déclare « sans référence — ADR délibéré ».
+- **Anchored on:** I-29 (forme de plan-lint : fonction pure, une ligne par écart), I-30.
+- **Alternatives considered:** étendre plan-lint par sous-commandes (rejeté par l'Owner : un
+  module couvrirait trois phases).
+- **Consequences:** les designs existants (ADR-10 n'a pas de ligne `Anchored on:`, ADR-8 dit « sans
+  référence — délibéré ») sont passés au design-lint avant l'activation du critère ; chaque écart
+  est corrigé par amendement, jamais en relâchant la règle.
+
+### ADR-20 — Un seul classifieur de signaux, catégorie `STATUS:` structurée
+- **Status:** proposed (décision Owner 2, QCM du 2026-11-14)
+- **Context:** BHV-5, BHV-5c ; la raison d'un `STATUS: blocked` est aujourd'hui du texte libre lu
+  en un seul endroit (I-33).
+- **Decision:** grammaire de fin de réponse : `STATUS: done` ou
+  `STATUS: blocked — <OQ|ADR|scope>: <raison>`. Une fonction pure
+  `classify(signal) -> (route, détail)` est le seul point qui choisit une route :
+
+  | Signal | Route |
+  |---|---|
+  | verify/eval rouge, tentative < `max_task_attempts` | R1 |
+  | verify/eval rouge à la dernière tentative | R2 |
+  | `STATUS: blocked — OQ: …` | R3 |
+  | `STATUS: blocked — ADR: …` | R4 |
+  | `STATUS: blocked — scope: …` | R5 |
+  | verdict agrégé `BLOCK` du panel sur un CP `mode: auto` | R6 |
+  | rejet signé de l'Owner (`reject.sh`) | R7 |
+  | `STATUS: blocked` sans catégorie reconnue | `human` (BHV-5c) |
+
+  Le mode de chaque route vient de la politique effective (`[overrides.routes]`, I-39), désormais
+  appliquée ; la note « appliqué à partir de l'itération 3 » de `lab policy` disparaît. Le message
+  de fuite de scope du moteur (`STATUS: blocked — files_touched gap: <files>`, `orchestrate.py`
+  `_run_task_attempts`) devient `STATUS: blocked — scope: files_touched gap: <files>`.
+- **Anchored on:** I-33, I-34, I-39, E-18 (types d'erreur non rejouables, comparés à un champ
+  `type` déclaré).
+- **Alternatives considered:** texte libre classé par mots-clés (rejeté par l'Owner : un mot-clé
+  manqué produit une route fausse au lieu de `human`).
+- **Consequences:** la grammaire change le prompt de l'implementer et `implementer.md` (ADR-22) ; les
+  cas behavioral qui lisent `STATUS:` (`evals/behavioral/cases.py` `is_blocked`) sont mis à jour
+  dans le même lot et le changement d'instrument est re-mesuré (campagne facturée, smoke d'abord).
+
+### ADR-21 — Propositions écrites par le moteur, appliquées après décision signée
+- **Status:** proposed (amendement 0.7.0)
+- **Context:** INV-3, INV-4, BHV-5a, BHV-5b ; routes R2, R4, R5.
+- **Decision:** pour R2, R4 et R5, le moteur écrit `.runs/<Tn>-<Rn>-<sujet>.md` (ex. EX-2 :
+  `.runs/T4-R2-plan-delta.md`) : signal déclencheur, extrait de la réponse de l'agent, proposition
+  (diff de `tasks.md` limité aux nœuds non démarrés pour R2/R5 ; rapport design-scout pour R4) et la
+  commande de décision. La tâche passe `failed` ou `blocked`, ses dépendants `skipped`
+  (`skip_dependents`, I-40), les autres branches continuent (BHV-5a). Aucun artefact humain n'est
+  modifié (INV-3, quel que soit le profil). La décision est un jeton signé du même type qu'un
+  checkpoint, sur l'identifiant de la proposition (`approve.sh T4-R2 <feature>`, I-37). Au
+  redémarrage, une proposition approuvée est appliquée **par le moteur** (diff de `tasks.md`), puis
+  le run reprend sur le graphe amendé sans rejouer les tâches `done` hors delta (ADR-18, BHV-5b).
+  Budgets : R2, R4, R5 = 1 ; R6 = 1 puis `human` ; R7 = `max_cp_rejects` ; consommés et persistés
+  dans `state.json` (ADR-18). Budget épuisé ⇒ escalade humaine (INV-4). R6 (nouveau) : un `BLOCK`
+  sur un CP `auto` réinjecte le rapport du panel comme rework des tâches du CP, une fois.
+- **Anchored on:** I-36 (fichier écrit par le moteur dans `.runs/`, versionné pour l'audit), I-37,
+  I-40, E-18 (budget fini, contrairement au défaut illimité de Temporal).
+- **Alternatives considered:** proposition appliquée automatiquement en `solo` (exclu par INV-3 et
+  BHV-3c).
+- **Consequences:** un `tasks.md` `approved` n'est modifié que par le moteur, après signature ;
+  plan-lint revalide le graphe amendé avant la reprise.
+
+### ADR-22 — R3 : l'OQ passe par le moteur ; INV-10 vérifié avant chaque commit
+- **Status:** proposed (décision Owner 3, QCM du 2026-11-14 : dans l'itération 3, avec R3)
+- **Context:** le prompt de l'implementer (`orchestrate.py:735`) et `implementer.md:18` font écrire
+  l'OQ dans `spec.md` §8 (I-38), contre INV-10 et R3 ; cause du lab-fix 34. INV-10 n'a que sa
+  moitié « commit » (I-42).
+- **Decision:** dans le même lot : (1) le prompt et `implementer.md` demandent de formuler l'OQ
+  dans la réponse et de finir par `STATUS: blocked — OQ: <question>` ; le changement d'agent suit
+  la boucle `lab/models/EVOLUTION.md` ; (2) sur R3, le moteur écrit `.runs/<Tn>-OQ.md` et notifie
+  la tâche et ses dépendants impactés (EX-3) ; (3) avant `scoped_commit`, le moteur compare
+  `spec.md` et `design.md` au HEAD : tout écart ⇒ la tâche échoue, rien n'est commité (EVAL-9).
+- **Anchored on:** I-36, I-38, I-42.
+- **Alternatives considered:** corriger le prompt seul, tout de suite (rejeté par l'Owner : une OQ
+  n'aurait plus de destination avant R3).
+- **Consequences:** `spec.md` reste octet pour octet identique pendant un run (EX-3) ; l'Owner
+  intègre l'OQ par amendement versionné.
+
+### ADR-23 — Reset ciblé : recoupement de fichiers ou d'IDs
+- **Status:** proposed (amendement 0.7.0)
+- **Context:** BHV-6 ; aujourd'hui R7 remet en `pending` les tâches visées, sans regarder leurs
+  dépendants (I-35).
+- **Decision:** quand R7 rouvre une tâche T, le moteur parcourt ses dépendants transitifs `done`
+  (hors checkpoints, via `ancestors`, I-41) ; un dépendant repasse `pending`, avec la note de
+  rework « amont <Tn> modifié », si un de ses `files_touched` recoupe un de ceux de T
+  (`paths_overlap`, I-41) **ou** s'il partage un ID de `implements`. Les autres restent `done` et
+  sont listés dans la notification (« <Tn> non relancé : aucun recoupement », BHV-6a). Les tâches
+  rouvertes sont marquées dans `state.json` (ADR-18), qui l'emporte alors sur git. Le filet de
+  sécurité est l'eval globale déjà lancée par `wait_checkpoint` au CP suivant (BHV-6b, I-32).
+- **Anchored on:** I-35, I-41, E-19 (Airflow « Downstream » : effacement de tout l'aval ; BHV-6
+  filtre plus finement).
+- **Consequences:** EX-7 se teste sans agent, sur le graphe seul (EVAL-6).
+
+### ADR-24 — Test goldfish : spec masquée, deux lecteurs isolés, canaris
+- **Status:** proposed (décision Owner 6, QCM du 2026-11-14) — volet comparaison : sans référence —
+  ADR délibéré (E-21)
+- **Context:** BHV-8, BHV-8a..8e, INV-12, EX-8.
+- **Decision:** `lab goldfish <feature> [--project p]`, en lecture seule :
+  1. **Masquage** : copie de `spec.md` où chaque `expected_output` des EX est remplacé par un
+     marqueur neutre ; un contrôle refuse la copie si une valeur attendue y subsiste.
+  2. **Lecteurs** : le petit lecteur (rôle `goldfish` du registre) et le lecteur implementer (rôle
+     `implementer`), chacun dans son propre `tempfile.mkdtemp` ne contenant que la copie masquée
+     (I-43), appelés via `claude_argv` **sans** plugin, settings ni règles (options du kit à
+     `None`). Même modèle pour les deux rôles, ou rôle absent ⇒ un seul appel et la note « lecteurs
+     confondus — signal `fragile` indisponible » (BHV-8e).
+  3. **Canaris** : un marqueur distinct, tiré à chaque test, par source interdite (règles dures,
+     `CLAUDE.md`, message de commit récent) ; un marqueur présent dans la réponse d'un lecteur ⇒
+     rc 1, test invalide, aucun score (INV-12, BHV-8b).
+  4. **Comparaison** (BHV-8a) : mapping comparé champ par champ, scalaire comparé seul, après
+     normalisation (casse, espaces, types numériques : `37.2` = `37.20`) ; toute autre forme =
+     « non testable », affichée et exclue du score. Fonction pure, forme « checker → (ok, détail) »
+     (I-45).
+  5. **Rapport** : score par lecteur, signal croisé par EX testable, écarts (ID, lecteur, champs),
+     non testables ; rc selon BHV-8c / 8d.
+  **Rôle `goldfish` (décision Owner 6)** : Haiku 5.5, seul modèle tier `fast` du registre, reçoit
+  l'éligibilité `goldfish` ; une campagne d'évaluation facturée (smoke d'abord, accord de l'Owner
+  avant le run complet) précède son affectation dans `[roles]`. D'ici là, BHV-8e s'applique.
+- **Anchored on:** I-43, I-44, I-45, E-20 ; comparaison : sans référence — ADR délibéré (E-21).
+- **Alternatives considered:** rôle `goldfish` affecté sans campagne (rejeté par l'Owner : un rôle
+  ne change que sur preuve mesurée) ; rôle reporté (rejeté par l'Owner).
+- **Consequences:** la façon de placer les canaris et de prouver l'absence des sources de niveau
+  utilisateur (plugin installé, `CLAUDE.md` utilisateur) reste à valider (§10, point 3).
+
 ## 5. Contracts & data
 
 - **`.lab/lab.toml`** (instance) :
@@ -392,6 +626,21 @@ l'unique constructeur `claude_argv`, qui ajoute plugin + settings + règles.
 - **`.claude-plugin/marketplace.json`** (racine du repo) : une entrée `fde-kit`, source `./lab/plugin`.
 - **CLI** : `lab init <project> --profile <solo|squad|regulated> [--dry-run]` ; `lab run <feature> [--project p] [options d'orchestrate]` ;
   `lab validate <feature> [--project p]` ; `lab policy [--project p]` ; `lab version`.
+  Itération 3 : `lab next <feature> [--project p]` (ADR-17) ; `lab spec-lint <feature>` et
+  `lab design-lint <feature>` (ADR-19) ; `lab goldfish <feature> [--project p]` (ADR-24).
+- **Fin de réponse de l'implementer** (ADR-20) : `STATUS: done` | `STATUS: blocked — <OQ|ADR|scope>: <raison>`.
+- **`.runs/state.json`** (ADR-18, gitignoré) :
+  ```json
+  {"schema_version": 2,
+   "tasks": {"T1": "done", "T3": "pending"},
+   "reopened": ["T3"],
+   "rejections": {"CP-1": 1},
+   "routes": {"T4": {"R2": 1}}}
+  ```
+  Un fichier sans `schema_version` est l'ancien format plat, relu comme `tasks`.
+- **Propositions** (ADR-21, versionnées) : `.runs/<Tn>-<Rn>-<sujet>.md` ; décision par
+  `approve.sh <Tn>-<Rn> <feature>` / `reject.sh <Tn>-<Rn> <feature> "raison"`.
+- **OQ d'agent** (ADR-22, versionnée) : `.runs/<Tn>-OQ.md`, écrite par le moteur.
 
 ## 6. Design System & Global Ready
 
@@ -407,6 +656,11 @@ Sans objet (outillage en ligne de commande, pas d'interface).
 - **Rollout itération 2** : version du kit `0.2.0` (les exemples ré-épinglent explicitement, INV-7) ;
   `lab policy` vérifié sur les deux exemples et sur le kit ; un run `regulated` sur une instance
   externe en sandbox Docker réelle avant le tag.
+- **Rollout itération 3** : version du kit `0.3.0`. Avant le tag : design-lint passé sur les designs
+  existants (ADR-19) ; campagne facturée de re-mesure après le changement de grammaire `STATUS:`
+  (ADR-20) et campagne du rôle `goldfish` (ADR-24), chacune en smoke d'abord avec l'accord de
+  l'Owner ; journal : un événement par route empruntée (route, tâche, mode, budget restant) —
+  matière du KPI « interventions humaines » et de la décision sur le test goldfish (spec §1).
 
 ## 8. Risks
 
@@ -421,6 +675,11 @@ Sans objet (outillage en ligne de commande, pas d'interface).
 | `.lab/lab.toml` exigé partout (ADR-16) casse les bacs à sable de test et les runs existants | H | M | Les fixtures écrivent le fichier ; message de pré-vol qui nomme la commande `lab init … --profile` |
 | Docker indisponible là où l'on développe : ADR-15 non vérifié en réel | M | H | Tests d'argv sans Docker dans le gate ; essai Docker réel exigé au checkpoint avant le tag |
 | Un override de route accepté en itération 2 mais sans effet trompe l'Owner | M | L | `lab policy` affiche « appliqué à partir de l'itération 3 » à côté de chaque route |
+| La nouvelle grammaire `STATUS:` n'est pas suivie par un modèle : tout blocage part en `human` | M | M | BHV-5c rend l'erreur sûre (jamais `auto`) ; campagne de re-mesure avant le tag (ADR-20) |
+| Perte de l'environnement : compteurs de rejets et budgets de route remis à zéro | M | M | Tâches `done` reconstruites depuis git (ADR-18) ; remise à zéro affichée par le moteur |
+| Le reset ciblé laisse `done` un dépendant réellement cassé | M | M | Filet BHV-6b : eval globale au checkpoint suivant, puis R6/R7 |
+| Isolement goldfish incomplet (plugin ou `CLAUDE.md` de niveau utilisateur) | M | H | Canaris (BHV-8b) : test invalide plutôt qu'un score faux ; mécanisme à valider (§10, point 3) |
+| Le design-lint rejette des designs existants | H | L | Passage sur les designs existants avant l'activation ; correction par amendement (ADR-19) |
 
 ## 9. Changelog
 
@@ -431,4 +690,21 @@ Sans objet (outillage en ligne de commande, pas d'interface).
 | 0.3.0 | 2026-11-12 | FDE | Trous relevés par le planner tranchés : status line dans le plugin câblée par le FDE (OQ-9, ADR-3), modèles `work/_templates/*.template.md` (OQ-10, ADR-7), `--profile` obligatoire et exemples en `squad` (OQ-11, ADR-7/9) ; message d'ADR-6 aligné sur EX-5 |
 | 0.4.0 | 2026-11-12 | FDE | ADR-12 (proposed) : spike promptfoo pour le banc d'évaluation, à mener dans l'itération multi-outils ; pointeur spec 0.6.0 |
 | 0.6.0 | 2026-11-13 | Owner | INV-5 garanti aussi à l'exécution (ADR-14) : un CP final/merge n'est jamais auto-validé, même sous `--force` — trou relevé par la revue CP-7 et corrigé par T18 |
+| 0.7.0 | 2026-11-14 | Owner + design-scout (brouillon) | Itération 3 (workflow de bout en bout) : ADR-17 `lab next`, ADR-18 état de run git + `state.json`, ADR-19 spec-lint / design-lint, ADR-20 classifieur et `STATUS:` structuré, ADR-21 propositions signées, ADR-22 OQ par le moteur + INV-10 complet, ADR-23 reset ciblé, ADR-24 test goldfish ; patterns I-26..I-45, références E-18..E-21 ; 6 décisions Owner par QCM. **Brouillon : à valider** |
 | 0.5.0 | 2026-11-12 | Owner | Itération 2 (profils) : ADR-13 politique effective (plancher monotone ⊕ overrides, profils en données), ADR-14 un point d'application par clé, ADR-15 sandbox d'instance externe (kit monté en lecture seule, remplace ADR-10), ADR-16 le kit est une instance de lui-même. 3 décisions Owner par QCM : routes réservées dès l'itération 2, sandbox externe livrée, `.lab/lab.toml` du kit explicite |
+
+## 10. Points ouverts de l'amendement 0.7.0 (à trancher à la validation)
+
+Ces points ne sont tranchés ni par la spec 0.8.0, ni par les 6 décisions Owner du 2026-11-14 ;
+le brouillon ne les décide pas.
+
+1. **Lecture des EX en YAML** (ADR-24, BHV-8a) : le stack est stdlib seule (§3) et la stdlib ne lit
+   pas le YAML. Options : une dépendance d'exécution (PyYAML), ou un lecteur limité au sous-ensemble
+   utilisé par les blocs EX (mappings en flux et scalaires), écrit et testé dans le kit.
+2. **BHV-4 et git** (ADR-18) : BHV-4 nomme les frontmatters et `.runs/state.json` comme sources de
+   la phase. Lire aussi l'historique git (décision Owner 1) est-il une précision du design, ou faut-il
+   un amendement de spec (0.9.0) ?
+3. **Isolement goldfish** (ADR-24, BHV-8b) : le moteur contrôle les sources du kit et le répertoire
+   du lecteur, pas le plugin ni le `CLAUDE.md` installés au niveau utilisateur, que `claude -p` peut
+   charger. Comment y placer un canari, ou comment les exclure de l'appel, est à vérifier sur la
+   doc de la CLI avant de figer l'ADR.

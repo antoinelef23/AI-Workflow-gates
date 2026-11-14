@@ -26,12 +26,13 @@
 | Item 12 (rapports de revue dans les commits de tâche) | ✅ PR #10 mergée le 2026-11-14 | `fix-commit-scope-feature-dir`, §10.7 |
 | Item 3 (couverture EVAL suite entière) | ✅ PR #11 mergée le 2026-11-14 | `fix-eval-coverage-scope`, §10.7 |
 | Items 2, 6, 10, 23–26 | revus en session 5 : chacun demande une décision Owner (preuves et options écrites en §8) | §8 |
-| Dépôt `portable` (Claudo-portable) : retrait Windows + modèles 5.5 | ⏸ commits locaux **non poussés** (push refusé par le classifieur) | §10.7 |
-| fde-kit itération 3 | rapport design-scout fait, **6 questions tranchées par l'Owner le 2026-11-14** ; prochaine étape : amendement de `design.md` (validation Owner) | `work/fde-kit/.runs/design-scout-iteration-3.md`, §11 |
+| Dépôt `portable` (Claudo-portable) : retrait Windows + modèles 5.5 | ✅ branches `drop-windows` et `models-latest-only` poussées le 2026-11-14 sur demande de l'Owner (aucune PR ouverte, rien de mergé) | §10.7 |
+| fde-kit itération 3 | rapport design-scout fait, 6 questions tranchées par l'Owner le 2026-11-14 ; **amendement design 0.7.0 en brouillon** (ADR-17..24, 3 points ouverts en §10 du design), branche `design-iter3-amendment` — **validation Owner attendue** | `work/fde-kit/.runs/design-scout-iteration-3.md`, §11 |
 
-**Prochaine action :** rédiger l'amendement de `design.md` pour l'itération 3 à partir du rapport
-design-scout et des 6 décisions Owner (validation Owner requise) ; re-mesure facturée des deux cas
-de la PR #8 (smoke d'abord) ; push des deux branches `portable` par l'Owner (§10.7).
+**Prochaine action (Owner) :** relire le brouillon de design 0.7.0 (itération 3, branche
+`design-iter3-amendment`) et trancher ses 3 points ouverts (§10 du design) ; puis valider ou
+rejeter l'amendement. Ensuite : plan de l'itération 3 (planner) ; re-mesure facturée des deux
+cas de la PR #8 (smoke d'abord).
 
 **Environnement depuis la session 4 : WSL Ubuntu uniquement** (décision Owner). Le moteur exige
 POSIX (`import fcntl`, groupes de process) : `just gate-ci` échoue en Windows natif. Clone de travail :
@@ -379,7 +380,9 @@ tout ce qui demande une signature ou un merge est laissé prêt et documenté.
 
 **Dépôt `portable`** (Claudo-portable, `main` local de `D:\Projets\ai-workflow-gates\_build`) :
 deux branches committées dans le clone WSL `~/work/portable` (cloné depuis `_build`, `main` = `5ccdfd1`),
-**non poussées** — le push vers le remote `portable` a été refusé par le classifieur de permissions :
+**poussées le 2026-11-14** sur demande explicite de l'Owner (`git push portable`, branches neuves sur
+`portable/main` = `5ccdfd1` ; aucune PR ouverte, rien de mergé). Le premier essai de push avait été
+refusé par le classifieur de permissions :
 
 - `drop-windows` (`09a4477`) : retire le support Windows natif (branche `msvcrt` d'`oslock`, `oscompat.find_bash`,
   `verify.resolve_python`, recherche `claude.cmd`→`claude.exe`, `lab-ws` + `contained(git_modes=…)`, bascule
@@ -391,11 +394,11 @@ deux branches committées dans le clone WSL `~/work/portable` (cloné depuis `_b
   Ce dépôt n'a pas de scorecard Claude 5 à lui : la preuve citée est la campagne 2026-11-12 de ce dépôt-ci.
   Chevauchement attendu avec le travail non committé de `_build` : `lab/models/registry.toml`.
 
-Pour pousser (Owner) : `cd D:\Projets\ai-workflow-gates\_build && git fetch //wsl.localhost/Ubuntu/home/antoine/work/portable drop-windows:p-drop-windows models-latest-only:p-models-latest-only && git push portable p-drop-windows:drop-windows p-models-latest-only:models-latest-only`.
+Commande utilisée (depuis `_build`, jamais vers `origin`) : `cd D:\Projets\ai-workflow-gates\_build && git fetch //wsl.localhost/Ubuntu/home/antoine/work/portable drop-windows:p-drop-windows models-latest-only:p-models-latest-only && git push portable p-drop-windows:drop-windows p-models-latest-only:models-latest-only`.
 
 ## 11. Ensuite
 
-1. Décisions Owner : push des deux branches `portable` (§10.7) ; trancher les items 2, 6, 10, 15, 19, 20, 23–26, 33, 37, 38 (§8). Fait le 2026-11-14 : merge des PR #4 à #11 ; les 6 questions du rapport design-scout (itération 3) sont tranchées.
+1. Décisions Owner : valider le design 0.7.0 (itération 3) ; trancher les items 2, 6, 10, 15, 19, 20, 23–26, 33, 37, 38 (§8). Fait le 2026-11-14 : merge des PR #4 à #12 ; les 6 questions du rapport design-scout (itération 3) sont tranchées ; push des deux branches `portable`.
 2. **fde-kit itération 3** — bloquée à l'étape **design** : la spec 0.8.0 (validée) couvre déjà BHV-4..6 et BHV-8, mais le design 0.6.0 dit que les itérations 3 et 4 « seront conçues à leur tour, par amendement de ce document » ; chaque amendement précédent est venu d'un rapport `design-scout` + décisions Owner par QCM. Prochaine étape : lancer `design-scout` sur BHV-4..6, BHV-8 (avec 37 et 38), puis QCM Owner. **Fait en session 5** : `work/fde-kit/.runs/design-scout-iteration-3.md` — 20 patterns internes I-26..I-45 avec fichier:ligne, anti-patterns (dont I-38 : le prompt implementer fait écrire les OQ dans `spec.md`, cause du lab-fix 34), 6 questions pour l’Owner, **tranchées le 2026-11-14** (section « Décisions Owner » du rapport) ; piste externe : E-18 Temporal, E-19 Airflow, E-20 BIG-bench vérifiées sur page primaire ; P6 (Dagster) et la comparaison YAML non établies. Contenu prévu : workflow de bout en bout, retours arrière R1–R7 (avec reset ciblé des
    dépendants), OQ d'agent écrites par le moteur dans `.runs/` (item 34), test goldfish à deux
    lecteurs (Haiku + modèle de l'implementer), interruption live sous Docker. Candidats à absorber :
