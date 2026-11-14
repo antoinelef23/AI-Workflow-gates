@@ -70,8 +70,17 @@ def test_task_commit_never_stages_spec_or_design(sandbox: Path) -> None:
         'echo x > a.txt\necho "OQ-9 from the agent" >> work/feat/spec.md\n'
         'echo "STATUS: done"\n'
     )
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=sandbox, capture_output=True, text=True
+    ).stdout
     run_orch(sandbox)
-    assert "work/feat/spec.md" not in _paths(sandbox)
+    # INV-10 (T28): the task fails and nothing is committed; the edit is left in the tree
+    assert (
+        subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=sandbox, capture_output=True, text=True
+        ).stdout
+        == head
+    )
     assert (
         "work/feat/spec.md"
         in subprocess.run(
