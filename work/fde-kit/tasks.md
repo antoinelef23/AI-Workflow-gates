@@ -144,7 +144,7 @@ ADRs: ADR-13 T16 · ADR-14 T18/T19 · ADR-15 T20 · ADR-16 T17/T18.
 ADRs: ADR-17 T26 · ADR-18 T24/T25 · ADR-19 T23 · ADR-20 T27/T31 · ADR-21 T29/T30 · ADR-22 T28/T31 ·
 ADR-23 T30 · ADR-24 T32/T33 + CP-10.
 
-## Plan-level open questions (iteration 3) — resolved by the Owner at approval (2026-11-14)
+## Plan-level open questions (iteration 3) — resolved by the Owner (2026-11-14)
 
 - **OQ-13** — At the spec phase, does `lab next` launch the billed goldfish test itself, or only
   display `lab goldfish <feature>` as the next action? ADR-17 lists `lab goldfish` as the spec gate's
@@ -157,6 +157,11 @@ ADR-23 T30 · ADR-24 T32/T33 + CP-10.
   `lab goldfish` on validated specs — smoke on one spec first, then the others with the Owner's
   OK — and the Owner decides the assignment on that report; T35 applies it.
   → *(resolved 2026-11-14, Owner: the default — live `lab goldfish` at CP-10.)*
+- **OQ-15** — *(raised by the T25 agent during the run, 2026-11-14; the old engine prompt made it
+  write the question into `spec.md` §8 — reverted, INV-10, fixed for good by T28/T31.)* The v2
+  `state.json` breaks the readers of the flat format outside T25's scope (status line, ~34 tests).
+  → *(resolved 2026-11-14 under the Owner's delegation: plan delta — T25's scope widened to migrate
+  them, assertions unchanged.)*
 
 ## Execution graph
 
@@ -947,7 +952,7 @@ Owner lanes: T31 (`lab/plugin/agents/`, protected) and T35 (plugin manifest, pro
 - **parallel_group:** Q
 - **implements:** [BHV-5a, INV-4, EVAL-5]
 - **anchored_on:** ADR-18, ADR-21, I-27, I-35
-- **files_touched:** `lab/engine/orchestrate.py`, `tests/fde_kit/test_eval_5_state_resume.py`
+- **files_touched:** `lab/engine/orchestrate.py`, `tests/fde_kit/test_eval_5_state_resume.py`, `lab/plugin/statusline.py`, `tests/orchestrator/test_statusline.py`, `tests/orchestrator/test_orchestrate.py`, `tests/orchestrator/test_lint_gate.py`, `tests/orchestrator/test_models.py`, `tests/orchestrator/test_owner_lane.py`, `tests/orchestrator/test_parallel_wave_isolation.py`, `tests/orchestrator/test_scope_leak.py`, `tests/orchestrator/test_security.py`, `tests/orchestrator/test_commit_scope_feature_dir.py`, `tests/lab_fixes/test_eval_1_interrupt.py`, `tests/lab_fixes/test_eval_1_interrupt_queue.py`, `tests/lab_fixes/test_eval_2_dry_run.py`, `tests/fde_kit/test_eval_2_plugin.py`, `tests/fde_kit/test_eval_3_engine.py`
 - **prompt:**
   > Per spec INV-4, BHV-5a and design ADR-18 (Owner decisions 1 and 4). In `orchestrate.py`, replace
   > the inline `state.json` read/write (resume block and `save()`) by `runstate.load`/`save`
@@ -958,9 +963,17 @@ Owner lanes: T31 (`lab/plugin/agents/`, protected) and T35 (plugin manifest, pro
   > once, engine restarted, rejected again up to the budget ⇒ the CP fails exactly at
   > `max_cp_rejects + 1` across restarts; a done task with a commit stays done when `state.json` is
   > deleted; an old flat `state.json` resumes.
+  > *Plan delta (OQ-15, raised by T25, decided under the Owner's delegation 2026-11-14):* the v2
+  > format breaks every reader of the old flat map outside the first scope — `lab/plugin/statusline.py`
+  > (`_latest_run` / `_run_segment` count the file's keys) and the tests that read `state["T1"]` or
+  > compare the whole file. Migrate them (now in `files_touched`): the status line reads statuses
+  > via `runstate` (or the `tasks` map, flat files still accepted); each test reads the statuses
+  > from the `tasks` map (a small helper per file is fine). **Assertions stay the same values** —
+  > only where the statuses are read changes; say so in your reply. Never edit `spec.md`: state an
+  > open question in your reply and end blocked.
   > Check with `uv run pytest`; the orchestrator runs `verify`.
 - **done_when:** engine uses run state v2; rejection counter persists across restarts; resume from git when state.json is gone
-- **verify:** `uv run pytest -q tests/orchestrator tests/fde_kit tests/sdlc_rework`
+- **verify:** `uv run pytest -q tests/orchestrator tests/fde_kit tests/sdlc_rework tests/lab_fixes`
 - **status:** ☐ pending → ☐ running → ☐ done
 
 ### T26 — `lab next`: deduce the phase, run its exit gate, say who decides
@@ -1323,3 +1336,4 @@ Owner lanes: T31 (`lab/plugin/agents/`, protected) and T35 (plugin manifest, pro
 | 2026-11-13 09:37 | CP-7 | owner | checkpoint validated | |
 | 2026-11-14 08:19 | T23 | implementer | done, evals green (t1) | |
 | 2026-11-14 08:23 | T24 | implementer | done, evals green (t1) | |
+| 2026-11-14 08:26 | T25 | implementer | BLOCKED — OQ-15 | |
