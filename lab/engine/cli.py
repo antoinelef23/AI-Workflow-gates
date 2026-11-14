@@ -19,7 +19,7 @@ from kit import kit_version  # noqa: E402
 
 USAGE = (
     "usage: lab {version | init <project> --profile <solo|squad|regulated> [--dry-run]"
-    " | policy [--project p] | run <feature> [args…] | validate <feature> [args…]}"
+    " | policy [--project p] | spec-lint <feature> | design-lint <feature> | run <feature> [args…] | validate <feature> [args…]}"
 )
 
 
@@ -79,6 +79,14 @@ def main(argv: list[str] | None = None) -> int:
         return _init(rest)
     if cmd == "policy":
         return _policy(rest)
+    if cmd == "spec-lint":
+        import speclint
+
+        return speclint.main(rest)
+    if cmd == "design-lint":
+        import designlint
+
+        return designlint.main(rest)
     if cmd == "run":
         return _relay(rest)
     if cmd == "validate":
