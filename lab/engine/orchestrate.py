@@ -54,6 +54,7 @@ from datetime import datetime
 from pathlib import Path
 
 import approvals
+import runstate
 from notify import notify
 from planlint import validate
 from plan import (
@@ -1304,13 +1305,10 @@ def main() -> int:
     feature = (PROJECT / args.feature).resolve()
     fm, nodes = parse_tasks_md(feature / "tasks.md")
 
-    try:  # nodes already done in a previous run: capability lint no longer applies
-        prev = json.loads(
-            (feature / ".runs" / "state.json").read_text(encoding="utf-8")
-        )
-        done_ids = {k for k, v in prev.items() if v == "done"}
-    except (OSError, json.JSONDecodeError, AttributeError):
-        done_ids = set()
+    # nodes already done in a previous run: capability lint no longer applies
+    done_ids = {
+        k for k, v in runstate.load(feature, PROJECT).tasks.items() if v == "done"
+    }
     errors, warnings = validate(
         feature, fm, nodes, REGISTRY, project=PROJECT, done=done_ids, policy=POLICY
     )
@@ -1380,7 +1378,6 @@ def main() -> int:
             + ", ".join(f"{r}={m or 'CLI default'}" for r, m in roles_used.items())
         )
 
-    rejections: dict[str, int] = {}
     state_f = feature / ".runs" / "state.json"
     if not args.dry_run:
         state_f.parent.mkdir(
@@ -1402,24 +1399,38 @@ def main() -> int:
                 k: {"value": v, "origin": o} for k, (v, o) in (POLICY or {}).items()
             },
         )
-    if state_f.exists() and not args.dry_run:
-        # Tolerant resume (finding L9): a truncated state.json (kill mid-write)
-        # must not crash the resume — we start clean rather than crash.
-        try:
-            restored = json.loads(state_f.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as e:
-            print(
-                f"⚠️  state.json unreadable ({e}) — fresh restart (all tasks pending).",
-                file=sys.stderr,
-            )
-            restored = {}
-        for nid, st in restored.items():
+    rs = runstate.RunState()
+    if not args.dry_run:
+        # ADR-18: git names the delivered tasks, state.json v2 carries the rest
+        # (unreadable file ⇒ git alone, never "everything pending").
+        rs = runstate.load(feature, PROJECT)
+        for nid, st in rs.tasks.items():
             if nid in by_id and st == "done":
                 by_id[nid].status = "done"
+        if state_f.exists():
+            try:  # tolerant resume (finding L9): flag it, git alone speaks
+                json.loads(state_f.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError) as e:
+                print(
+                    f"⚠️  state.json unreadable ({e}) — resuming from git only.",
+                    file=sys.stderr,
+                )
+        if not state_f.exists() and any(
+            n.status == "done" and not n.is_checkpoint for n in nodes
+        ):
+            print(
+                "⚠️  run state lost (no .runs/state.json) — resuming from git; "
+                "CP rejection counters reset to 0.",
+                file=sys.stderr,
+            )
 
     def save() -> None:
         if not args.dry_run:
-            atomic_write_json(state_f, {n.id: n.status for n in nodes})
+            rs.tasks = {n.id: n.status for n in nodes}
+            rs.reopened = [t for t in rs.reopened if rs.tasks.get(t) != "done"]
+            runstate.save(state_f, rs)
+
+    save()  # heals a lost/truncated state.json from git right away (ADR-18)
 
     def finish_interrupted(inflight: list[str]) -> int:
         """BHV-1: in-flight tasks go back to pending (done ones keep done), atomic state
@@ -1522,11 +1533,11 @@ def main() -> int:
             if outcome == "approved":
                 cp.status = "done"
             else:  # rejected — on_reject: back to the targeted tasks with a comment
-                rejections[cp.id] = rejections.get(cp.id, 0) + 1
-                if rejections[cp.id] > MAX_CP_REJECTS:
+                rs.rejections[cp.id] = rs.rejections.get(cp.id, 0) + 1
+                if rs.rejections[cp.id] > MAX_CP_REJECTS:
                     cp.status = "failed"
                     notify(
-                        f"{cp.id}: rejected {rejections[cp.id]} times — stopping, manual resume required"
+                        f"{cp.id}: rejected {rs.rejections[cp.id]} times — stopping, manual resume required"
                     )
                     skip_dependents(cp, nodes)
                 else:
@@ -1535,6 +1546,8 @@ def main() -> int:
                         t = by_id.get(tid)
                         if t and not t.is_checkpoint:
                             t.status = "pending"
+                            if tid not in rs.reopened:
+                                rs.reopened.append(tid)  # git says done: not any more
                             t.rework = (
                                 f"\n\n⚠️ OWNER REVIEW FEEDBACK (rejection {cp.id}): {info['reason']}\n"
                                 f"Fix accordingly before re-delivering."

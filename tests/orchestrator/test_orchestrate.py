@@ -26,7 +26,9 @@ def write_tasks(sandbox: Path, body: str) -> None:
 
 
 def state(sandbox: Path) -> dict:
-    return json.loads((sandbox / "work" / "feat" / ".runs" / "state.json").read_text())
+    return json.loads((sandbox / "work" / "feat" / ".runs" / "state.json").read_text())[
+        "tasks"
+    ]
 
 
 def journal_events(sandbox: Path) -> list[dict]:

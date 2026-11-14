@@ -130,7 +130,9 @@ def test_owner_task_signed_but_red_is_failed(sandbox: Path) -> None:
     approve(sandbox, "T1")
     r = run_orch(sandbox)
     assert r.returncode == 1, r.stdout + r.stderr
-    state = json.loads((sandbox / "work" / "feat" / ".runs" / "state.json").read_text())
+    state = json.loads(
+        (sandbox / "work" / "feat" / ".runs" / "state.json").read_text()
+    )["tasks"]
     assert state["T1"] == "failed"
 
 
@@ -141,7 +143,9 @@ def test_owner_task_rejected_is_blocked(sandbox: Path) -> None:
     (d / "T1.rejected").write_text("reason=cannot do it today\n")
     r = run_orch(sandbox)
     assert r.returncode == 1, r.stdout + r.stderr
-    state = json.loads((sandbox / "work" / "feat" / ".runs" / "state.json").read_text())
+    state = json.loads(
+        (sandbox / "work" / "feat" / ".runs" / "state.json").read_text()
+    )["tasks"]
     assert state["T1"] == "blocked"
 
 

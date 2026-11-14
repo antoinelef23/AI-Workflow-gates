@@ -33,7 +33,9 @@ def _setup(sb: Path) -> None:
 
 
 def _state(sb: Path) -> dict:
-    return json.loads((sb / "work" / "feat" / ".runs" / "state.json").read_text())
+    return json.loads((sb / "work" / "feat" / ".runs" / "state.json").read_text())[
+        "tasks"
+    ]
 
 
 def test_red_lint_is_sent_back_and_fixed_on_retry(sandbox: Path) -> None:

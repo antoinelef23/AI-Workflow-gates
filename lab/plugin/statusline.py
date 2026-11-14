@@ -4,8 +4,8 @@
 Claude Code pipes a JSON blob about the session on stdin and renders the first
 line we print as the status line. We show the model plus, when an orchestrator
 run exists, the live state of the most-recently-touched feature read from
-`work/<feature>/.runs/state.json` (a flat {node_id: status} map written by
-lab/engine/orchestrate.py): which node is running, progress, and any blocker.
+`work/<feature>/.runs/state.json` (v2: the statuses live in its `tasks` map; the
+old flat {node_id: status} map is still read — written by lab/engine/orchestrate.py): which node is running, progress, and any blocker.
 
 Pure stdlib, read-only, never raises (a status line must not break the session).
 """
@@ -54,6 +54,8 @@ def _latest_run(proj: Path) -> tuple[str, dict] | None:
         obj = json.loads(newest.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
+    if isinstance(obj, dict) and "schema_version" in obj:  # v2: statuses in `tasks`
+        obj = obj.get("tasks")
     if not isinstance(obj, dict) or not obj:
         return None
     # work/<…>/<feature>/.runs/state.json -> the path under work/ (e.g. "agent/booking")

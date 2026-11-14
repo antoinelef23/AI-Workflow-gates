@@ -31,7 +31,9 @@ def _setup(sb: Path, body: str) -> None:
 
 
 def _state(sb: Path) -> dict:
-    return json.loads((sb / "work" / "feat" / ".runs" / "state.json").read_text())
+    return json.loads((sb / "work" / "feat" / ".runs" / "state.json").read_text())[
+        "tasks"
+    ]
 
 
 T1 = """
