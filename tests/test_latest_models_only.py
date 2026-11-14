@@ -3,7 +3,8 @@
 The registry (`lab/models/registry.toml`) is the source of truth. Any Claude model id written
 in a live file (code, config, tests, docs, agents) must be one of its `[[model]]` ids, so an
 older generation cannot linger after it is removed. Dated history is exempt: scorecards,
-feature folders under `work/` (specs, plans, run logs, review reports) and `progress.md`.
+feature folders under `work/` (specs, plans, run logs, review reports), `progress.md` and the
+session history moved out of it, `docs/history/`.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MODEL_ID = re.compile(r"\bclaude-(?:opus|sonnet|haiku|fable)-\d+(?:-\d+)*\b")
-HISTORY = ("lab/models/scorecards/", "work/", "progress.md")
+HISTORY = ("lab/models/scorecards/", "work/", "progress.md", "docs/history/")
 
 
 def _registry_ids() -> set[str]:
